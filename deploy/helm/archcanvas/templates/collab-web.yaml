@@ -1,0 +1,78 @@
+{{- $collab := dict "root" . "component" "collab" -}}
+{{- $web := dict "root" . "component" "web" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-collab
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.collab.replicas }}
+  selector:
+    matchLabels: {{- include "archcanvas.selector" $collab | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "archcanvas.selector" $collab | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: collab
+          image: {{ include "archcanvas.image" (dict "root" . "name" "collab") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: ws, containerPort: 1234 }]
+          envFrom:
+            - secretRef: { name: {{ include "archcanvas.dbSecret" . }} }
+          readinessProbe:
+            tcpSocket: { port: ws }
+          resources: {{- toYaml .Values.collab.resources | nindent 12 }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-collab
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "archcanvas.selector" $collab | nindent 4 }}
+  ports: [{ name: ws, port: 1234, targetPort: ws }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-web
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels: {{- include "archcanvas.selector" $web | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "archcanvas.selector" $web | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: web
+          image: {{ include "archcanvas.image" (dict "root" . "name" "web") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - { name: API_UPSTREAM, value: "http://{{ include "archcanvas.fullname" . }}-api:8080" }
+            - { name: COLLAB_UPSTREAM, value: "http://{{ include "archcanvas.fullname" . }}-collab:1234" }
+          readinessProbe:
+            httpGet: { path: /, port: http }
+          resources: {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-web
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "archcanvas.selector" $web | nindent 4 }}
+  ports: [{ name: http, port: 80, targetPort: http }]

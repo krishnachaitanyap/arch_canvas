@@ -1,0 +1,24 @@
+# ArchCanvas self-hosted in a customer's Kubernetes / OpenShift cluster.
+image:
+  registry: registry.customer.internal/archcanvas   # mirror of the release images
+  tag: "0.1.0"
+
+ingress:
+  className: nginx
+  host: archcanvas.customer.internal
+  tls:
+    - secretName: archcanvas-tls
+      hosts: [archcanvas.customer.internal]
+
+database:
+  existingSecret: archcanvas-db       # customer's Postgres 14+ (or CloudNativePG)
+
+auth:
+  oidcIssuer: https://sso.customer.internal/realms/archcanvas   # Keycloak federated to Okta / Entra / LDAP
+
+llm:
+  # Air-gapped: point at an in-cluster vLLM / Ollama, or the customer's Azure OpenAI / Bedrock via LiteLLM
+  provider: openai_compatible
+  model: <model-name>
+  openaiBaseUrl: http://vllm.ai-platform.svc:8000/v1
+  existingSecret: archcanvas-llm      # key OPENAI_API_KEY

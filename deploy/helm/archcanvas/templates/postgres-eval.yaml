@@ -1,0 +1,41 @@
+{{- if .Values.postgresql.enabled }}
+{{- $c := dict "root" . "component" "postgres" -}}
+# Evaluation-only Postgres. Use Cloud SQL / CloudNativePG / the customer's DB in production.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-postgres
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "archcanvas.fullname" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels: {{- include "archcanvas.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "archcanvas.selector" $c | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_USER, value: archcanvas }
+            - { name: POSTGRES_DB, value: archcanvas }
+            - { name: POSTGRES_PASSWORD, value: {{ .Values.postgresql.password | quote }} }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports: [{ name: pg, containerPort: 5432 }]
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: {{ .Values.postgresql.storage }} } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-postgres
+spec:
+  selector: {{- include "archcanvas.selector" $c | nindent 4 }}
+  ports: [{ name: pg, port: 5432, targetPort: pg }]
+{{- end }}

@@ -1,0 +1,81 @@
+# ---- Images ----
+image:
+  # GCP:          <region>-docker.pkg.dev/<project>/archcanvas
+  # Self-hosted:  the customer's registry (images mirrored for air-gapped installs)
+  registry: ghcr.io/your-org/archcanvas
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# ---- Public URL / ingress ----
+ingress:
+  enabled: true
+  className: ""            # "gce" on GKE, "nginx" / "openshift-default" for self-hosted
+  host: archcanvas.example.com
+  annotations: {}
+  # GKE managed certificate:  networking.gke.io/managed-certificates: archcanvas-cert
+  tls: []
+  # - secretName: archcanvas-tls
+  #   hosts: [archcanvas.example.com]
+
+# ---- Database ----
+# Production: external Postgres (Cloud SQL on GCP, CloudNativePG or the customer's DB on-prem).
+database:
+  # Name of an existing secret with key DATABASE_URL. If empty, `url` below is used.
+  existingSecret: ""
+  url: ""
+# Evaluation only: single-pod Postgres inside the release. Do NOT use for production data.
+postgresql:
+  enabled: false
+  storage: 10Gi
+  password: change-me
+
+# ---- Auth (OIDC) ----
+auth:
+  oidcIssuer: ""           # e.g. https://keycloak.corp.example/realms/archcanvas
+  audience: archcanvas
+  tenantClaim: tenant
+
+# ---- AI ----
+llm:
+  provider: anthropic      # anthropic | vertex | openai_compatible | none
+  model: claude-sonnet-5-5
+  vertexProjectId: ""
+  vertexRegion: us-east5
+  openaiBaseUrl: ""        # vLLM / Ollama / Azure OpenAI / LiteLLM for self-hosted
+  # Secret with keys ANTHROPIC_API_KEY and/or OPENAI_API_KEY
+  existingSecret: ""
+
+# ---- Workloads ----
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 10, targetCPU: 70 }
+  serviceAccount:
+    # GKE Workload Identity, e.g. archcanvas-api@<project>.iam.gserviceaccount.com (for Vertex AI)
+    gcpServiceAccount: ""
+
+collab:
+  replicas: 1              # >1 requires the Redis extension (phase 2)
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 512Mi }
+
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile: { type: RuntimeDefault }
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities: { drop: [ALL] }
+
+# ---- GKE-only extras ----
+gke:
+  managedCertificate: false   # creates a Google-managed TLS cert for ingress.host

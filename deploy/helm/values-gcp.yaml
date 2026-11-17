@@ -1,0 +1,32 @@
+# ArchCanvas Cloud on GKE. Fill the <...> values from `terraform output`.
+image:
+  registry: <region>-docker.pkg.dev/<project>/archcanvas
+  tag: "0.1.0"
+
+ingress:
+  className: gce
+  host: app.archcanvas.example.com
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: archcanvas-ip
+    networking.gke.io/managed-certificates: archcanvas-cert   # = <release>-cert
+
+gke:
+  managedCertificate: true
+
+database:
+  # Secret with DATABASE_URL pointing at Cloud SQL (private IP). Create with:
+  # kubectl create secret generic archcanvas-db --from-literal=DATABASE_URL=postgres://archcanvas:<pw>@<cloudsql-private-ip>:5432/archcanvas
+  existingSecret: archcanvas-db
+
+auth:
+  oidcIssuer: https://auth.archcanvas.example.com/realms/archcanvas
+
+llm:
+  provider: vertex
+  model: claude-sonnet-5-5
+  vertexProjectId: <project>
+  vertexRegion: us-east5
+
+api:
+  serviceAccount:
+    gcpServiceAccount: archcanvas-api@<project>.iam.gserviceaccount.com

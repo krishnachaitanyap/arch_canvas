@@ -1,0 +1,40 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1d1d1f; background: #fafafa; }
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+.topbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid #e4e4e7; background: #fff;
+}
+.logo { font-weight: 600; margin-right: 8px; }
+.title { width: 240px; }
+.spacer { flex: 1; }
+.status { font-size: 13px; }
+.status.ok { color: #15803d; }
+.status.error { color: #b91c1c; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+input, select, textarea, button {
+  font: inherit; font-size: 14px; border: 1px solid #d4d4d8; border-radius: 6px; padding: 6px 10px; background: #fff;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { background: #f4f4f5; }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+button.primary:hover:not(:disabled) { background: #4338ca; }
+
+.workspace { flex: 1; display: flex; min-height: 0; }
+.panel {
+  width: 360px; display: flex; flex-direction: column; gap: 16px;
+  padding: 12px; border-right: 1px solid #e4e4e7; background: #fff; overflow: auto;
+}
+.panel section { display: flex; flex-direction: column; gap: 8px; }
+.panel section.grow { flex: 1; min-height: 240px; }
+.panel h2 { font-size: 13px; font-weight: 600; margin: 0; color: #52525b; }
+.panel textarea { resize: vertical; width: 100%; }
+.panel textarea.code { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; resize: none; }
+.row { display: flex; gap: 8px; }
+.hint { font-size: 12px; color: #71717a; margin: 0; }
+
+.canvas { flex: 1; min-width: 0; }

@@ -1,0 +1,73 @@
+{{- $c := dict "root" . "component" "api" -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-api
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+  {{- with .Values.api.serviceAccount.gcpServiceAccount }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ . }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-api
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels: {{- include "archcanvas.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "archcanvas.selector" $c | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "archcanvas.fullname" . }}-api
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          image: {{ include "archcanvas.image" (dict "root" . "name" "api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: {{ include "archcanvas.fullname" . }}-config }
+            - secretRef: { name: {{ include "archcanvas.dbSecret" . }} }
+            {{- with .Values.llm.existingSecret }}
+            - secretRef: { name: {{ . }} }
+            {{- end }}
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-api
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "archcanvas.selector" $c | nindent 4 }}
+  ports: [{ name: http, port: 8080, targetPort: http }]
+{{- if .Values.api.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-api
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ include "archcanvas.fullname" . }}-api }
+  minReplicas: {{ .Values.api.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.api.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: {{ .Values.api.autoscaling.targetCPU }} } }
+{{- end }}

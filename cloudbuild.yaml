@@ -1,0 +1,25 @@
+# Build and push all images to Artifact Registry:
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=_REGION=asia-south1,_TAG=0.1.0
+substitutions:
+  _REGION: asia-south1
+  _REPO: archcanvas
+  _TAG: latest
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "deploy/docker/Dockerfile.api", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${_TAG}", "."]
+    waitFor: ["-"]
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "deploy/docker/Dockerfile.collab", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/collab:${_TAG}", "."]
+    waitFor: ["-"]
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "deploy/docker/Dockerfile.web", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web:${_TAG}", "."]
+    waitFor: ["-"]
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/collab:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web:${_TAG}
+
+options:
+  machineType: E2_HIGHCPU_8

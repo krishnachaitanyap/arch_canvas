@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-config
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+data:
+  PORT: "8080"
+  CORS_ORIGIN: "https://{{ .Values.ingress.host }}"
+  OIDC_ISSUER: {{ .Values.auth.oidcIssuer | quote }}
+  OIDC_AUDIENCE: {{ .Values.auth.audience | quote }}
+  TENANT_CLAIM: {{ .Values.auth.tenantClaim | quote }}
+  LLM_PROVIDER: {{ .Values.llm.provider | quote }}
+  LLM_MODEL: {{ .Values.llm.model | quote }}
+  VERTEX_PROJECT_ID: {{ .Values.llm.vertexProjectId | quote }}
+  VERTEX_REGION: {{ .Values.llm.vertexRegion | quote }}
+  OPENAI_BASE_URL: {{ .Values.llm.openaiBaseUrl | quote }}
+---
+{{- if not .Values.database.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "archcanvas.fullname" . }}-db
+  labels: {{- include "archcanvas.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- if .Values.postgresql.enabled }}
+  DATABASE_URL: "postgres://archcanvas:{{ .Values.postgresql.password }}@{{ include "archcanvas.fullname" . }}-postgres:5432/archcanvas"
+  {{- else }}
+  DATABASE_URL: {{ required "database.url or database.existingSecret is required" .Values.database.url | quote }}
+  {{- end }}
+{{- end }}

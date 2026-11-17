@@ -1,0 +1,21 @@
+{
+  "name": "archcanvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-native architecture diagramming platform. Cloud (GCP) and self-hosted from one codebase.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:web": "npm run dev -w @archcanvas/web",
+    "dev:api": "npm run dev -w @archcanvas/api",
+    "dev:collab": "npm run dev -w @archcanvas/collab",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "migrate": "npm run migrate -w @archcanvas/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

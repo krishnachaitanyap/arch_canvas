@@ -1,0 +1,6 @@
+apiVersion: v2
+name: archcanvas
+description: AI-native architecture diagramming. One chart for GKE (cloud) and customer Kubernetes (self-hosted).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

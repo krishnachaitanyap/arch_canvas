@@ -1,0 +1,15 @@
+# Build context: repository root
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/
+RUN npm ci -w @archcanvas/web --include-workspace-root
+COPY apps/web apps/web
+RUN npm run build -w @archcanvas/web
+
+FROM nginxinc/nginx-unprivileged:1.27-alpine
+# API_UPSTREAM / COLLAB_UPSTREAM are substituted into the nginx config at container start
+ENV API_UPSTREAM=http://api:8080 COLLAB_UPSTREAM=http://collab:1234
+COPY deploy/docker/default.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+EXPOSE 8080
