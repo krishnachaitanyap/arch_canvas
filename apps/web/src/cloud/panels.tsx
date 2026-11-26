@@ -13,6 +13,7 @@ import {
   PROTOCOLS,
   type PropSpec,
   resolvedProps,
+  GROUP_STYLE_KEYS,
 } from "@archcanvas/shared";
 import { api, type TerraformValidation } from "../api";
 import { ResourceIcon } from "./flow";
@@ -27,17 +28,7 @@ import { Modal } from "../home/Home";
 
 export type Selection = { type: "node" | "edge"; id: string } | null;
 
-export function Properties({
-  model,
-  selection,
-  onOp,
-  readOnly,
-}: {
-  model: DiagramModel;
-  selection: Selection;
-  onOp: (op: Op) => void;
-  readOnly: boolean;
-}) {
+export function Properties({ model, selection, onOp, readOnly }: { model: DiagramModel; selection: Selection; onOp: (op: Op) => void; readOnly: boolean }) {
   if (!selection) return <p className="hint pad">Select a resource or connection to edit it.</p>;
   if (selection.type === "edge") {
     const e = model.edges.find((x) => x.id === selection.id);
@@ -49,7 +40,12 @@ export function Properties({
         <h3>
           {from?.label} → {to?.label}
         </h3>
-        <EdgeLabelField key={e.id} value={e.label ?? ""} disabled={readOnly} onCommit={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, label: v || null })} />
+        <EdgeLabelField
+          key={e.id}
+          value={e.label ?? ""}
+          disabled={readOnly}
+          onCommit={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, label: v || null })}
+        />
         <label>
           Protocol
           <select
@@ -69,7 +65,9 @@ export function Properties({
             <select
               value={e.routing ?? "orthogonal"}
               disabled={readOnly}
-              onChange={(ev) => onOp({ op: "update_edge", from: e.from, to: e.to, routing: ev.target.value === "orthogonal" ? null : (ev.target.value as never) })}
+              onChange={(ev) =>
+                onOp({ op: "update_edge", from: e.from, to: e.to, routing: ev.target.value === "orthogonal" ? null : (ev.target.value as never) })
+              }
             >
               <option value="orthogonal">Orthogonal</option>
               <option value="straight">Straight</option>
@@ -92,11 +90,19 @@ export function Properties({
         <div className="prop-row">
           <label>
             Start
-            <ArrowSelect value={e.arrowStart ?? "none"} disabled={readOnly} onChange={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, arrowStart: v === "none" ? null : v })} />
+            <ArrowSelect
+              value={e.arrowStart ?? "none"}
+              disabled={readOnly}
+              onChange={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, arrowStart: v === "none" ? null : v })}
+            />
           </label>
           <label>
             End
-            <ArrowSelect value={e.arrowEnd ?? "arrow"} disabled={readOnly} onChange={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, arrowEnd: v === "arrow" ? null : v })} />
+            <ArrowSelect
+              value={e.arrowEnd ?? "arrow"}
+              disabled={readOnly}
+              onChange={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, arrowEnd: v === "arrow" ? null : v })}
+            />
           </label>
           <label className="color-label">
             Colour
@@ -220,16 +226,12 @@ function NodeProperties({ model, nodeId, onOp, readOnly }: { model: DiagramModel
       )}
       {node.kind !== "generic.shape" && node.kind !== "generic.note" && <IconField node={node} onOp={onOp} readOnly={readOnly} />}
       <label>
-        Id <span className="hint">{node.kind.startsWith("gcp.") ? "(Terraform name)" : ""}</span>
+        Id <span className="hint">{node.kind.startsWith("gcp.") && model.settings?.terraform ? "(Terraform name)" : ""}</span>
         <input value={node.id} disabled />
       </label>
       <label>
         Inside
-        <select
-          value={node.parentId ?? ""}
-          disabled={readOnly}
-          onChange={(e) => onOp({ op: "update_node", id: node.id, parentId: e.target.value || null })}
-        >
+        <select value={node.parentId ?? ""} disabled={readOnly} onChange={(e) => onOp({ op: "update_node", id: node.id, parentId: e.target.value || null })}>
           <option value="">Top level</option>
           {parents.map((p) => (
             <option key={p.id} value={p.id}>
@@ -238,15 +240,21 @@ function NodeProperties({ model, nodeId, onOp, readOnly }: { model: DiagramModel
           ))}
         </select>
       </label>
-      {entry?.props.map((spec) => (
-        <PropField
-          key={spec.key}
-          spec={spec}
-          value={props[spec.key]}
-          disabled={readOnly}
-          onChange={(v) => onOp({ op: "update_node", id: node.id, props: { [spec.key]: v } })}
-        />
-      ))}
+      {/* Deployment settings (CPU, memory, CIDR…) only with Terraform details on; styling always. */}
+      {node.kind.startsWith("gcp.") && !model.settings?.terraform && entry?.props.some((sp) => !(GROUP_STYLE_KEYS as readonly string[]).includes(sp.key)) && (
+        <p className="hint">Cloud settings (sizes, regions, networking) appear when Terraform is turned on for this canvas.</p>
+      )}
+      {entry?.props
+        .filter((spec) => model.settings?.terraform || !node.kind.startsWith("gcp.") || (GROUP_STYLE_KEYS as readonly string[]).includes(spec.key))
+        .map((spec) => (
+          <PropField
+            key={spec.key}
+            spec={spec}
+            value={props[spec.key]}
+            disabled={readOnly}
+            onChange={(v) => onOp({ op: "update_node", id: node.id, props: { [spec.key]: v } })}
+          />
+        ))}
       <button className="danger" disabled={readOnly} onClick={() => onOp({ op: "remove_node", id: node.id })}>
         Delete {entry?.container ? "group" : "resource"}
       </button>
@@ -385,10 +393,7 @@ export function TerraformPanel({ model, title }: { model: DiagramModel; title: s
     const z = new JSZip();
     const dir = z.folder(slug(title))!;
     for (const f of out.files) dir.file(f.path, f.content);
-    dir.file(
-      "README.md",
-      `# ${title}\n\nGenerated by ArchCanvas.\n\n\`\`\`bash\nterraform init\nterraform plan -var project_id=YOUR_PROJECT\n\`\`\`\n`,
-    );
+    dir.file("README.md", `# ${title}\n\nGenerated by ArchCanvas.\n\n\`\`\`bash\nterraform init\nterraform plan -var project_id=YOUR_PROJECT\n\`\`\`\n`);
     download(`${slug(title)}-terraform.zip`, await z.generateAsync({ type: "blob" }));
   }
 
@@ -409,8 +414,8 @@ export function TerraformPanel({ model, title }: { model: DiagramModel; title: s
     return (
       <div className="tf">
         <p className="banner warn">
-          Terraform is generated for the <b>Google Cloud</b> resources in a diagram, and this one has none yet. AWS, Azure, on-prem and other components
-          are documentation: they appear in workflows, the architecture doc and presentations.
+          Terraform is generated for the <b>Google Cloud</b> resources in a diagram, and this one has none yet. AWS, Azure, on-prem and other components are
+          documentation: they appear in workflows, the architecture doc and presentations.
         </p>
         <p className="hint">Add Google Cloud resources from the palette (the first segment) to get deployable Terraform for them.</p>
       </div>
@@ -419,7 +424,8 @@ export function TerraformPanel({ model, title }: { model: DiagramModel; title: s
     <div className="tf">
       {otherCount > 0 && (
         <p className="hint">
-          Covers the {gcpCount} Google Cloud resource{gcpCount === 1 ? "" : "s"}; the {otherCount} other component{otherCount === 1 ? "" : "s"} (AWS, Azure, on-prem…) are documentation only.
+          Covers the {gcpCount} Google Cloud resource{gcpCount === 1 ? "" : "s"}; the {otherCount} other component{otherCount === 1 ? "" : "s"} (AWS, Azure,
+          on-prem…) are documentation only.
         </p>
       )}
       <div className="row wrap">
@@ -471,4 +477,3 @@ function ValidationResult({ v }: { v: TerraformValidation }) {
     </div>
   );
 }
-

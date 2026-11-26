@@ -23,6 +23,8 @@ export interface MenuActions {
   /** Set style properties on the clicked item and any other selected items that have them. */
   styleNodes: (id: string, props: Record<string, string | boolean>) => void;
   arrange: (id: string, where: "front" | "back") => void;
+  /** Rotate by some degrees, or null to reset. */
+  rotate: (id: string, by: number | null) => void;
   edge: (edgeId: string, patch: Record<string, string | null>) => void;
   reverse: (edgeId: string) => void;
   editEdgeLabel: (edgeId: string) => void;
@@ -210,6 +212,12 @@ export function ContextMenu({
               {swatches("Fill", GROUP_FILLS, String(group.fill), (c) => actions.styleNodes(t.id, { fill: c }))}
               {seg("Title", "header", HEADER_LABELS, String(group.header))}
               <hr />
+            </>
+          )}
+          {!group && node.kind !== "generic.note" && (
+            <>
+              {item("Rotate 90°", () => actions.rotate(t.id, 90), { disabled: readOnly, hint: "or drag ↻" })}
+              {model.layout[t.id]?.r ? item("Reset rotation", () => actions.rotate(t.id, null), { disabled: readOnly }) : null}
             </>
           )}
           {item("Bring to front", () => actions.arrange(t.id, "front"), { disabled: readOnly })}

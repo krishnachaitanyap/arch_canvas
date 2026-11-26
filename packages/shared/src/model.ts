@@ -65,6 +65,8 @@ export const LayoutSchema = z.object({
   y: z.number(),
   w: z.number().optional(),
   h: z.number().optional(),
+  /** Rotation in degrees, clockwise (shapes and icon items). */
+  r: z.number().min(-360).max(360).optional(),
 });
 
 export const DiagramModelSchema = z.object({

@@ -12,6 +12,7 @@ import {
   type NodeProps,
   NodeResizer,
   Position,
+  useUpdateNodeInternals,
   useViewport,
 } from "@xyflow/react";
 import {
@@ -66,6 +67,8 @@ export interface CloudNodeData extends Record<string, unknown> {
   issues?: number;
   /** Terraform details on: show types, regions and warnings. */
   details?: boolean;
+  /** Rotation in degrees. */
+  rotation?: number;
 }
 type CloudNode = Node<CloudNodeData>;
 
@@ -112,6 +115,8 @@ export interface EditorActions {
   setEditing: (id: string | null) => void;
   rename: (id: string, label: string) => void;
   renameEdge: (edgeId: string, label: string) => void;
+  /** Rotate an item (degrees, clockwise; 0 clears it). */
+  rotated: (id: string, deg: number) => void;
   /** Drop a line's label somewhere else (offset from the middle of the line). */
   moveEdgeLabel: (edgeId: string, dx: number, dy: number) => void;
   resized: (id: string, box: { x: number; y: number; w: number; h: number }) => void;
@@ -123,10 +128,23 @@ export const EditorContext = createContext<EditorActions>({
   rename: () => undefined,
   renameEdge: () => undefined,
   moveEdgeLabel: () => undefined,
+  rotated: () => undefined,
   resized: () => undefined,
 });
 
-function InlineText({ id, value, className, multiline, onCommit }: { id: string; value: string; className?: string; multiline?: boolean; onCommit: (v: string) => void }) {
+function InlineText({
+  id,
+  value,
+  className,
+  multiline,
+  onCommit,
+}: {
+  id: string;
+  value: string;
+  className?: string;
+  multiline?: boolean;
+  onCommit: (v: string) => void;
+}) {
   const ctx = useContext(EditorContext);
   if (ctx.editing !== id) return <div className={className}>{value}</div>;
   return (
@@ -218,7 +236,6 @@ function EditInPlace({
       spellCheck={false}
       onBlur={() => finish(true)}
       onInput={() => (latest.current = (ref.current?.innerText ?? "").replace(/\n$/, ""))}
-
     />
   );
 }
@@ -234,12 +251,9 @@ function ResourceNode({ id, data, selected, width, height }: NodeProps<CloudNode
   const w = width ?? NODE_W;
   const h = height ?? NODE_H;
   const size = Math.max(20, Math.round(Math.min(w, h) * 0.78));
+  const rot = useRotation(id, data.rotation);
   return (
-    <div
-      className={`rnode ${data.status ?? ""} ${selected ? "selected" : ""}`}
-      title={data.details ? entry?.description : undefined}
-      onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
-    >
+    <>
       <NodeResizer
         isVisible={selected && ctx.editable}
         minWidth={28}
@@ -249,26 +263,89 @@ function ResourceNode({ id, data, selected, width, height }: NodeProps<CloudNode
         handleClassName="sel-handle"
         onResizeEnd={(_, r) => ctx.resized(id, { x: r.x, y: r.y, w: r.width, h: r.height })}
       />
-      <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={size} />
-      {data.details && data.issues ? (
-        <span className="rnode-badge" title={`${data.issues} warning(s)`}>
-          {data.issues}
+      {selected && ctx.editable && <RotateHandle angle={rot.angle} onLive={rot.setLive} onEnd={(d) => ctx.rotated(id, d)} />}
+      <div
+        className={`rnode ${data.status ?? ""} ${selected ? "selected" : ""}`}
+        title={data.details ? entry?.description : undefined}
+        onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
+      >
+        {/* Only the icon turns; the name underneath stays level. */}
+        <span className="rnode-icon" style={rot.style}>
+          <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={size} />
         </span>
-      ) : null}
-      <div className="rnode-caption">
-        {/* A name: Enter saves, Shift+Enter breaks the line. */}
-        <InlineText id={id} value={data.node.label} className="rnode-label" onCommit={(v) => ctx.rename(id, v)} />
-        {data.details && (entry?.label ?? data.node.kind) !== data.node.label.trim() && <div className="rnode-kind">{entry?.label ?? data.node.kind}</div>}
+        {data.details && data.issues ? (
+          <span className="rnode-badge" title={`${data.issues} warning(s)`}>
+            {data.issues}
+          </span>
+        ) : null}
+        <div className="rnode-caption">
+          {/* A name: Enter saves, Shift+Enter breaks the line. */}
+          <InlineText id={id} value={data.node.label} className="rnode-label" onCommit={(v) => ctx.rename(id, v)} />
+          {data.details && (entry?.label ?? data.node.kind) !== data.node.label.trim() && <div className="rnode-kind">{entry?.label ?? data.node.kind}</div>}
+        </div>
+        {/* Target first, source on top: dragging from a point starts a line from this item. */}
+        {SIDES.map((side) => (
+          <Handle key={`t-${side}`} id={side} type="target" position={SIDE_POS[side]} className="side-handle" />
+        ))}
+        {SIDES.map((side) => (
+          <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
+        ))}
       </div>
-      {/* Target first, source on top: dragging from a point starts a line from this item. */}
-      {SIDES.map((side) => (
-        <Handle key={`t-${side}`} id={side} type="target" position={SIDE_POS[side]} className="side-handle" />
-      ))}
-      {SIDES.map((side) => (
-        <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
-      ))}
+    </>
+  );
+}
+
+/**
+ * draw.io's rotate handle: drag around the item to turn it (15° steps; hold Shift for any
+ * angle). The item's own rotation is applied by the node; this reports the live angle.
+ */
+function RotateHandle({ angle, onLive, onEnd }: { angle: number; onLive: (deg: number | null) => void; onEnd: (deg: number) => void }) {
+  const drag = useRef<{ cx: number; cy: number; last: number } | null>(null);
+  const angleAt = (e: React.PointerEvent) => {
+    const d = drag.current!;
+    let deg = (Math.atan2(e.clientY - d.cy, e.clientX - d.cx) * 180) / Math.PI + 90;
+    if (!e.shiftKey) deg = Math.round(deg / 15) * 15;
+    deg = ((deg % 360) + 360) % 360;
+    return deg > 180 ? deg - 360 : deg;
+  };
+  return (
+    <div
+      className="rotate-handle nodrag nopan"
+      title={`Rotate (${Math.round(angle)}°) · Shift for any angle`}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        const node = (e.currentTarget as HTMLElement).closest(".react-flow__node")!.getBoundingClientRect();
+        drag.current = { cx: node.x + node.width / 2, cy: node.y + node.height / 2, last: angle };
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!drag.current) return;
+        drag.current.last = angleAt(e);
+        onLive(drag.current.last);
+      }}
+      onPointerUp={() => {
+        const d = drag.current;
+        drag.current = null;
+        onLive(null);
+        if (d) onEnd(d.last);
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+        <path d="M21 3v5h-5" />
+      </svg>
     </div>
   );
+}
+
+/** An item's rotation: the saved angle, or the live one while its handle is dragged. */
+function useRotation(id: string, saved: number | undefined) {
+  const [live, setLive] = useState<number | null>(null);
+  const angle = live ?? saved ?? 0;
+  const update = useUpdateNodeInternals();
+  // Connection points rotate with the item; React Flow must re-measure them.
+  useEffect(() => update(id), [id, angle, update]);
+  return { angle, setLive, style: angle ? { transform: `rotate(${angle}deg)` } : undefined };
 }
 
 /** The group's corner tab: AWS group icons already are one; other icons sit on the group colour. */
@@ -295,7 +372,7 @@ function GroupNode({ id, data, selected }: NodeProps<CloudNode>) {
   const border = String(p.border ?? "dashed");
   const header = String(p.header ?? "icon");
   const fill = String(p.fill ?? "none");
-  const region = data.node.kind === "gcp.region" ? (data.node.props.region as string | undefined) ?? "us-central1" : undefined;
+  const region = data.node.kind === "gcp.region" ? ((data.node.props.region as string | undefined) ?? "us-central1") : undefined;
   const kindLabel = `${data.node.kind === "generic.group" ? "" : (entry?.label ?? "")}${region ? ` · ${region}` : ""}`;
   return (
     <div
@@ -320,7 +397,9 @@ function GroupNode({ id, data, selected }: NodeProps<CloudNode>) {
         {header === "tab" && <GroupTab kind={data.node.kind} icon={data.node.icon} color={color} />}
         {header === "icon" && <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={20} />}
         <InlineText id={id} value={data.node.label} className="gnode-label" onCommit={(v) => ctx.rename(id, v)} />
-        {data.details && kindLabel && kindLabel !== data.node.label.trim() && (header === "icon" || header === "label") && <span className="gnode-kind">{kindLabel}</span>}
+        {data.details && kindLabel && kindLabel !== data.node.label.trim() && (header === "icon" || header === "label") && (
+          <span className="gnode-kind">{kindLabel}</span>
+        )}
       </div>
     </div>
   );
@@ -330,7 +409,13 @@ function NoteNode({ id, data, selected }: NodeProps<CloudNode>) {
   const ctx = useContext(EditorContext);
   return (
     <div className={`note ${selected ? "selected" : ""}`} onDoubleClick={() => ctx.editable && ctx.setEditing(id)}>
-      <NodeResizer isVisible={selected && ctx.editable} minWidth={100} minHeight={40} color="#ca8a04" onResizeEnd={(_, p) => ctx.resized(id, { x: p.x, y: p.y, w: p.width, h: p.height })} />
+      <NodeResizer
+        isVisible={selected && ctx.editable}
+        minWidth={100}
+        minHeight={40}
+        color="#ca8a04"
+        onResizeEnd={(_, p) => ctx.resized(id, { x: p.x, y: p.y, w: p.width, h: p.height })}
+      />
       <Handle type="target" position={Position.Left} />
       <InlineText id={id} value={data.node.label} className="note-text" multiline onCommit={(v) => ctx.rename(id, v)} />
       <Handle type="source" position={Position.Right} />
@@ -365,7 +450,16 @@ type SvgCommon = { fill: string; stroke: string; strokeWidth: number; vectorEffe
  * their direction: block arrows, two-way arrows, chevrons and thin arrows.
  */
 function arrowShape(shape: string, w: number, h: number, p: number, common: SvgCommon): React.ReactNode {
-  const dir = shape.endsWith("left") && !shape.endsWith("left-right") ? "left" : shape.endsWith("up") ? "up" : shape.endsWith("down") && !shape.endsWith("up-down") ? "down" : shape.endsWith("up-down") ? "down" : "right";
+  const dir =
+    shape.endsWith("left") && !shape.endsWith("left-right")
+      ? "left"
+      : shape.endsWith("up")
+        ? "up"
+        : shape.endsWith("down") && !shape.endsWith("up-down")
+          ? "down"
+          : shape.endsWith("up-down")
+            ? "down"
+            : "right";
   const vertical = dir === "up" || dir === "down";
   const L = vertical ? h : w;
   const T = vertical ? w : h;
@@ -377,8 +471,24 @@ function arrowShape(shape: string, w: number, h: number, p: number, common: SvgC
     const hw = Math.min(T / 2 - p, 7);
     return (
       <>
-        <polyline points={pts([[p, T / 2], [L - hl, T / 2]])} {...common} fill="none" strokeWidth={common.strokeWidth + 0.4} />
-        <polygon points={pts([[L - hl, T / 2 - hw], [L - p, T / 2], [L - hl, T / 2 + hw]])} {...common} fill={common.stroke} />
+        <polyline
+          points={pts([
+            [p, T / 2],
+            [L - hl, T / 2],
+          ])}
+          {...common}
+          fill="none"
+          strokeWidth={common.strokeWidth + 0.4}
+        />
+        <polygon
+          points={pts([
+            [L - hl, T / 2 - hw],
+            [L - p, T / 2],
+            [L - hl, T / 2 + hw],
+          ])}
+          {...common}
+          fill={common.stroke}
+        />
       </>
     );
   }
@@ -387,18 +497,54 @@ function arrowShape(shape: string, w: number, h: number, p: number, common: SvgC
   const y2 = T * 0.73;
   if (shape === "chevron") {
     const k = Math.min(L * 0.3, T * 0.5);
-    return <polygon points={pts([[p, p], [L - k, p], [L - p, T / 2], [L - k, T - p], [p, T - p], [p + k, T / 2]])} {...common} />;
+    return (
+      <polygon
+        points={pts([
+          [p, p],
+          [L - k, p],
+          [L - p, T / 2],
+          [L - k, T - p],
+          [p, T - p],
+          [p + k, T / 2],
+        ])}
+        {...common}
+      />
+    );
   }
   if (shape.endsWith("left-right") || shape.endsWith("up-down")) {
     const hd = Math.min(L * 0.3, T * 0.9);
     return (
       <polygon
-        points={pts([[p, T / 2], [hd, p], [hd, y1], [L - hd, y1], [L - hd, p], [L - p, T / 2], [L - hd, T - p], [L - hd, y2], [hd, y2], [hd, T - p]])}
+        points={pts([
+          [p, T / 2],
+          [hd, p],
+          [hd, y1],
+          [L - hd, y1],
+          [L - hd, p],
+          [L - p, T / 2],
+          [L - hd, T - p],
+          [L - hd, y2],
+          [hd, y2],
+          [hd, T - p],
+        ])}
         {...common}
       />
     );
   }
-  return <polygon points={pts([[p, y1], [L - head, y1], [L - head, p], [L - p, T / 2], [L - head, T - p], [L - head, y2], [p, y2]])} {...common} />;
+  return (
+    <polygon
+      points={pts([
+        [p, y1],
+        [L - head, y1],
+        [L - head, p],
+        [L - p, T / 2],
+        [L - head, T - p],
+        [L - head, y2],
+        [p, y2],
+      ])}
+      {...common}
+    />
+  );
 }
 
 /** SVG outline for a general shape at its real pixel size (so it stays crisp when resized). */
@@ -426,7 +572,14 @@ export function ShapeOutline({
   const H = h - p;
   fill = fill === "none" ? "transparent" : fill;
   const dasharray = dash === "dashed" ? `${sw * 4} ${sw * 3}` : dash === "dotted" ? `${Math.max(1, sw * 0.8)} ${sw * 2.5}` : undefined;
-  const common = { fill, stroke, strokeWidth: sw, vectorEffect: "non-scaling-stroke" as const, strokeDasharray: dasharray, strokeLinecap: dash === "dotted" ? ("round" as const) : undefined };
+  const common = {
+    fill,
+    stroke,
+    strokeWidth: sw,
+    vectorEffect: "non-scaling-stroke" as const,
+    strokeDasharray: dasharray,
+    strokeLinecap: dash === "dotted" ? ("round" as const) : undefined,
+  };
   const solid = { ...common, fill: stroke };
   const open = { ...common, fill: "none" };
   const slant = Math.min(24, w * 0.18);
@@ -536,7 +689,12 @@ export function ShapeOutline({
     }
     case "tape": {
       const a = Math.min(10, h * 0.12);
-      el = <path d={`M${p},${p + a} C${w * 0.33},${p - a} ${w * 0.66},${p + 3 * a} ${W},${p + a} V${H - a} C${w * 0.66},${H - 3 * a} ${w * 0.33},${H + a} ${p},${H - a} Z`} {...common} />;
+      el = (
+        <path
+          d={`M${p},${p + a} C${w * 0.33},${p - a} ${w * 0.66},${p + 3 * a} ${W},${p + a} V${H - a} C${w * 0.66},${H - 3 * a} ${w * 0.33},${H + a} ${p},${H - a} Z`}
+          {...common}
+        />
+      );
       break;
     }
     case "page": {
@@ -698,8 +856,7 @@ export function ShapeOutline({
     }
     default:
       if (shape.includes("arrow") || shape === "chevron") el = arrowShape(shape, w, h, p, common);
-      else
-      el = <rect x={p} y={p} width={W - p} height={H - p} {...common} />;
+      else el = <rect x={p} y={p} width={W - p} height={H - p} {...common} />;
   }
   return (
     <svg className={`shape-svg ${shadow ? "shadow" : ""}`} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
@@ -715,43 +872,57 @@ function ShapeNode({ id, data, selected, width, height }: NodeProps<CloudNode>) 
   const [dw, dh] = SHAPE_LABELS[shape as ShapeName]?.size ?? [160, 70];
   const w = width ?? dw;
   const h = height ?? dh;
+  const rot = useRotation(id, data.rotation);
   return (
-    <div
-      className={`shape-node ${data.status ?? ""} ${selected ? "selected" : ""} ${shape === "text" ? "text-only" : ""}`}
-      style={{
-        color: String(p.textColor),
-        fontFamily: FONT_STACKS[String(p.font)] ?? undefined,
-        ["--shape-font-size" as string]: `${p.fontSize}px`,
-        fontWeight: p.bold ? 700 : undefined,
-        fontStyle: p.italic ? "italic" : undefined,
-      }}
-      onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
-    >
+    <>
       <NodeResizer
         isVisible={selected && ctx.editable}
-        minWidth={40}
-        minHeight={24}
+        minWidth={10}
+        minHeight={10}
         lineClassName="sel-line"
         handleClassName="sel-handle"
         onResizeEnd={(_, r) => ctx.resized(id, { x: r.x, y: r.y, w: r.width, h: r.height })}
       />
-      <ShapeOutline shape={shape} w={w} h={h} fill={String(p.fill)} stroke={String(p.stroke)} sw={Number(p.strokeWidth)} dash={String(p.lineStyle)} shadow={Boolean(p.shadow)} />
-      {ROW_SHAPES.has(shape) && ctx.editing !== id ? (
-        <RowsText shape={shape} text={data.node.label} stroke={String(p.stroke)} />
-      ) : (
-        <div className={`shape-label at-${LABEL_AT[shape] ?? "center"} ${ROW_SHAPES.has(shape) ? "rows-editing" : ""}`}>
-          <InlineText id={id} value={data.node.label} multiline onCommit={(v) => ctx.rename(id, v)} />
-        </div>
-      )}
-      {/* A source and a target handle on every side (same id), so lines can start and end anywhere. */}
-      {/* Target first, source on top: dragging from a point starts a line from this item. */}
-      {SIDES.map((side) => (
-        <Handle key={`t-${side}`} id={side} type="target" position={SIDE_POS[side]} className="side-handle" />
-      ))}
-      {SIDES.map((side) => (
-        <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
-      ))}
-    </div>
+      {selected && ctx.editable && <RotateHandle angle={rot.angle} onLive={rot.setLive} onEnd={(d) => ctx.rotated(id, d)} />}
+      <div
+        className={`shape-node ${data.status ?? ""} ${selected ? "selected" : ""} ${shape === "text" ? "text-only" : ""}`}
+        style={{
+          ...rot.style,
+          color: String(p.textColor),
+          fontFamily: FONT_STACKS[String(p.font)] ?? undefined,
+          ["--shape-font-size" as string]: `${p.fontSize}px`,
+          fontWeight: p.bold ? 700 : undefined,
+          fontStyle: p.italic ? "italic" : undefined,
+        }}
+        onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
+      >
+        <ShapeOutline
+          shape={shape}
+          w={w}
+          h={h}
+          fill={String(p.fill)}
+          stroke={String(p.stroke)}
+          sw={Number(p.strokeWidth)}
+          dash={String(p.lineStyle)}
+          shadow={Boolean(p.shadow)}
+        />
+        {ROW_SHAPES.has(shape) && ctx.editing !== id ? (
+          <RowsText shape={shape} text={data.node.label} stroke={String(p.stroke)} />
+        ) : (
+          <div className={`shape-label at-${LABEL_AT[shape] ?? "center"} ${ROW_SHAPES.has(shape) ? "rows-editing" : ""}`}>
+            <InlineText id={id} value={data.node.label} multiline onCommit={(v) => ctx.rename(id, v)} />
+          </div>
+        )}
+        {/* A source and a target handle on every side (same id), so lines can start and end anywhere. */}
+        {/* Target first, source on top: dragging from a point starts a line from this item. */}
+        {SIDES.map((side) => (
+          <Handle key={`t-${side}`} id={side} type="target" position={SIDE_POS[side]} className="side-handle" />
+        ))}
+        {SIDES.map((side) => (
+          <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -874,7 +1045,11 @@ function SmartEdge(props: EdgeProps<Edge<EdgeData>>) {
   const ctx = useContext(EditorContext);
   const params = { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition };
   const [path, lx, ly] =
-    data?.routing === "straight" ? getStraightPath(params) : data?.routing === "curved" ? getBezierPath(params) : getSmoothStepPath({ ...params, borderRadius: 8 });
+    data?.routing === "straight"
+      ? getStraightPath(params)
+      : data?.routing === "curved"
+        ? getBezierPath(params)
+        : getSmoothStepPath({ ...params, borderRadius: 8 });
   const text = typeof label === "string" ? label : "";
   const editing = ctx.editing === `edge:${id}`;
   const color = data?.color ?? "#5f6368";
@@ -912,7 +1087,25 @@ function SmartEdge(props: EdgeProps<Edge<EdgeData>>) {
  * A line's label. Drag it anywhere (it stays attached to the line and follows it when shapes
  * move, as in draw.io); double-click to edit. A dotted lead-in shows which line it belongs to.
  */
-function EdgeLabel({ id, x, y, dx, dy, editing, moved, children }: { id: string; x: number; y: number; dx: number; dy: number; editing: boolean; moved: boolean; children: React.ReactNode }) {
+function EdgeLabel({
+  id,
+  x,
+  y,
+  dx,
+  dy,
+  editing,
+  moved,
+  children,
+}: {
+  id: string;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  editing: boolean;
+  moved: boolean;
+  children: React.ReactNode;
+}) {
   const ctx = useContext(EditorContext);
   const { zoom } = useViewport();
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
@@ -922,7 +1115,12 @@ function EdgeLabel({ id, x, y, dx, dy, editing, moved, children }: { id: string;
   return (
     <>
       {(moved || drag) && (
-        <svg className="edge-label-lead" style={{ transform: `translate(${Math.min(x, x + ox)}px, ${Math.min(y, y + oy)}px)` }} width={Math.abs(ox) + 1} height={Math.abs(oy) + 1}>
+        <svg
+          className="edge-label-lead"
+          style={{ transform: `translate(${Math.min(x, x + ox)}px, ${Math.min(y, y + oy)}px)` }}
+          width={Math.abs(ox) + 1}
+          height={Math.abs(oy) + 1}
+        >
           <line x1={ox < 0 ? -ox : 0} y1={oy < 0 ? -oy : 0} x2={ox < 0 ? 0 : ox} y2={oy < 0 ? 0 : oy} />
         </svg>
       )}
@@ -963,7 +1161,15 @@ export const edgeTypes = { smart: SmartEdge };
 /** Model → React Flow nodes/edges. Parents are emitted before children, as React Flow requires. */
 export function toFlow(
   m: DiagramModel,
-  opts: { diff?: ModelDiff; issues?: Map<string, number>; selected?: string | null; selectedIds?: Set<string>; highlight?: Highlight | null; editable?: boolean; details?: boolean } = {},
+  opts: {
+    diff?: ModelDiff;
+    issues?: Map<string, number>;
+    selected?: string | null;
+    selectedIds?: Set<string>;
+    highlight?: Highlight | null;
+    editable?: boolean;
+    details?: boolean;
+  } = {},
 ): { nodes: CloudNode[]; edges: Edge[] } {
   const details = opts.details ?? Boolean(m.settings?.terraform);
   const statusOf = (id: string): Status | undefined =>
@@ -990,7 +1196,7 @@ export function toFlow(
         type: container ? "group" : note ? "note" : shape ? "shape" : "resource",
         position: { x: box.x, y: box.y },
         ...(n.parentId ? { parentId: n.parentId } : {}),
-        data: { node: n, status: statusOf(n.id), issues: opts.issues?.get(n.id), details },
+        data: { node: n, status: statusOf(n.id), issues: opts.issues?.get(n.id), details, rotation: m.layout[n.id]?.r },
         style: { width: w, height: h },
         width: w,
         height: h,

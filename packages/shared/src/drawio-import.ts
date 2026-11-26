@@ -634,8 +634,13 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
       const parentCell = node.parentId ? [...nodeIdOf].find(([, n]) => n === node.parentId)?.[0] : undefined;
       const base = parentCell ? abs.get(parentCell)! : { x: 0, y: 0 };
       const container = catalogEntry(node.kind)?.container;
-      model.layout[nodeId] = { x: own.x - base.x, y: own.y - base.y, ...(container ? { w: own.w, h: own.h } : {}) };
-      void cell;
+      const rotation = Number(styleMap(cell.style).rotation ?? 0);
+      model.layout[nodeId] = {
+        x: own.x - base.x,
+        y: own.y - base.y,
+        ...(container ? { w: own.w, h: own.h } : {}),
+        ...(rotation && Math.abs(rotation) <= 360 ? { r: rotation } : {}),
+      };
     }
   }
   return { model, items, warnings, layoutKept: exact };

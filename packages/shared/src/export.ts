@@ -125,7 +125,7 @@ function drawioDiagram(m: DiagramModel, name: string, id: string): string {
       (n.icon ? ` archcanvas_icon="${esc(n.icon)}"` : "");
     cells.push(
       `<object id="${cellId(n.id)}" label="${esc(value)}" archcanvas_kind="${esc(n.kind)}" archcanvas_id="${esc(n.id)}"${props}>` +
-        `<mxCell style="${style}" vertex="1" parent="${n.parentId ? cellId(n.parentId) : "1"}">` +
+        `<mxCell style="${style}${m.layout[n.id]?.r ? `rotation=${m.layout[n.id].r};` : ""}" vertex="1" parent="${n.parentId ? cellId(n.parentId) : "1"}">` +
         `<mxGeometry x="${Math.round(b.x)}" y="${Math.round(b.y)}" width="${Math.round(b.w)}" height="${Math.round(b.h)}" as="geometry" />` +
         `</mxCell></object>`,
     );

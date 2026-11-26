@@ -93,3 +93,15 @@ describe("canvas tabs in draw.io", () => {
     expect((await readDrawio(toDrawio(m, "Orders"))).map((p) => p.name)).toEqual(["Orders"]);
   });
 });
+
+describe("rotation", () => {
+  it("keeps an item's rotation through draw.io", async () => {
+    const { toDrawio, readDrawio, drawioToModel } = await import("../src/index.js");
+    const m0 = ok(applyOps(emptyModel(), [{ op: "add_node", id: "arrow", kind: "generic.shape", label: "", props: { shape: "arrow-right" } }]));
+    const m = { ...m0, layout: { arrow: { x: 10, y: 20, w: 140, h: 70, r: 45 } } };
+    const xml = toDrawio(m, "R");
+    expect(xml).toContain("rotation=45;");
+    const back = drawioToModel((await readDrawio(xml))[0]).model;
+    expect(back.layout.arrow.r).toBe(45);
+  });
+});

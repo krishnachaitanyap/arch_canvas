@@ -635,3 +635,9 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 /* in-place editing everywhere: same font and spot as the text, no box */
 .edge-label .edit-in-place, .gnode-head .edit-in-place { min-width: 30px; }
 .rnode-caption .edit-in-place { min-width: 40px; display: inline-block; }
+
+/* ---------- rotate handle (draw.io style) ---------- */
+.rotate-handle { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 1px solid #1a73e8; color: #1a73e8; display: flex; align-items: center; justify-content: center; cursor: grab; z-index: 5; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.rotate-handle:active { cursor: grabbing; }
+.rotate-handle::after { content: ""; position: absolute; top: 100%; left: 50%; width: 1px; height: 10px; background: #1a73e8; }
+.rnode-icon { display: flex; transition: none; }

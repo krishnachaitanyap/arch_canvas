@@ -273,6 +273,8 @@ function Editor({
   /** Auto layout of the tab in view (other tabs keep their arrangement). */
   async function relayout() {
     const layout = await autoLayout(pageModel(model, page));
+    // Positions change; rotations stay.
+    for (const [id, l] of Object.entries(layout)) if (model.layout[id]?.r) layout[id] = { ...l, r: model.layout[id].r };
     commit({ ...model, layout: { ...model.layout, ...layout } });
     fit();
   }
@@ -587,9 +589,16 @@ function Editor({
       const home = Math.hypot(dx, dy) < 6;
       if (e) op({ op: "update_edge", from: e.from, to: e.to, labelDx: home ? null : dx, labelDy: home ? null : dy });
     },
+    rotated: (id, deg) => {
+      const m = modelRef.current;
+      const l = m.layout[id] ?? { x: 0, y: 0 };
+      const r = Math.round(deg * 10) / 10;
+      const { r: _old, ...rest } = l;
+      if ((l.r ?? 0) !== r) commit({ ...m, layout: { ...m.layout, [id]: r ? { ...rest, r } : rest } });
+    },
     resized: (id, box) => {
       const m = modelRef.current;
-      commit({ ...m, layout: growGroups({ ...m, layout: { ...m.layout, [id]: { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) } } }) });
+      commit({ ...m, layout: growGroups({ ...m, layout: { ...m.layout, [id]: { ...m.layout[id], x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) } } }) });
     },
   };
 
@@ -1118,6 +1127,21 @@ function Editor({
                     .map((n) => ({ op: "update_node" as const, id: n!.id, props: { ...n!.props, ...props } }));
                   // Changing the shape keeps the size the user gave it.
                   if (ops.length) change(ops);
+                },
+                rotate: (id, by) => {
+                  const m = modelRef.current;
+                  const ids = selectedIds.has(id) ? nodeIds(selectedIds) : [id];
+                  const layout = { ...m.layout };
+                  for (const x of ids) {
+                    const n = m.nodes.find((k) => k.id === x);
+                    if (!n || catalogEntry(n.kind)?.container || n.kind === "generic.note") continue;
+                    const l = layout[x] ?? { x: 0, y: 0 };
+                    let r = by === null ? 0 : (((l.r ?? 0) + by) % 360 + 360) % 360;
+                    if (r > 180) r -= 360;
+                    const { r: _old, ...rest } = l;
+                    layout[x] = r ? { ...rest, r } : rest;
+                  }
+                  commit({ ...m, layout });
                 },
                 arrange: (id, where) => arrange(selectedIds.has(id) ? nodeIds(selectedIds) : [id], where),
                 edge: (edgeId, patch) => {
