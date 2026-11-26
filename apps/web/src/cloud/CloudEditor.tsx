@@ -27,7 +27,14 @@ import {
   type ModelDiff,
   NODE_ID,
   type DrawioPage,
+  addPage,
+  movePage,
+  removePage,
+  renamePage,
   type Op,
+  pageModel,
+  pageOf,
+  pagesOf,
   resolvedProps,
   SHAPE_LABELS,
   type ShapeName,
@@ -51,6 +58,7 @@ import { autoLayout, hasLayout, structureKey } from "./layout";
 import { DRAG_TYPE, Palette, type PaletteItem } from "./Palette";
 import { ContextMenu, type MenuState } from "./ContextMenu";
 import { FormatBar } from "./FormatBar";
+import { PageTabs } from "./PageTabs";
 import { Presentation } from "./Presentation";
 import { Properties, Review, type Selection, TerraformPanel } from "./panels";
 
@@ -121,6 +129,8 @@ function Editor({
   /** How new connections are drawn (the toolbar's connector style). */
   const [newRouting, setNewRouting] = useState<"orthogonal" | "straight" | "curved">("orthogonal");
   const [paletteOpen, setPaletteOpen] = useState(true);
+  /** The canvas tab in view; everything you add, paste or lay out happens on it. */
+  const [activePage, setActivePage] = useState<string>(() => pagesOf(initial).at(0)!.id);
   const [model, setModel] = useState<DiagramModel>(initial);
   const modelRef = useRef(model);
   modelRef.current = model;
@@ -174,7 +184,7 @@ function Editor({
     registerCurrent(() => ({ kind: "cloud", model: modelRef.current, source: "", dirty: dirtyRef.current || !diagramId }));
   }, [registerCurrent, diagramId]);
 
-  const fit = useCallback(() => setTimeout(() => void rf.fitView({ padding: 0.15, duration: 300 }), 60), [rf]);
+  const fit = useCallback(() => setTimeout(() => void rf.fitView({ padding: 0.15, duration: 300, maxZoom: 1.25 }), 60), [rf]);
 
   // ---------------------------------------------------------------- model changes
 
@@ -228,6 +238,11 @@ function Editor({
     setDirty(true);
   }, [future, readOnly]);
 
+  const pages = pagesOf(model);
+  const page = pages.some((p) => p.id === activePage) ? activePage : pages[0].id;
+  const pageRef = useRef(page);
+  pageRef.current = page;
+
   // Positions: a fresh diagram (nothing placed yet) gets a full auto-layout; after that only
   // new or re-parented nodes are placed, so manual arrangement is never thrown away.
   const modelKey = structureKey(model);
@@ -239,7 +254,7 @@ function Editor({
       return;
     }
     let cancelled = false;
-    void autoLayout(model).then((layout) => {
+    void layoutPages(model).then((layout) => {
       if (cancelled) return;
       setModel((m) => (structureKey(m) === modelKey ? { ...m, layout } : m));
       fit();
@@ -250,9 +265,10 @@ function Editor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelKey]);
 
+  /** Auto layout of the tab in view (other tabs keep their arrangement). */
   async function relayout() {
-    const layout = await autoLayout(model);
-    commit({ ...model, layout });
+    const layout = await autoLayout(pageModel(model, page));
+    commit({ ...model, layout: { ...model.layout, ...layout } });
     fit();
   }
 
@@ -260,16 +276,16 @@ function Editor({
 
   const diff: ModelDiff | undefined = useMemo(() => (proposal ? diffModels(proposal.base, proposal.model) : undefined), [proposal]);
   const display: DiagramModel = useMemo(() => {
-    if (!proposal || !diff) return model;
+    if (!proposal || !diff) return pageModel(model, page);
     const shown = withGhosts(proposal.base, proposal.model, diff);
-    return { ...shown, layout: proposalLayout ?? proposal.base.layout };
-  }, [model, proposal, diff, proposalLayout]);
+    return pageModel({ ...shown, layout: proposalLayout ?? proposal.base.layout }, page);
+  }, [model, proposal, diff, proposalLayout, page]);
 
   const proposalKey = proposal && diff ? structureKey(withGhosts(proposal.base, proposal.model, diff)) : "";
   useEffect(() => {
     if (!proposal || !diff) return setProposalLayout(null);
     let cancelled = false;
-    void autoLayout(withGhosts(proposal.base, proposal.model, diff)).then((l) => {
+    void layoutPages(withGhosts(proposal.base, proposal.model, diff)).then((l) => {
       if (!cancelled) {
         setProposalLayout(l);
         fit();
@@ -283,8 +299,8 @@ function Editor({
 
   const agentCallbacks = {
     onStart: (base: DiagramModel) => setProposal({ base, model: base, running: true, changed: false }),
-    onProposal: (m: DiagramModel) => setProposal((p) => (p ? { ...p, model: m, changed: true } : p)),
-    onDone: (m: DiagramModel, changed: boolean) => setProposal((p) => (p && changed ? { ...p, model: m, running: false, changed: true } : null)),
+    onProposal: (m: DiagramModel) => setProposal((p) => (p ? { ...p, model: onPage(p.base, m, page), changed: true } : p)),
+    onDone: (m: DiagramModel, changed: boolean) => setProposal((p) => (p && changed ? { ...p, model: onPage(p.base, m, page), running: false, changed: true } : null)),
     onShowTerraform: () => setTab("terraform"),
   };
 
@@ -362,7 +378,7 @@ function Editor({
     for (const n of roots) {
       const node = next.nodes.find((x) => x.id === n.id)!;
       const abs = absBox(next, n.id);
-      const target = containerAt(next, { x: abs.x + abs.w / 2, y: abs.y + Math.min(abs.h / 2, 30) }, node.kind, [n.id]);
+      const target = containerAt(next, { x: abs.x + abs.w / 2, y: abs.y + Math.min(abs.h / 2, 30) }, node.kind, [n.id], page);
       if ((target?.id ?? undefined) === (node.parentId ?? undefined)) continue;
       const { ops, layout: fix } = reparentOps(next, n.id, target?.id);
       const r = applyOps(next, ops);
@@ -380,7 +396,7 @@ function Editor({
     const m = modelRef.current;
     const entry = catalogEntry(item.kind)!;
     let parentId: string | undefined;
-    if (at) parentId = containerAt(m, at, item.kind)?.id;
+    if (at) parentId = containerAt(m, at, item.kind, [], page)?.id;
     else {
       const sel = selection?.type === "node" ? m.nodes.find((n) => n.id === selection.id) : undefined;
       const candidates = sel ? [sel, ...(sel.parentId ? [m.nodes.find((n) => n.id === sel.parentId)!] : [])] : [];
@@ -400,7 +416,7 @@ function Editor({
     for (let i = 2; m.nodes.some((n) => n.id === id); i++) id = `${base}_${i}`;
     const long = item.kind === "generic.note" || item.kind === "generic.shape";
     const ok = change(
-      [{ op: "add_node", id, kind: item.kind, label: (label || " ").slice(0, long ? 500 : 80), parentId, ...(item.icon ? { icon: item.icon } : {}), ...(item.props ? { props: item.props } : {}) }],
+      [{ op: "add_node", id, kind: item.kind, label: (label || " ").slice(0, long ? 500 : 80), parentId, ...(item.icon ? { icon: item.icon } : {}), ...(item.props ? { props: item.props } : {}), ...(parentId ? {} : { page }) }],
       (after) => {
         if (!shapeSize) return at ? { ...after.layout, [id]: relativeAt(after, parentId, at, item.kind) } : placeMissing(after);
         const [w, h] = shapeSize;
@@ -465,10 +481,10 @@ function Editor({
       offset = 0;
       if (l) {
         const shifted: Clip = { ...clip, layout: Object.fromEntries(Object.entries(clip.layout).map(([k, v]) => [k, k === first!.id ? { ...v, x: at.x, y: at.y } : v])) };
-        return finishPaste(pasteOps(m, shifted, offset));
+        return finishPaste(pasteOps(m, shifted, offset, undefined, false, page));
       }
     }
-    finishPaste(pasteOps(m, clip, offset));
+    finishPaste(pasteOps(m, clip, offset, undefined, false, page));
   }
 
   function finishPaste(r: ReturnType<typeof pasteOps>) {
@@ -480,7 +496,7 @@ function Editor({
 
   function duplicate(ids = nodeIds(selectedIds)) {
     const clip = copySelection(modelRef.current, ids);
-    if (clip) finishPaste(pasteOps(modelRef.current, clip, 32));
+    if (clip) finishPaste(pasteOps(modelRef.current, clip, 32, undefined, false, pageOf(modelRef.current, ids[0] ?? "")));
   }
 
   function doAlign(mode: AlignMode) {
@@ -528,7 +544,7 @@ function Editor({
         duplicate();
       } else if (mod && k === "a") {
         e.preventDefault();
-        setSelectedIds(new Set(modelRef.current.nodes.map((n) => n.id)));
+        setSelectedIds(new Set(modelRef.current.nodes.filter((n) => pageOf(modelRef.current, n.id) === pageRef.current).map((n) => n.id)));
       } else if (k === "f2" && selection?.type === "node" && !readOnly) {
         e.preventDefault();
         setEditing(selection.id);
@@ -585,12 +601,12 @@ function Editor({
     const tops = laid.nodes.filter((n) => !n.parentId).map((n) => n.id);
     const clip = copySelection(laid, tops);
     if (!clip) return;
-    const existing = m.nodes.filter((n) => !n.parentId).map((n) => absBox(m, n.id));
+    const existing = m.nodes.filter((n) => !n.parentId && pageOf(m, n.id) === page).map((n) => absBox(m, n.id));
     const right = existing.length ? Math.max(...existing.map((b) => b.x + b.w)) + 120 : 0;
     const top = existing.length ? Math.min(...existing.map((b) => b.y)) : 0;
     const minX = Math.min(...tops.map((id) => laid.layout[id]?.x ?? 0));
     const minY = Math.min(...tops.map((id) => laid.layout[id]?.y ?? 0));
-    const r = pasteOps(m, clip, { x: right - minX, y: top - minY }, undefined, true);
+    const r = pasteOps(m, clip, { x: right - minX, y: top - minY }, undefined, true, page);
     if ("error" in r) return setStatus({ kind: "error", text: r.error });
     commit(r.model);
     setSelectedIds(new Set(r.ids));
@@ -757,6 +773,60 @@ function Editor({
     </>
   );
 
+  // ---------------------------------------------------------------- canvas tabs
+
+  function switchPage(id: string) {
+    setActivePage(id);
+    setSelectedIds(new Set());
+    setSelection(null);
+    setMenu(null);
+    setHighlight(null);
+    fit();
+  }
+  function newPage() {
+    const n = pages.length + 1;
+    let name = `Page ${n}`;
+    for (let i = n; pages.some((p) => p.name === name); i++) name = `Page ${i + 1}`;
+    const r = addPage(modelRef.current, name);
+    commit(r.model);
+    switchPage(r.id);
+  }
+  function duplicatePage(id: string) {
+    const m = modelRef.current;
+    const src = pages.find((p) => p.id === id);
+    if (!src) return;
+    const r = addPage(m, `${src.name} copy`);
+    const tops = r.model.nodes.filter((n) => !n.parentId && pageOf(r.model, n.id) === id).map((n) => n.id);
+    const clip = copySelection(r.model, tops);
+    const pasted = clip ? pasteOps(r.model, clip, 0, undefined, false, r.id) : { model: r.model, ids: [] };
+    if ("error" in pasted) return setStatus({ kind: "error", text: pasted.error });
+    commit(pasted.model);
+    switchPage(r.id);
+  }
+  function deletePage(id: string) {
+    const m = modelRef.current;
+    const p = pages.find((x) => x.id === id);
+    const count = m.nodes.filter((n) => pageOf(m, n.id) === id).length;
+    if (!p || (count && !confirm(`Delete the "${p.name}" tab and the ${count} item${count === 1 ? "" : "s"} on it? You can undo this.`))) return;
+    commit(removePage(m, id));
+    if (id === page) switchPage(pagesOf(removePage(m, id))[0].id);
+  }
+  /** Moves the selected (or given) items to another tab, with whatever is inside them. */
+  function moveToPage(ids: string[], target: string) {
+    const m = modelRef.current;
+    const tops = ids.filter((id) => {
+      const n = m.nodes.find((x) => x.id === id);
+      return n && !ids.includes(n.parentId ?? "");
+    });
+    if (!tops.length) return;
+    if (change(tops.map((id) => ({ op: "update_node" as const, id, page: target })))) {
+      setSelectedIds(new Set());
+      setSelection(null);
+      setStatus({ kind: "ok", text: `Moved ${tops.length} item${tops.length === 1 ? "" : "s"} to ${pages.find((p) => p.id === target)?.name}` });
+    }
+  }
+  const pageCounts = Object.fromEntries(pages.map((p) => [p.id, model.nodes.filter((n) => !n.parentId && pageOf(model, n.id) === p.id).length]));
+
   /** Bring to front / send to back: z-order follows the order of nodes in the model. */
   function arrange(idList: string[], where: "front" | "back") {
     const m = modelRef.current;
@@ -846,6 +916,18 @@ function Editor({
             openMenu(e, { type: "pane" });
           }}
           onDragOver={(e) => e.dataTransfer.types.includes(DRAG_TYPE) && (e.preventDefault(), (e.dataTransfer.dropEffect = "copy"))} onDrop={onDrop}>
+          <PageTabs
+            pages={pages}
+            active={page}
+            counts={pageCounts}
+            readOnly={readOnly || Boolean(proposal)}
+            onSelect={switchPage}
+            onAdd={newPage}
+            onRename={(id, name) => commit(renamePage(modelRef.current, id, name))}
+            onDuplicate={duplicatePage}
+            onMove={(id, by) => commit(movePage(modelRef.current, id, by))}
+            onDelete={deletePage}
+          />
           <FormatBar
             readOnly={readOnly}
             paletteOpen={paletteOpen}
@@ -998,7 +1080,10 @@ function Editor({
               model={model}
               readOnly={readOnly}
               onClose={() => setMenu(null)}
+              pages={pages}
+              page={page}
               actions={{
+                moveToPage: (id, target) => moveToPage(selectedIds.has(id) ? nodeIds(selectedIds) : [id], target),
                 addText: (at) => addItem({ key: "text", kind: "generic.shape", label: "Text", props: { shape: "text" } }, at),
                 styleNodes: (id, props) => {
                   const ids = selectedIds.has(id) ? nodeIds(selectedIds) : [id];
@@ -1039,7 +1124,7 @@ function Editor({
             />
           )}
 
-          {!model.nodes.length && !proposal && (
+          {!display.nodes.length && !proposal && (
             <div className="canvas-empty">
               <h2>Start your architecture</h2>
               <p>
@@ -1170,3 +1255,17 @@ function usePanelWidth(key: string, initial: number): [number, (fn: (w: number) 
 }
 
 export const newCloudModel = (): DiagramModel => emptyModel();
+
+/** Lays out each tab on its own (tabs don't share space). */
+async function layoutPages(m: DiagramModel): Promise<DiagramModel["layout"]> {
+  const out: DiagramModel["layout"] = {};
+  for (const p of pagesOf(m)) Object.assign(out, await autoLayout(pageModel(m, p.id)));
+  return out;
+}
+
+/** Things the assistant adds go on the tab you're looking at. */
+function onPage(base: DiagramModel, m: DiagramModel, page: string): DiagramModel {
+  const known = new Set(base.nodes.map((n) => n.id));
+  if (page === pagesOf(m)[0].id && !m.pages?.length) return m;
+  return { ...m, pages: m.pages ?? base.pages, nodes: m.nodes.map((n) => (!known.has(n.id) && !n.parentId && !n.page ? { ...n, page } : n)) };
+}

@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Background, BackgroundVariant, Controls, MiniMap, type Node, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { type DiagramModel, diffModels, type ModelDiff } from "@archcanvas/shared";
+import { type DiagramModel, diffModels, type ModelDiff, pageModel, pageOf, pagesOf } from "@archcanvas/shared";
 import { edgeTypes, type Highlight, nodeTypes, toFlow, withGhosts } from "./flow";
 import { autoLayout, hasLayout, structureKey } from "./layout";
 
@@ -18,9 +18,34 @@ interface StaticProps {
 
 /** Read-only canvas: comparisons, walkthroughs and presentations. Auto-lays out when positions are missing. */
 export function StaticCanvas(props: StaticProps) {
+  // A diagram with canvas tabs is shown one tab at a time: the tab of what's in focus (e.g.
+  // the presentation's current step), else the one picked from the small tab bar.
+  const pages = pagesOf(props.model);
+  const [picked, setPicked] = useState(pages[0].id);
+  const focusPage = props.focus?.length ? pageOf(props.model, props.focus[0]) : undefined;
+  const page = focusPage ?? (pages.some((p) => p.id === picked) ? picked : pages[0].id);
+  const model = useMemo(() => (pages.length > 1 ? pageModel(props.model, page) : props.model), [props.model, page, pages.length]);
   return (
     <ReactFlowProvider>
-      <Inner {...props} />
+      <Inner
+        key={pages.length > 1 ? page : "one"}
+        {...props}
+        model={model}
+        overlay={
+          <>
+            {props.overlay}
+            {pages.length > 1 && (
+              <div className="static-pages" role="tablist" aria-label="Canvas tabs">
+                {pages.map((p) => (
+                  <button key={p.id} role="tab" aria-selected={p.id === page} className={p.id === page ? "on" : ""} onClick={() => setPicked(p.id)}>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        }
+      />
     </ReactFlowProvider>
   );
 }

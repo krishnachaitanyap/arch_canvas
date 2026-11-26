@@ -1,4 +1,4 @@
-import { applyOps, catalogEntry, type DiagramModel, type DiagramNode, NODE_ID, type Op } from "@archcanvas/shared";
+import { applyOps, catalogEntry, type DiagramModel, type DiagramNode, NODE_ID, type Op, pageOf } from "@archcanvas/shared";
 import { NODE_H, NODE_W } from "./layout";
 
 /**
@@ -56,11 +56,12 @@ export function descendants(m: DiagramModel, id: string): string[] {
  * The deepest group under an absolute point that may hold a node of `kind`, ignoring the
  * node itself and its descendants (you can't drop a group into itself).
  */
-export function containerAt(m: DiagramModel, p: { x: number; y: number }, kind: string, exclude: string[] = []): DiagramNode | undefined {
+export function containerAt(m: DiagramModel, p: { x: number; y: number }, kind: string, exclude: string[] = [], page?: string): DiagramNode | undefined {
   const entry = catalogEntry(kind);
   const skip = new Set(exclude.flatMap((id) => [id, ...descendants(m, id)]));
   return m.nodes
     .filter((n) => isContainer(n.kind) && !skip.has(n.id) && entry?.parents.includes(n.kind))
+    .filter((n) => !page || pageOf(m, n.id) === page)
     .filter((n) => {
       const b = absBox(m, n.id);
       return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
@@ -97,7 +98,8 @@ export function placeMissing(m: DiagramModel): Layout {
   const ordered = [...m.nodes].sort((a, b) => depth(m, a.id) - depth(m, b.id));
   for (const n of ordered) {
     if (layout[n.id]) continue;
-    const siblings = m.nodes.filter((s) => s.parentId === n.parentId && s.id !== n.id && layout[s.id]);
+    // Siblings on the same tab only: other tabs have their own space.
+    const siblings = m.nodes.filter((s) => s.parentId === n.parentId && s.id !== n.id && layout[s.id] && (n.parentId || pageOf(m, s.id) === pageOf(m, n.id)));
     const top = n.parentId ? HEADER : 0;
     const bottom = siblings.reduce((y, s) => Math.max(y, layout[s.id].y + sizeOf(mm, s).h), top - PAD);
     const d = defaultSize(n.kind);
@@ -192,6 +194,8 @@ export function pasteOps(
   offset: number | { x: number; y: number } = 32,
   parentId?: string,
   keepIds = false,
+  /** The tab top-level pasted items go on. */
+  page?: string,
 ): { model: DiagramModel; ids: string[] } | { error: string } {
   const dx = typeof offset === "number" ? offset : offset.x;
   const dy = typeof offset === "number" ? offset : offset.y;
@@ -218,9 +222,10 @@ export function pasteOps(
     placed.add(n.id);
     const own = n.parentId && inClip.has(n.parentId) ? rename.get(n.parentId) : undefined;
     const fallback = parentId && catalogEntry(n.kind)?.parents.includes(m.nodes.find((x) => x.id === parentId)?.kind ?? "") ? parentId : undefined;
-    const parent = own ?? fallback ?? (n.parentId && m.nodes.some((x) => x.id === n.parentId) ? n.parentId : undefined);
+    const keepParent = n.parentId && m.nodes.some((x) => x.id === n.parentId) && (!page || pageOf(m, n.parentId) === page);
+    const parent = own ?? fallback ?? (keepParent ? n.parentId : undefined);
     if (!own) topLevel.push(n.id);
-    ops.push({ op: "add_node", id: rename.get(n.id)!, kind: n.kind, label: n.label, parentId: parent, props: n.props, ...(n.icon ? { icon: n.icon } : {}) });
+    ops.push({ op: "add_node", id: rename.get(n.id)!, kind: n.kind, label: n.label, parentId: parent, props: n.props, ...(n.icon ? { icon: n.icon } : {}), ...(page && !parent ? { page } : {}) });
   }
   for (const { id: _id, from, to, ...rest } of clip.edges) ops.push({ op: "connect", from: rename.get(from)!, to: rename.get(to)!, ...rest });
   const r = applyOps(m, ops);

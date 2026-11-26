@@ -14,11 +14,12 @@ import {
   type Side,
   SIDES,
 } from "./model.js";
+import { pageOf, pagesOf } from "./pages.js";
 
 /** Every change to a model, by a person or the agent, is one of these operations. */
 export type Op =
-  | { op: "add_node"; id: string; kind: string; label: string; parentId?: string; props?: Record<string, unknown>; icon?: string }
-  | { op: "update_node"; id: string; label?: string; parentId?: string | null; props?: Record<string, unknown>; icon?: string | null }
+  | { op: "add_node"; id: string; kind: string; label: string; parentId?: string; props?: Record<string, unknown>; icon?: string; page?: string }
+  | { op: "update_node"; id: string; label?: string; parentId?: string | null; props?: Record<string, unknown>; icon?: string | null; page?: string }
   | { op: "remove_node"; id: string }
   | ({ op: "connect"; from: string; to: string; label?: string; protocol?: Protocol; routing?: Routing } & EdgeStyle)
   | ({
@@ -72,6 +73,10 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       const node: DiagramNode = { id: op.id, kind: op.kind, label: op.label || entry.label, props: { ...op.props } };
       if (op.parentId) node.parentId = op.parentId;
       if (op.icon) node.icon = op.icon.slice(0, 240);
+      if (op.page && !op.parentId) {
+        if (!pagesOf(m).some((p) => p.id === op.page)) return fail(`no tab "${op.page}"`);
+        if (op.page !== pagesOf(m)[0].id || m.pages?.length) node.page = op.page;
+      }
       return ok({ ...m, nodes: [...m.nodes, node] });
     }
     case "update_node": {
@@ -95,6 +100,14 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       }
       const layout = { ...m.layout };
       if (op.parentId !== undefined) delete layout[node.id];
+      if (op.page !== undefined && op.page !== pageOf(m, node.id)) {
+        // Moving to another tab: it leaves its group, and lines to things left behind go.
+        if (!pagesOf(m).some((p) => p.id === op.page)) return fail(`no tab "${op.page}"`);
+        delete next.parentId;
+        next.page = op.page;
+        const moved = { ...m, layout, nodes: m.nodes.map((n) => (n.id === node.id ? next : n)) };
+        return ok({ ...moved, edges: moved.edges.filter((e) => pageOf(moved, e.from) === pageOf(moved, e.to)) });
+      }
       return ok({ ...m, layout, nodes: m.nodes.map((n) => (n.id === node.id ? next : n)) });
     }
     case "remove_node": {
@@ -113,6 +126,7 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       if (!nodeById(m, op.from)) return fail(`no node with id "${op.from}"`);
       if (!nodeById(m, op.to)) return fail(`no node with id "${op.to}"`);
       if (op.from === op.to) return fail("cannot connect a node to itself");
+      if (pageOf(m, op.from) !== pageOf(m, op.to)) return fail(`"${op.from}" and "${op.to}" are on different tabs`);
       if (catalogEntry(nodeById(m, op.from)!.kind)?.container || catalogEntry(nodeById(m, op.to)!.kind)?.container)
         return fail("connect resources, not groups (project, region, VPC, subnet)");
       if (op.protocol && !PROTOCOLS.includes(op.protocol)) return fail(`protocol must be one of ${PROTOCOLS.join(", ")}`);

@@ -2,6 +2,7 @@ import { BORDER_WIDTHS, CATALOG, catalogEntry, FONT_SIZES, FONTS, SHAPE_LABELS, 
 import { DRAWIO_AWS_GROUP } from "./groups.js";
 import { type Arrowhead, type DiagramEdge, type DiagramModel, emptyModel, NODE_ID, type Protocol } from "./model.js";
 import { applyOp, type Op } from "./ops.js";
+import { pageIdFor } from "./pages.js";
 import { findAll, htmlToText, parseXml, type XmlElement } from "./xml.js";
 
 /**
@@ -685,4 +686,30 @@ function inferProtocol(label: string): Protocol | undefined {
   if (/\bredis\b/.test(l)) return "redis";
   if (/\btcp\b/.test(l)) return "tcp";
   return undefined;
+}
+
+/**
+ * Every page of a draw.io file as one diagram with a canvas tab per page (ids that repeat
+ * across pages get a suffix). `overrides` are per page index, as in drawioToModel.
+ */
+export function drawioPagesToModel(pages: DrawioPage[], overrides: Record<number, Record<string, string | null>> = {}): DiagramModel {
+  const out: DiagramModel = { ...emptyModel(), pages: [] };
+  const used = new Set<string>();
+  pages.forEach((pg, i) => {
+    const m = drawioToModel(pg, overrides[i] ?? {}).model;
+    const pageId = pageIdFor(pg.name || `Page ${i + 1}`, out.pages!.map((p) => p.id));
+    out.pages!.push({ id: pageId, name: (pg.name || `Page ${i + 1}`).slice(0, 60) });
+    const rename = new Map<string, string>();
+    for (const n of m.nodes) {
+      let id = n.id;
+      for (let k = 2; used.has(id); k++) id = `${n.id.slice(0, 36)}_${k}`;
+      used.add(id);
+      rename.set(n.id, id);
+    }
+    const r = (id: string) => rename.get(id) ?? id;
+    for (const n of m.nodes) out.nodes.push({ ...n, id: r(n.id), ...(n.parentId ? { parentId: r(n.parentId) } : { page: pageId }) });
+    for (const e of m.edges) out.edges.push({ ...e, id: `${r(e.from)}__${r(e.to)}`, from: r(e.from), to: r(e.to) });
+    for (const [id, l] of Object.entries(m.layout)) out.layout[r(id)] = l;
+  });
+  return out;
 }

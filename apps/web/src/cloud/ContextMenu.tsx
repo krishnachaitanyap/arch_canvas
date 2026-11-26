@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { type Arrowhead, BORDER_WIDTHS, catalogEntry, type DiagramModel, FONT_SIZES, FONTS, resolvedProps, SHAPE_LABELS, SHAPES } from "@archcanvas/shared";
+import { type Page, type Arrowhead, BORDER_WIDTHS, catalogEntry, type DiagramModel, FONT_SIZES, FONTS, resolvedProps, SHAPE_LABELS, SHAPES } from "@archcanvas/shared";
 import { FONT_STACKS, ShapeOutline, thumbSize } from "./flow";
 
 export interface MenuState {
@@ -27,6 +27,8 @@ export interface MenuActions {
   reverse: (edgeId: string) => void;
   editEdgeLabel: (edgeId: string) => void;
   fit: () => void;
+  /** Moves the item (and any other selected ones) to another canvas tab. */
+  moveToPage: (id: string, page: string) => void;
 }
 
 const FILLS = ["#ffffff", "#f4f4f5", "#dae8fc", "#d5e8d4", "#fff2cc", "#ffe6cc", "#f8cecc", "#e1d5e7"];
@@ -66,7 +68,11 @@ export function ContextMenu({
   readOnly,
   onClose,
   actions,
+  pages = [],
+  page,
 }: {
+  pages?: Page[];
+  page?: string;
   menu: MenuState;
   model: DiagramModel;
   readOnly: boolean;
@@ -209,6 +215,27 @@ export function ContextMenu({
           {item("Bring to front", () => actions.arrange(t.id, "front"), { disabled: readOnly })}
           {item("Send to back", () => actions.arrange(t.id, "back"), { disabled: readOnly })}
           <hr />
+          {pages.length > 1 && (
+            <div className="ctx-swatches">
+              <span className="ctx-label">Move to tab</span>
+              <div className="ctx-pages">
+                {pages
+                  .filter((p) => p.id !== page)
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      disabled={readOnly}
+                      onClick={() => {
+                        actions.moveToPage(t.id, p.id);
+                        onClose();
+                      }}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
           {!shape && node.kind !== "generic.note" && item("Properties & icon…", () => actions.properties())}
           {item("Copy", () => actions.copy(t.id), { hint: "⌘C" })}
           {item("Duplicate", () => actions.duplicate(t.id), { disabled: readOnly, hint: "⌘D" })}

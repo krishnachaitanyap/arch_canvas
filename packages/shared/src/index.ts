@@ -12,3 +12,4 @@ export * from "./drawio-import.js";
 export * from "./icons.js";
 export { SAMPLE_MODEL } from "./sample.js";
 export * from "./groups.js";
+export * from "./pages.js";

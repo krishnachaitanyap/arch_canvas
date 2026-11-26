@@ -1,6 +1,7 @@
 import { catalogEntry, resolvedProps } from "./catalog.js";
 import { DRAWIO_AWS_GROUP, TAB_ICONS } from "./groups.js";
 import { childrenOf, type DiagramModel, type DiagramNode } from "./model.js";
+import { pageModel, pagesOf } from "./pages.js";
 
 /** draw.io style for a group box: its border, fill and title, and AWS's group shape for AWS icons. */
 function groupStyle(n: DiagramNode): string {
@@ -67,7 +68,21 @@ const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\n/g, "&#xa;");
 
 /** draw.io / diagrams.net file (.drawio). Groups become containers, so moving one in draw.io moves its contents. */
+/** draw.io file: one draw.io page per canvas tab (a single page named after the title otherwise). */
 export function toDrawio(m: DiagramModel, title = "Architecture"): string {
+  const pages = pagesOf(m);
+  const diagrams =
+    m.pages && m.pages.length > 1
+      ? pages.map((p) => drawioDiagram(pageModel(m, p.id), p.name, `archcanvas-${p.id}`))
+      : [drawioDiagram(m, title, "archcanvas")];
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="ArchCanvas" type="device">
+${diagrams.join("\n")}
+</mxfile>
+`;
+}
+
+function drawioDiagram(m: DiagramModel, name: string, id: string): string {
   const boxes = resolveLayout(m);
   const cells: string[] = ['<mxCell id="0" />', '<mxCell id="1" parent="0" />'];
   const cellId = (id: string) => `n_${id}`;
@@ -123,17 +138,13 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
         `<mxGeometry relative="1" as="geometry" /></mxCell></object>`,
     );
   }
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="ArchCanvas" type="device">
-  <diagram id="archcanvas" name="${esc(title)}">
+  return `  <diagram id="${esc(id)}" name="${esc(name)}">
     <mxGraphModel grid="1" gridSize="10" guides="1" connect="1" arrows="1" page="0" math="0" shadow="0">
       <root>
         ${cells.join("\n        ")}
       </root>
     </mxGraphModel>
-  </diagram>
-</mxfile>
-`;
+  </diagram>`;
 }
 
 /** draw.io style for each ArchCanvas shape. */

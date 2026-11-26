@@ -20,7 +20,11 @@ export const NodeSchema = z.object({
    * pack's id). Purely visual: Terraform and workflows ignore it.
    */
   icon: z.string().max(240).optional(),
+  /** The tab (page) a top-level item is on; the first page when unset. Items in a group follow the group. */
+  page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/).optional(),
 });
+
+export const PageSchema = z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/), name: z.string().trim().min(1).max(60) });
 
 /** Arrowheads: filled arrow, open arrow, hollow triangle (UML inheritance), filled / hollow diamond (composition / aggregation), circle, none. */
 /** Line ends: arrows, UML diamonds, and entity-relationship crow's feet (er-*). */
@@ -68,6 +72,11 @@ export const DiagramModelSchema = z.object({
   edges: z.array(EdgeSchema).default([]),
   /** Positions relative to the parent group, as produced by auto-layout or dragging. */
   layout: z.record(LayoutSchema).default({}),
+  /**
+   * Tabs (pages) of the canvas, in order, like draw.io pages: e.g. Architecture, HA / DR, CI/CD.
+   * Unset means one page. Terraform, validation and workflows cover every page.
+   */
+  pages: z.array(PageSchema).max(50).optional(),
 });
 
 export type DiagramNode = z.infer<typeof NodeSchema>;
