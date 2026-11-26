@@ -13,6 +13,7 @@ import {
   ReactFlowProvider,
   SelectionMode,
   useReactFlow,
+  useViewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -27,6 +28,7 @@ import {
   NODE_ID,
   type DrawioPage,
   type Op,
+  resolvedProps,
   SHAPE_LABELS,
   type ShapeName,
   readDrawio,
@@ -48,6 +50,7 @@ import { absBox, type AlignMode, align, type Clip, containerAt, copySelection, g
 import { autoLayout, hasLayout, structureKey } from "./layout";
 import { DRAG_TYPE, Palette, type PaletteItem } from "./Palette";
 import { ContextMenu, type MenuState } from "./ContextMenu";
+import { FormatBar } from "./FormatBar";
 import { Presentation } from "./Presentation";
 import { Properties, Review, type Selection, TerraformPanel } from "./panels";
 
@@ -114,6 +117,10 @@ function Editor({
   onSaved,
 }: EditorProps) {
   const rf = useReactFlow();
+  const { zoom } = useViewport();
+  /** How new connections are drawn (the toolbar's connector style). */
+  const [newRouting, setNewRouting] = useState<"orthogonal" | "straight" | "curved">("orthogonal");
+  const [paletteOpen, setPaletteOpen] = useState(true);
   const [model, setModel] = useState<DiagramModel>(initial);
   const modelRef = useRef(model);
   modelRef.current = model;
@@ -750,6 +757,46 @@ function Editor({
     </>
   );
 
+  /** Bring to front / send to back: z-order follows the order of nodes in the model. */
+  function arrange(idList: string[], where: "front" | "back") {
+    const m = modelRef.current;
+    const ids = new Set(idList);
+    const moved = m.nodes.filter((n) => ids.has(n.id));
+    const rest = m.nodes.filter((n) => !ids.has(n.id));
+    if (moved.length) commit({ ...m, nodes: where === "front" ? [...rest, ...moved] : [...moved, ...rest] });
+  }
+
+  /** Styles everything selected; each item gets the property it has (a shape's fill, a group's colour, a line's colour…). */
+  function styleSelected(forNode: (kind: string, props: Record<string, unknown>) => Record<string, unknown> | null, edgePatch?: Record<string, unknown>) {
+    const m = modelRef.current;
+    const ops: Op[] = [];
+    for (const id of nodeIds(selectedIds)) {
+      const n = m.nodes.find((x) => x.id === id);
+      const pr = n && forNode(n.kind, n.props);
+      if (n && pr) ops.push({ op: "update_node", id, props: { ...n.props, ...pr } });
+    }
+    if (edgePatch)
+      for (const id of selectedIds) {
+        const e = id.startsWith("edge:") ? m.edges.find((x) => x.id === id.slice(5)) : undefined;
+        if (e) ops.push({ op: "update_edge", from: e.from, to: e.to, ...edgePatch } as Op);
+      }
+    if (ops.length) change(ops);
+  }
+  const firstSelected = (() => {
+    const id = [...selectedIds][0];
+    if (!id) return undefined;
+    if (id.startsWith("edge:")) {
+      const e = model.edges.find((x) => x.id === id.slice(5));
+      return e ? { fill: undefined, line: e.color ?? "#5f6368", shadow: null } : undefined;
+    }
+    const n = model.nodes.find((x) => x.id === id);
+    if (!n) return undefined;
+    const pr = resolvedProps(n.kind, n.props);
+    if (n.kind === "generic.shape") return { fill: String(pr.fill), line: String(pr.stroke), shadow: Boolean(pr.shadow) };
+    if (catalogEntry(n.kind)?.container) return { fill: String(pr.fill), line: String(pr.color), shadow: null };
+    return { fill: undefined, line: undefined, shadow: null };
+  })();
+
   const openMenu = (e: React.MouseEvent, target: Menu["target"]) => {
     e.preventDefault();
     const box = canvasRef.current!.getBoundingClientRect();
@@ -777,10 +824,14 @@ function Editor({
         )}
         {presenting && <Presentation model={model} title={title} workflows={workflows} startWorkflow={presenting.start} onClose={() => onExitPresent?.()} />}
 
-        <aside className="palette" style={{ width: paletteW }}>
-          <Palette onAdd={(item) => addItem(item)} disabled={readOnly} />
-        </aside>
-        <Resizer onDrag={(dx) => setPaletteW((w) => w + dx)} />
+        {paletteOpen && (
+          <>
+            <aside className="palette" style={{ width: paletteW }}>
+              <Palette onAdd={(item) => addItem(item)} disabled={readOnly} />
+            </aside>
+            <Resizer onDrag={(dx) => setPaletteW((w) => w + dx)} />
+          </>
+        )}
 
         <div
           className="cloud-canvas"
@@ -795,6 +846,41 @@ function Editor({
             openMenu(e, { type: "pane" });
           }}
           onDragOver={(e) => e.dataTransfer.types.includes(DRAG_TYPE) && (e.preventDefault(), (e.dataTransfer.dropEffect = "copy"))} onDrop={onDrop}>
+          <FormatBar
+            readOnly={readOnly}
+            paletteOpen={paletteOpen}
+            onTogglePalette={() => setPaletteOpen((o) => !o)}
+            zoom={zoom}
+            onZoom={(z) => void rf.zoomTo(z, { duration: 200 })}
+            onZoomIn={() => void rf.zoomIn({ duration: 200 })}
+            onZoomOut={() => void rf.zoomOut({ duration: 200 })}
+            onFit={() => fit()}
+            canUndo={past.length > 0}
+            canRedo={future.length > 0}
+            onUndo={undo}
+            onRedo={redo}
+            selected={selectedIds.size}
+            onDelete={() => removeSelected()}
+            onFront={() => arrange(nodeIds(selectedIds), "front")}
+            onBack={() => arrange(nodeIds(selectedIds), "back")}
+            fill={firstSelected?.fill}
+            line={firstSelected?.line}
+            onFill={(c) => styleSelected((kind) => (kind === "generic.shape" || catalogEntry(kind)?.container ? { fill: c } : null))}
+            onLine={(c) =>
+              styleSelected((kind) => (kind === "generic.shape" ? { stroke: c } : catalogEntry(kind)?.container ? { color: c } : null), { color: c })
+            }
+            shadow={firstSelected?.shadow ?? null}
+            onShadow={() => {
+              const on = !firstSelected?.shadow;
+              styleSelected((kind) => (kind === "generic.shape" ? { shadow: on } : null));
+            }}
+            routing={newRouting}
+            onRouting={(r) => {
+              setNewRouting(r);
+              styleSelected(() => null, { routing: r === "orthogonal" ? null : r });
+            }}
+            onInsert={(item) => addItem(item)}
+          />
           <ReactFlow
             onDoubleClick={(e) => {
               // Double-click on empty canvas adds text, as in draw.io.
@@ -817,7 +903,7 @@ function Editor({
             onConnect={(c) => {
               if (!c.source || !c.target) return;
               const side = (h: string | null | undefined) => (h && ["t", "r", "b", "l"].includes(h) ? (h as "t") : undefined);
-              op({ op: "connect", from: c.source, to: c.target, ...(side(c.sourceHandle) ? { fromHandle: side(c.sourceHandle) } : {}), ...(side(c.targetHandle) ? { toHandle: side(c.targetHandle) } : {}) });
+              op({ op: "connect", from: c.source, to: c.target, ...(newRouting !== "orthogonal" ? { routing: newRouting } : {}), ...(side(c.sourceHandle) ? { fromHandle: side(c.sourceHandle) } : {}), ...(side(c.targetHandle) ? { toHandle: side(c.targetHandle) } : {}) });
             }}
             onReconnect={(old, c) => {
               const e = modelRef.current.edges.find((x) => x.id === old.id);
@@ -925,13 +1011,7 @@ function Editor({
                   // Changing the shape keeps the size the user gave it.
                   if (ops.length) change(ops);
                 },
-                arrange: (id, where) => {
-                  const m = modelRef.current;
-                  const ids = new Set(selectedIds.has(id) ? nodeIds(selectedIds) : [id]);
-                  const moved = m.nodes.filter((n) => ids.has(n.id));
-                  const rest = m.nodes.filter((n) => !ids.has(n.id));
-                  commit({ ...m, nodes: where === "front" ? [...rest, ...moved] : [...moved, ...rest] });
-                },
+                arrange: (id, where) => arrange(selectedIds.has(id) ? nodeIds(selectedIds) : [id], where),
                 edge: (edgeId, patch) => {
                   const e = modelRef.current.edges.find((x) => x.id === edgeId);
                   if (e) op({ op: "update_edge", from: e.from, to: e.to, ...(patch as Record<string, never>) });

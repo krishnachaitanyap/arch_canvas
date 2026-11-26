@@ -41,6 +41,7 @@ import {
   type ModelDiff,
   resolvedProps,
   type Routing,
+  ROW_SHAPES,
   SHAPE_LABELS,
   type ShapeName,
   type Side,
@@ -297,7 +298,7 @@ export function thumbSize(shape: string, maxW: number, maxH: number): [number, n
   return [Math.max(6, Math.round(w * k)), Math.max(6, Math.round(h * k))];
 }
 
-type SvgCommon = { fill: string; stroke: string; strokeWidth: number; vectorEffect: "non-scaling-stroke" };
+type SvgCommon = { fill: string; stroke: string; strokeWidth: number; vectorEffect: "non-scaling-stroke"; strokeDasharray?: string; strokeLinecap?: "round" };
 
 /**
  * Arrow shapes, drawn pointing right along a length L and thickness T, then turned to face
@@ -341,11 +342,33 @@ function arrowShape(shape: string, w: number, h: number, p: number, common: SvgC
 }
 
 /** SVG outline for a general shape at its real pixel size (so it stays crisp when resized). */
-export function ShapeOutline({ shape, w, h, fill, stroke, sw = 1.6 }: { shape: string; w: number; h: number; fill: string; stroke: string; sw?: number }) {
+export function ShapeOutline({
+  shape,
+  w,
+  h,
+  fill,
+  stroke,
+  sw = 1.6,
+  dash,
+  shadow,
+}: {
+  shape: string;
+  w: number;
+  h: number;
+  fill: string;
+  stroke: string;
+  sw?: number;
+  dash?: string;
+  shadow?: boolean;
+}) {
   const p = sw / 2 + 0.5;
   const W = w - p;
   const H = h - p;
-  const common = { fill, stroke, strokeWidth: sw, vectorEffect: "non-scaling-stroke" as const };
+  fill = fill === "none" ? "transparent" : fill;
+  const dasharray = dash === "dashed" ? `${sw * 4} ${sw * 3}` : dash === "dotted" ? `${Math.max(1, sw * 0.8)} ${sw * 2.5}` : undefined;
+  const common = { fill, stroke, strokeWidth: sw, vectorEffect: "non-scaling-stroke" as const, strokeDasharray: dasharray, strokeLinecap: dash === "dotted" ? ("round" as const) : undefined };
+  const solid = { ...common, fill: stroke };
+  const open = { ...common, fill: "none" };
   const slant = Math.min(24, w * 0.18);
   let el: React.ReactNode;
   switch (shape) {
@@ -417,13 +440,209 @@ export function ShapeOutline({ shape, w, h, fill, stroke, sw = 1.6 }: { shape: s
     case "vline":
       el = <line x1={w / 2} y1={p} x2={w / 2} y2={H} {...common} strokeWidth={sw + 0.4} />;
       break;
+    case "square":
+    case "activation":
+      el = <rect x={p} y={p} width={W - p} height={H - p} {...common} />;
+      break;
+    case "heading":
+      el = null;
+      break;
+    case "internal-storage": {
+      const k = Math.min(14, w * 0.15, h * 0.15);
+      el = (
+        <>
+          <rect x={p} y={p} width={W - p} height={H - p} {...common} />
+          <line x1={p + k} y1={p} x2={p + k} y2={H} {...open} />
+          <line x1={p} y1={p + k} x2={W} y2={p + k} {...open} />
+        </>
+      );
+      break;
+    }
+    case "cube": {
+      const d = Math.min(16, w * 0.16, h * 0.16);
+      el = (
+        <>
+          <rect x={p} y={p + d} width={W - d - p} height={H - d - p} {...common} />
+          <polygon points={`${p},${p + d} ${p + d},${p} ${W},${p} ${W - d},${p + d}`} {...common} />
+          <polygon points={`${W - d},${p + d} ${W},${p} ${W},${H - d} ${W - d},${H}`} {...common} />
+        </>
+      );
+      break;
+    }
+    case "trapezoid": {
+      const k = Math.min(26, w * 0.2);
+      el = <polygon points={`${p + k},${p} ${W - k},${p} ${W},${H} ${p},${H}`} {...common} />;
+      break;
+    }
+    case "tape": {
+      const a = Math.min(10, h * 0.12);
+      el = <path d={`M${p},${p + a} C${w * 0.33},${p - a} ${w * 0.66},${p + 3 * a} ${W},${p + a} V${H - a} C${w * 0.66},${H - 3 * a} ${w * 0.33},${H + a} ${p},${H - a} Z`} {...common} />;
+      break;
+    }
+    case "page": {
+      const f = Math.min(16, w * 0.25, h * 0.25);
+      el = (
+        <>
+          <polygon points={`${p},${p} ${W - f},${p} ${W},${p + f} ${W},${H} ${p},${H}`} {...common} />
+          <polyline points={`${W - f},${p} ${W - f},${p + f} ${W},${p + f}`} {...open} />
+        </>
+      );
+      break;
+    }
+    case "card": {
+      const c = Math.min(18, w * 0.25, h * 0.25);
+      el = <polygon points={`${p + c},${p} ${W},${p} ${W},${H} ${p},${H} ${p},${p + c}`} {...common} />;
+      break;
+    }
+    case "callout":
+    case "callout-round": {
+      const bh = h * 0.74;
+      const r = shape === "callout-round" ? Math.min(12, w * 0.12, bh * 0.25) : 0;
+      el = (
+        <path
+          d={`M${p + r},${p} H${W - r} Q${W},${p} ${W},${p + r} V${bh - r} Q${W},${bh} ${W - r},${bh} H${w * 0.36} L${w * 0.16},${H} L${w * 0.22},${bh} H${p + r} Q${p},${bh} ${p},${bh - r} V${p + r} Q${p},${p} ${p + r},${p} Z`}
+          {...common}
+        />
+      );
+      break;
+    }
+    case "actor": {
+      const r = Math.min(w, h) * 0.13;
+      el = (
+        <>
+          <circle cx={w / 2} cy={p + r} r={r} {...common} />
+          <line x1={w / 2} y1={p + 2 * r} x2={w / 2} y2={h * 0.64} {...open} />
+          <line x1={p} y1={h * 0.38} x2={W} y2={h * 0.38} {...open} />
+          <polyline points={`${p},${H} ${w / 2},${h * 0.64} ${W},${H}`} {...open} />
+        </>
+      );
+      break;
+    }
+    case "delay":
+      el = <path d={`M${p},${p} H${w / 2} A${W - w / 2},${(H - p) / 2} 0 0 1 ${w / 2},${H} H${p} Z`} {...common} />;
+      break;
+    case "data-storage": {
+      const k = Math.min(16, w * 0.15);
+      el = <path d={`M${p + k},${p} H${W} Q${W - 2 * k},${h / 2} ${W},${H} H${p + k} Q${p - k},${h / 2} ${p + k},${p} Z`} {...common} />;
+      break;
+    }
+    case "container":
+    case "list":
+    case "entity":
+    case "class":
+      el = (
+        <>
+          <rect x={p} y={p} width={W - p} height={H - p} {...common} />
+          <line x1={p} y1={Math.min(26, h - p)} x2={W} y2={Math.min(26, h - p)} {...open} />
+        </>
+      );
+      break;
+    case "weak-entity":
+      el = (
+        <>
+          <rect x={p} y={p} width={W - p} height={H - p} {...common} />
+          <rect x={p + 4} y={p + 4} width={W - p - 8} height={H - p - 8} {...open} />
+        </>
+      );
+      break;
+    case "package": {
+      const tw = Math.min(60, w * 0.4);
+      el = (
+        <>
+          <rect x={p} y={p} width={tw} height={16} {...common} />
+          <rect x={p} y={p + 16} width={W - p} height={H - p - 16} {...common} />
+        </>
+      );
+      break;
+    }
+    case "component":
+      el = (
+        <>
+          <rect x={p + 10} y={p} width={W - p - 10} height={H - p} {...common} />
+          <rect x={p} y={h * 0.25} width={20} height={12} {...common} />
+          <rect x={p} y={h * 0.55} width={20} height={12} {...common} />
+        </>
+      );
+      break;
+    case "lifeline": {
+      const top = Math.min(40, h * 0.3);
+      el = (
+        <>
+          <rect x={p} y={p} width={W - p} height={top} {...common} />
+          <line x1={w / 2} y1={p + top} x2={w / 2} y2={H} {...open} strokeDasharray="6 4" />
+        </>
+      );
+      break;
+    }
+    case "frame": {
+      const tw = Math.min(70, w * 0.4);
+      el = (
+        <>
+          <rect x={p} y={p} width={W - p} height={H - p} {...common} />
+          <polyline points={`${p},${p + 22} ${p + tw - 8},${p + 22} ${p + tw},${p + 14} ${p + tw},${p}`} {...open} />
+        </>
+      );
+      break;
+    }
+    case "initial":
+      el = <ellipse cx={w / 2} cy={h / 2} rx={w / 2 - p} ry={h / 2 - p} {...solid} />;
+      break;
+    case "final":
+      el = (
+        <>
+          <ellipse cx={w / 2} cy={h / 2} rx={w / 2 - p} ry={h / 2 - p} {...common} fill="#fff" />
+          <ellipse cx={w / 2} cy={h / 2} rx={(w / 2 - p) * 0.62} ry={(h / 2 - p) * 0.62} {...solid} />
+        </>
+      );
+      break;
+    case "fork":
+      el = <rect x={p} y={p} width={W - p} height={H - p} {...solid} />;
+      break;
+    case "curve-arrow":
+      el = (
+        <>
+          <path d={`M${p + 2},${H - 2} C${w * 0.95},${H} ${w * 0.05},${p + 10} ${W - 14},${p + 10}`} {...open} />
+          <polygon points={`${W - 15},${p + 3} ${W},${p + 10} ${W - 15},${p + 17}`} {...solid} />
+        </>
+      );
+      break;
+    case "diag-line":
+    case "diag-arrow":
+    case "diag-double-arrow": {
+      const len = Math.hypot(W - p, H - p);
+      const ux = (W - p) / len;
+      const uy = (p - H) / len;
+      const head = (x: number, y: number, dx: number, dy: number) =>
+        `${x},${y} ${x - 13 * dx - 5 * dy},${y - 13 * dy + 5 * dx} ${x - 13 * dx + 5 * dy},${y - 13 * dy - 5 * dx}`;
+      const two = shape === "diag-double-arrow";
+      const one = shape !== "diag-line";
+      el = (
+        <>
+          <line x1={p + (two ? 10 * ux : 0)} y1={H + (two ? 10 * uy : 0)} x2={W - (one ? 10 * ux : 0)} y2={p - (one ? 10 * uy : 0)} {...open} />
+          {one && <polygon points={head(W, p, ux, uy)} {...solid} strokeDasharray={undefined} />}
+          {two && <polygon points={head(p, H, -ux, -uy)} {...solid} strokeDasharray={undefined} />}
+        </>
+      );
+      break;
+    }
+    case "diag-arrow-block":
+    case "diag-double-block": {
+      const L = Math.min(w, h) * 0.98;
+      const T = L * 0.42;
+      el = (
+        <g transform={`translate(${(w - L) / 2},${(h - T) / 2}) rotate(-45 ${L / 2} ${T / 2})`}>
+          {arrowShape(shape === "diag-double-block" ? "arrow-left-right" : "arrow-right", L, T, p, common)}
+        </g>
+      );
+      break;
+    }
     default:
       if (shape.includes("arrow") || shape === "chevron") el = arrowShape(shape, w, h, p, common);
       else
       el = <rect x={p} y={p} width={W - p} height={H - p} {...common} />;
   }
   return (
-    <svg className="shape-svg" width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+    <svg className={`shape-svg ${shadow ? "shadow" : ""}`} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
       {el}
     </svg>
   );
@@ -456,16 +675,74 @@ function ShapeNode({ id, data, selected, width, height }: NodeProps<CloudNode>) 
         handleClassName="sel-handle"
         onResizeEnd={(_, r) => ctx.resized(id, { x: r.x, y: r.y, w: r.width, h: r.height })}
       />
-      <ShapeOutline shape={shape} w={w} h={h} fill={String(p.fill)} stroke={String(p.stroke)} />
-      <div className={`shape-label ${shape === "cylinder" ? "low" : ""}`}>
-        <InlineText id={id} value={data.node.label} multiline onCommit={(v) => ctx.rename(id, v)} />
-      </div>
+      <ShapeOutline shape={shape} w={w} h={h} fill={String(p.fill)} stroke={String(p.stroke)} sw={Number(p.strokeWidth)} dash={String(p.lineStyle)} shadow={Boolean(p.shadow)} />
+      {ROW_SHAPES.has(shape) && ctx.editing !== id ? (
+        <RowsText shape={shape} text={data.node.label} stroke={String(p.stroke)} />
+      ) : (
+        <div className={`shape-label at-${LABEL_AT[shape] ?? "center"} ${ROW_SHAPES.has(shape) ? "rows-editing" : ""}`}>
+          <InlineText id={id} value={data.node.label} multiline onCommit={(v) => ctx.rename(id, v)} />
+        </div>
+      )}
       {/* A source and a target handle on every side (same id), so lines can start and end anywhere. */}
       {SIDES.map((side) => (
         <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
       ))}
       {SIDES.map((side) => (
         <Handle key={`t-${side}`} id={side} type="target" position={SIDE_POS[side]} className="side-handle" />
+      ))}
+    </div>
+  );
+}
+
+/** Where a shape's label sits (default: centred). */
+const LABEL_AT: Record<string, string> = {
+  cylinder: "low",
+  actor: "below",
+  lifeline: "head",
+  frame: "tag",
+  package: "body",
+  component: "right",
+  callout: "bubble",
+  "callout-round": "bubble",
+  cube: "front",
+  page: "center",
+};
+
+/**
+ * Text laid out in rows: the first line is the title (in the header band), the rest are rows.
+ * In a class, a line of "--" starts the next compartment (attributes, then operations).
+ */
+function RowsText({ shape, text, stroke }: { shape: string; text: string; stroke: string }) {
+  const [title, ...rest] = text.split("\n");
+  if (shape === "heading")
+    return (
+      <div className="rows heading">
+        <div className="rows-heading">{title}</div>
+        <div className="rows-para">{rest.join("\n")}</div>
+      </div>
+    );
+  if (shape === "container")
+    return (
+      <div className="rows">
+        <div className="rows-title">{title}</div>
+      </div>
+    );
+  const groups: string[][] = [[]];
+  for (const line of rest) {
+    if (shape === "class" && /^-{2,}$/.test(line.trim())) groups.push([]);
+    else groups[groups.length - 1].push(line);
+  }
+  return (
+    <div className={`rows ${shape}`}>
+      <div className="rows-title">{title}</div>
+      {groups.map((g, i) => (
+        <div key={i} className="rows-group" style={i ? { borderTopColor: stroke } : undefined}>
+          {g.map((line, j) => (
+            <div key={j} className="rows-line" style={shape === "list" && j ? { borderTopColor: stroke } : undefined}>
+              {line || "\u00a0"}
+            </div>
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -493,6 +770,25 @@ type EdgeData = {
 /** Arrowhead drawn in the line's colour; `auto-start-reverse` lets one marker serve both ends. */
 function Marker({ id, kind, color }: { id: string; kind: Arrowhead; color: string }) {
   if (kind === "none") return null;
+  if (kind.startsWith("er-")) {
+    // Crow's-foot notation; the line meets the entity at x = 12.
+    const d =
+      kind === "er-one"
+        ? "M0,6 H12 M5,1 V11 M8,1 V11"
+        : kind === "er-many"
+          ? "M0,6 H12 M3,6 L12,1 M3,6 L12,11"
+          : kind === "er-one-many"
+            ? "M0,6 H12 M2.5,1 V11 M5,6 L12,1 M5,6 L12,11"
+            : kind === "er-zero-many"
+              ? "M6,6 H12 M6,6 L12,1 M6,6 L12,11"
+              : "M5.6,6 H12 M8.5,1 V11";
+    return (
+      <marker id={id} viewBox="-1 0 14 12" refX={12} refY={6} markerWidth={14} markerHeight={12} markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+        <path d={d} fill="none" stroke={color} strokeWidth={1.3} />
+        {(kind === "er-zero-many" || kind === "er-zero-one") && <circle cx={3} cy={6} r={2.6} fill="#fff" stroke={color} strokeWidth={1.3} />}
+      </marker>
+    );
+  }
   const shape =
     kind === "arrow" ? (
       <path d="M1,1 L12,6 L1,11 z" fill={color} />

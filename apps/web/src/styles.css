@@ -540,3 +540,47 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 .ctx-font button.on { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
 /* Labels above the lines (whose z-index puts them above groups), so they can be grabbed and edited. */
 .react-flow__edgelabel-renderer { z-index: 40000 !important; }
+
+/* ---------- label placement and row layouts for shapes ---------- */
+.shape-node .shape-svg.shadow { filter: drop-shadow(2px 3px 2px rgba(0,0,0,.22)); }
+.shape-node .shape-label.at-below { position: absolute; top: 100%; max-width: none; white-space: nowrap; margin-top: 4px; }
+.shape-node .shape-label.at-head { position: absolute; top: 0; left: 0; right: 0; height: min(40px, 30%); display: flex; align-items: center; justify-content: center; max-width: none; }
+.shape-node .shape-label.at-tag { position: absolute; top: 3px; left: 8px; max-width: 40%; font-size: calc(var(--shape-font-size, 13px) - 1px); font-weight: 600; text-align: left; }
+.shape-node .shape-label.at-body { margin-top: 16px; }
+.shape-node .shape-label.at-right { margin-left: 22px; }
+.shape-node .shape-label.at-bubble { position: absolute; top: 0; left: 0; right: 0; height: 74%; display: flex; align-items: center; justify-content: center; max-width: none; padding: 0 8px; }
+.shape-node .shape-label.at-front { margin: 14px 14px 0 0; }
+.shape-node .shape-label.rows-editing { position: absolute; inset: 4px; max-width: none; max-height: none; text-align: left; }
+.shape-node .rows { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; font-size: var(--shape-font-size, 13px); line-height: 1.35; }
+.shape-node .rows-title { height: 26px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 700; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shape-node .rows-group { padding: 3px 0; }
+.shape-node .rows-group + .rows-group { border-top: 1px solid; }
+.shape-node .rows-line { padding: 1px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shape-node .rows.list .rows-group { padding: 0; }
+.shape-node .rows.list .rows-line { padding: 4px 8px; }
+.shape-node .rows.list .rows-line + .rows-line { border-top: 1px solid; }
+.shape-node .rows.heading { padding: 4px 6px; text-align: left; }
+.shape-node .rows-heading { font-size: 1.45em; font-weight: 700; margin-bottom: 4px; }
+.shape-node .rows-para { white-space: pre-wrap; word-break: break-word; }
+
+/* ---------- format toolbar above the canvas (draw.io style) ---------- */
+.cloud-canvas > .format-bar { position: absolute; top: 0; left: 0; right: 0; height: 38px; z-index: 20; display: flex; align-items: center; gap: 2px; padding: 0 8px; background: #fff; border-bottom: 1px solid #e4e4e7; overflow-x: auto; }
+.cloud-canvas > .react-flow { position: absolute !important; top: 38px; left: 0; right: 0; bottom: 0; height: auto !important; }
+.format-bar button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; padding: 0; border: 1px solid transparent; background: none; border-radius: 6px; color: #3f3f46; flex: none; }
+.format-bar button:hover:not(:disabled) { background: #f4f4f5; }
+.format-bar button.on { background: #eef2ff; border-color: #c7d2fe; color: #3730a3; }
+.format-bar button:disabled { color: #c4c4c8; }
+.format-bar .fb-sep { width: 1px; height: 20px; background: #e4e4e7; margin: 0 6px; flex: none; }
+.format-bar .fb-zoom { height: 28px; font-size: 12.5px; padding: 0 4px; width: 74px; flex: none; }
+.format-bar .fb-color { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 28px; border-radius: 6px; color: #3f3f46; cursor: pointer; flex: none; }
+.format-bar .fb-color:hover:not(.disabled) { background: #f4f4f5; }
+.format-bar .fb-color.disabled { color: #c4c4c8; cursor: default; }
+.format-bar .fb-color input { position: absolute; inset: 0; opacity: 0; cursor: inherit; }
+.format-bar .fb-swatch { width: 18px; height: 3px; border-radius: 1px; margin-top: 1px; border: 1px solid rgba(0,0,0,.15); }
+.format-bar .fb-insert { position: relative; }
+.format-bar .fb-menu { position: fixed; margin-top: 4px; background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 4px; display: flex; flex-direction: column; min-width: 180px; z-index: 50; }
+.format-bar .fb-menu button { width: auto; justify-content: flex-start; padding: 6px 10px; height: auto; font-size: 13px; }
+.tile-heading { width: 38px; height: 30px; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; justify-content: center; }
+.tile-heading b { font-size: 8px; line-height: 1; color: #27272a; }
+.tile-heading i { display: block; height: 2px; width: 100%; background: #a1a1aa; border-radius: 1px; }
+.tile-heading i:last-child { width: 70%; }

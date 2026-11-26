@@ -23,7 +23,8 @@ export const NodeSchema = z.object({
 });
 
 /** Arrowheads: filled arrow, open arrow, hollow triangle (UML inheritance), filled / hollow diamond (composition / aggregation), circle, none. */
-export const ARROWHEADS = ["none", "arrow", "open", "triangle", "diamond", "odiamond", "circle"] as const;
+/** Line ends: arrows, UML diamonds, and entity-relationship crow's feet (er-*). */
+export const ARROWHEADS = ["none", "arrow", "open", "triangle", "diamond", "odiamond", "circle", "er-one", "er-many", "er-one-many", "er-zero-many", "er-zero-one"] as const;
 export type Arrowhead = (typeof ARROWHEADS)[number];
 export const SIDES = ["t", "r", "b", "l"] as const;
 export type Side = (typeof SIDES)[number];

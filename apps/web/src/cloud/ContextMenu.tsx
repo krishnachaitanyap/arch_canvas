@@ -49,6 +49,11 @@ const HEADS: [Arrowhead, string][] = [
   ["diamond", "◆"],
   ["odiamond", "◇"],
   ["circle", "●"],
+  ["er-one", "‖"],
+  ["er-many", "⋲"],
+  ["er-one-many", "|⋲"],
+  ["er-zero-many", "o⋲"],
+  ["er-zero-one", "o|"],
 ];
 
 /**
@@ -141,6 +146,8 @@ export function ContextMenu({
             <>
               {swatches("Fill", FILLS, String(shape.fill), (c) => actions.styleNodes(t.id, { fill: c }))}
               {swatches("Border", STROKES, String(shape.stroke), (c) => actions.styleNodes(t.id, { stroke: c }))}
+              {seg("Line", "lineStyle", [["solid", "──"], ["dashed", "- - -"], ["dotted", "· · ·"]], String(shape.lineStyle))}
+              {seg("Thickness", "strokeWidth", ["1", "1.5", "2", "3", "4", "6"].map((w) => [w, <span key={w} className="thick" style={{ borderTopWidth: Number(w) }} title={`${w}px`} />]), String(shape.strokeWidth))}
               {swatches("Text", TEXTS, String(shape.textColor), (c) => actions.styleNodes(t.id, { textColor: c }))}
               <div className="ctx-swatches">
                 <span className="ctx-label">Font</span>
@@ -164,6 +171,9 @@ export function ContextMenu({
                   </button>
                   <button className={shape.italic ? "on" : ""} disabled={readOnly} title="Italic" onClick={() => actions.styleNodes(t.id, { italic: !shape.italic })}>
                     <i>I</i>
+                  </button>
+                  <button className={shape.shadow ? "on" : ""} disabled={readOnly} title="Shadow" onClick={() => actions.styleNodes(t.id, { shadow: !shape.shadow })}>
+                    ❐
                   </button>
                 </div>
               </div>

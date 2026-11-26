@@ -227,6 +227,23 @@ function styleMap(style: string): Record<string, string> {
 function shapeOf(c: DrawioCell, plainToo: boolean): ShapeName | undefined {
   const s = c.style.toLowerCase();
   const m = styleMap(c.style);
+  // On architecture pages a stick figure means users (generic.client), so only flowcharts keep it as a shape.
+  if (/shape=umlactor/.test(s)) return plainToo ? "actor" : undefined;
+  if (/shape=umllifeline/.test(s)) return "lifeline";
+  if (/shape=umlframe/.test(s)) return "frame";
+  if (/shape=endstate/.test(s)) return "final";
+  if (/shape=folder/.test(s)) return "package";
+  if (/shape=component/.test(s)) return "component";
+  if (/shape=internalstorage/.test(s)) return "internal-storage";
+  if (/shape=cube/.test(s)) return "cube";
+  if (/shape=trapezoid/.test(s)) return "trapezoid";
+  if (/shape=tape/.test(s)) return "tape";
+  if (/shape=card/.test(s)) return "card";
+  if (/shape=callout/.test(s)) return m.rounded === "1" ? "callout-round" : "callout";
+  if (/shape=delay/.test(s)) return "delay";
+  if (/shape=datastorage/.test(s)) return "data-storage";
+  if (/shape=ext/.test(s) && m.double === "1") return "weak-entity";
+  if (/shape=note/.test(s)) return "page";
   if (/shape=singlearrow/.test(s)) {
     const thin = Number(m.arrowwidth ?? 0.3) < 0.2;
     const dir = m.direction === "west" ? "left" : m.direction === "north" ? "up" : m.direction === "south" ? "down" : "right";
@@ -280,7 +297,20 @@ function fontProps(m: Record<string, string>): Record<string, unknown> {
   return out;
 }
 
-const ARROWS: Record<string, Arrowhead> = { none: "none", block: "arrow", classic: "arrow", open: "open", diamond: "diamond", oval: "circle" };
+const ARROWS: Record<string, Arrowhead> = {
+  none: "none",
+  block: "arrow",
+  classic: "arrow",
+  open: "open",
+  diamond: "diamond",
+  oval: "circle",
+  ermandone: "er-one",
+  erone: "er-one",
+  ermany: "er-many",
+  eronetomany: "er-one-many",
+  erzerotomany: "er-zero-many",
+  erzerotoone: "er-zero-one",
+};
 
 /** Line pattern, arrowheads, routing and colour from a draw.io edge style. */
 function edgeStyleOf(style: string): Partial<Pick<DiagramEdge, "dash" | "arrowStart" | "arrowEnd" | "color" | "routing">> {

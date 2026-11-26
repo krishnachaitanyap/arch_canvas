@@ -144,6 +144,11 @@ const ARROW_LABELS: [Arrowhead, string][] = [
   ["diamond", "Diamond ◆ (composition)"],
   ["odiamond", "Hollow diamond ◇ (aggregation)"],
   ["circle", "Circle ●"],
+  ["er-one", "ER: exactly one ‖"],
+  ["er-many", "ER: many (crow's foot)"],
+  ["er-one-many", "ER: one or many"],
+  ["er-zero-many", "ER: zero or many"],
+  ["er-zero-one", "ER: zero or one"],
 ];
 
 function ArrowSelect({ value, disabled, onChange }: { value: Arrowhead; disabled: boolean; onChange: (v: Arrowhead) => void }) {

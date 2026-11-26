@@ -1,5 +1,5 @@
 import { type DragEvent, useEffect, useMemo, useState } from "react";
-import { ARROW_SHAPES, AWS_GROUPS, awsGroupStyle, CATALOG, type Category, type GroupPreset, iconDataUrl, OTHER_GROUPS, iconScore, type IconEntry, SHAPE_LABELS, type ShapeName, SHAPES } from "@archcanvas/shared";
+import { ARROW_SHAPES, AWS_GROUPS, SHAPE_SECTIONS, awsGroupStyle, CATALOG, type Category, type GroupPreset, iconDataUrl, OTHER_GROUPS, iconScore, type IconEntry, SHAPE_LABELS, type ShapeName, SHAPES } from "@archcanvas/shared";
 import { allPacks, loadPack, useIconsVersion } from "../icons/registry";
 import { ResourceIcon, ShapeOutline, thumbSize } from "./flow";
 
@@ -95,15 +95,56 @@ const multiCloudItems: PaletteItem[] = [
   c("External API / SaaS", "lucide:cloud", "external api saas third party vendor"),
 ];
 
-const shapeTile = (shape: ShapeName): PaletteItem => ({
-  key: `shape:${shape}`,
+const shapeTile = (shape: ShapeName, section = "s"): PaletteItem => ({
+  key: `shape:${section}:${shape}`,
   kind: "generic.shape",
   label: SHAPE_LABELS[shape].label,
   props: { shape },
   hint: `${SHAPE_LABELS[shape].title} shape ${ARROW_SHAPES.includes(shape) ? "arrow line direction" : "flowchart"} ${shape.replace(/-/g, " ")}`,
 });
-const shapeItems: PaletteItem[] = SHAPES.filter((s) => !ARROW_SHAPES.includes(s)).map(shapeTile);
-const arrowItems: PaletteItem[] = ARROW_SHAPES.map(shapeTile);
+/** A shape with its own name and settings (e.g. a diamond used as an ER relationship). */
+const shapePreset = (key: string, label: string, shape: ShapeName, hint: string, props: Record<string, unknown> = {}): PaletteItem => ({
+  key: `x:${key}`,
+  kind: "generic.shape",
+  label,
+  props: { shape, ...props },
+  hint,
+});
+const generalItems: PaletteItem[] = SHAPE_SECTIONS.general.map((s) => shapeTile(s, "general"));
+const flowchartItems: PaletteItem[] = SHAPE_SECTIONS.flowchart.map((s) => shapeTile(s, "flow"));
+const arrowItems: PaletteItem[] = [
+  ...ARROW_SHAPES.map((s) => shapeTile(s, "arrows")),
+  shapePreset("diag-dashed", "Dashed line", "diag-line", "dashed diagonal line", { lineStyle: "dashed" }),
+  shapePreset("diag-dotted", "Dotted line", "diag-line", "dotted diagonal line", { lineStyle: "dotted" }),
+  shapePreset("thick-line", "Thick line", "line", "thick bar line", { strokeWidth: "6" }),
+];
+const erItems: PaletteItem[] = [
+  shapeTile("entity", "er"),
+  shapeTile("weak-entity", "er"),
+  shapePreset("er-rel", "Relationship", "diamond", "er relationship diamond"),
+  shapePreset("er-attr", "Attribute", "ellipse", "er attribute ellipse"),
+  shapePreset("er-derived", "Derived attribute", "ellipse", "er derived attribute dashed ellipse", { lineStyle: "dashed" }),
+  shapePreset("er-multi", "Multivalued attribute", "ellipse", "er multivalued attribute", { strokeWidth: "3" }),
+];
+const umlItems: PaletteItem[] = [
+  shapeTile("class", "uml"),
+  shapePreset("uml-interface", "«interface» Repository\n+ find(id): Item\n+ save(item): void", "class", "uml interface"),
+  shapeTile("package", "uml"),
+  shapeTile("component", "uml"),
+  shapeTile("actor", "uml"),
+  shapePreset("uml-usecase", "Use case", "ellipse", "uml use case"),
+  shapeTile("lifeline", "uml"),
+  shapeTile("activation", "uml"),
+  shapeTile("frame", "uml"),
+  shapePreset("uml-note", "Note", "page", "uml note comment"),
+  shapePreset("uml-state", "State", "rounded", "uml state"),
+  shapeTile("initial", "uml"),
+  shapeTile("final", "uml"),
+  shapeTile("fork", "uml"),
+  shapePreset("uml-choice", "", "diamond", "uml choice decision"),
+];
+/** Tile captions for presets (their label is the text the new shape starts with). */
+const PRESET_TITLES: Record<string, string> = { "x:uml-interface": "Interface", "x:uml-choice": "Choice" };
 
 const gcpItems: PaletteItem[] = CATALOG.filter((c) => c.kind.startsWith("gcp."))
   .sort((a, b) => GCP_ORDER.indexOf(a.category) - GCP_ORDER.indexOf(b.category))
@@ -148,8 +189,11 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
     const out: Segment[] = [
       { id: "gcp", title: "Google Cloud", note: "Deploys with Terraform", items: gcpItems, defaultOpen: true },
       { id: "basics", title: "Diagram basics", items: basicItems, defaultOpen: true },
-      { id: "shapes", title: "Flowchart & shapes", note: "Connect them with lines; set arrowheads and dashes in Properties", items: shapeItems, defaultOpen: true },
+      { id: "general", title: "General", note: "Right-click a shape for colours, fonts, lines and shadow", items: generalItems, defaultOpen: true },
       { id: "arrows", title: "Arrows & lines", note: "Free-standing arrows to resize and colour; to link two things, drag between their connection points", items: arrowItems, defaultOpen: true },
+      { id: "flowchart", title: "Flowchart", items: flowchartItems },
+      { id: "er", title: "Entity relation", note: "Type the columns as lines; right-click a line for crow's-foot ends", items: erItems },
+      { id: "uml", title: "UML", note: "Classes: a line with -- starts the operations", items: umlItems },
       { id: "boundaries", title: "Boundaries · Azure, Kubernetes, on-prem", note: "Groups to nest things in; change border, thickness and colour by right-clicking", items: boundaryItems, defaultOpen: true },
       { id: "multicloud", title: "Multi-cloud & on-prem", note: "Documentation; mix freely with any cloud", items: multiCloudItems, defaultOpen: true },
     ];
@@ -244,8 +288,15 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
                         onDragStart={(e) => onDragStart(e, it)}
                         onClick={() => onAdd(it)}
                       >
-                        {it.key === "basic:text" ? (
+                        {it.key === "basic:text" || it.props?.shape === "text" ? (
                           <span className="tile-text">T</span>
+                        ) : it.props?.shape === "heading" ? (
+                          <span className="tile-heading">
+                            <b>Heading</b>
+                            <i />
+                            <i />
+                            <i />
+                          </span>
                         ) : it.kind === "generic.shape" ? (
                           <ShapeOutline shape={String(it.props?.shape)} w={thumbSize(String(it.props?.shape), 38, 30)[0]} h={thumbSize(String(it.props?.shape), 38, 30)[1]} fill="#fff" stroke="#27272a" sw={1.3} />
                         ) : it.kind === "generic.group" && !it.icon && it.props ? (
@@ -262,7 +313,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
                         ) : (
                           <ResourceIcon kind={it.kind} icon={it.icon} size={32} />
                         )}
-                        <span>{it.kind === "generic.shape" && it.key.startsWith("shape:") ? SHAPE_LABELS[it.props!.shape as ShapeName].title : it.label}</span>
+                        <span>{PRESET_TITLES[it.key] ?? (it.kind === "generic.shape" && it.key.startsWith("shape:") ? SHAPE_LABELS[it.props!.shape as ShapeName].title : it.label)}</span>
                       </button>
                     ))}
                   </div>

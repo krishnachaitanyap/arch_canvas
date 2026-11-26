@@ -108,9 +108,41 @@ export const SHAPES = [
   "thin-arrow-down",
   "line",
   "vline",
+  "square",
+  "heading",
+  "internal-storage",
+  "cube",
+  "trapezoid",
+  "tape",
+  "page",
+  "card",
+  "callout",
+  "callout-round",
+  "actor",
+  "delay",
+  "data-storage",
+  "container",
+  "list",
+  "curve-arrow",
+  "diag-arrow-block",
+  "diag-double-block",
+  "diag-line",
+  "diag-arrow",
+  "diag-double-arrow",
+  "entity",
+  "weak-entity",
+  "class",
+  "package",
+  "component",
+  "lifeline",
+  "activation",
+  "frame",
+  "initial",
+  "final",
+  "fork",
 ] as const;
 /** The arrow and line shapes, listed in their own palette section. */
-export const ARROW_SHAPES: ShapeName[] = ["arrow-right", "arrow-left", "arrow-up", "arrow-down", "arrow-left-right", "arrow-up-down", "chevron", "thin-arrow-right", "thin-arrow-left", "thin-arrow-up", "thin-arrow-down", "line", "vline"];
+export const ARROW_SHAPES: ShapeName[] = ["curve-arrow", "diag-arrow", "diag-double-arrow", "diag-line", "diag-arrow-block", "diag-double-block", "arrow-right", "arrow-left", "arrow-up", "arrow-down", "arrow-left-right", "arrow-up-down", "chevron", "thin-arrow-right", "thin-arrow-left", "thin-arrow-up", "thin-arrow-down", "line", "vline"];
 export type ShapeName = (typeof SHAPES)[number];
 
 /** Flowchart meaning of each shape, for the palette and tooltips. */
@@ -143,7 +175,50 @@ export const SHAPE_LABELS: Record<ShapeName, { title: string; label: string; siz
   "thin-arrow-down": { title: "Thin arrow down", label: "", size: [24, 160] },
   line: { title: "Line", label: "", size: [160, 12] },
   vline: { title: "Vertical line", label: "", size: [12, 160] },
+  "square": { title: "Square", label: "", size: [80, 80] },
+  "heading": { title: "Heading and text", label: "Heading\nWrite a paragraph of text here. It wraps to the box.", size: [200, 110] },
+  "internal-storage": { title: "Internal storage", label: "", size: [100, 100] },
+  "cube": { title: "Cube", label: "", size: [120, 90] },
+  "trapezoid": { title: "Trapezoid", label: "", size: [140, 70] },
+  "tape": { title: "Tape", label: "", size: [140, 80] },
+  "page": { title: "Page / note", label: "", size: [90, 110] },
+  "card": { title: "Card", label: "", size: [90, 110] },
+  "callout": { title: "Callout", label: "", size: [150, 90] },
+  "callout-round": { title: "Speech bubble", label: "", size: [150, 90] },
+  "actor": { title: "Actor", label: "Actor", size: [40, 70] },
+  "delay": { title: "Delay", label: "", size: [90, 80] },
+  "data-storage": { title: "Stored data", label: "", size: [120, 80] },
+  "container": { title: "Container", label: "Container", size: [200, 150] },
+  "list": { title: "List", label: "List\nItem 1\nItem 2\nItem 3", size: [150, 120] },
+  "curve-arrow": { title: "Curved arrow", label: "", size: [100, 90] },
+  "diag-arrow-block": { title: "Diagonal block arrow", label: "", size: [90, 90] },
+  "diag-double-block": { title: "Diagonal two-way block arrow", label: "", size: [90, 90] },
+  "diag-line": { title: "Diagonal line", label: "", size: [90, 90] },
+  "diag-arrow": { title: "Diagonal arrow", label: "", size: [90, 90] },
+  "diag-double-arrow": { title: "Diagonal two-way arrow", label: "", size: [90, 90] },
+  "entity": { title: "Entity (table)", label: "Customer\nid: uuid PK\nname: text\nemail: text", size: [170, 120] },
+  "weak-entity": { title: "Weak entity", label: "Order line", size: [150, 60] },
+  "class": { title: "Class", label: "Order\n+ id: string\n+ total: number\n--\n+ place(): void\n+ cancel(): void", size: [180, 140] },
+  "package": { title: "Package", label: "package", size: [160, 110] },
+  "component": { title: "Component", label: "Component", size: [160, 80] },
+  "lifeline": { title: "Lifeline", label: "Object", size: [100, 260] },
+  "activation": { title: "Activation bar", label: "", size: [14, 110] },
+  "frame": { title: "Frame (fragment)", label: "alt", size: [260, 170] },
+  "initial": { title: "Initial state", label: "", size: [30, 30] },
+  "final": { title: "Final state", label: "", size: [34, 34] },
+  "fork": { title: "Fork / join bar", label: "", size: [150, 10] },
 };
+
+/** Palette sections, as in draw.io (a shape may appear in several). */
+export const SHAPE_SECTIONS: Record<"general" | "flowchart" | "er" | "uml", ShapeName[]> = {
+  general: ["rectangle", "rounded", "text", "heading", "ellipse", "square", "circle", "predefined", "diamond", "parallelogram", "hexagon", "triangle", "cylinder", "cloud", "document", "internal-storage", "cube", "chevron", "trapezoid", "tape", "page", "card", "callout", "callout-round", "actor", "delay", "data-storage", "container", "list"],
+  flowchart: ["rectangle", "rounded", "terminator", "diamond", "parallelogram", "predefined", "document", "cylinder", "manual-input", "hexagon", "circle", "delay", "data-storage", "internal-storage", "card", "triangle", "ellipse"],
+  er: ["entity", "weak-entity"],
+  uml: ["class", "package", "component", "actor", "lifeline", "activation", "frame", "page", "initial", "final", "fork"],
+};
+/** Shapes whose text is laid out in rows (a title, then lines or compartments). */
+export const ROW_SHAPES = new Set<string>(["class", "entity", "list", "container", "heading"]);
+export const LINE_STYLES = ["solid", "dashed", "dotted"] as const;
 
 const ALL_GROUPS = ["gcp.project", "gcp.region", "gcp.vpc", "gcp.subnet", "generic.group"];
 
@@ -340,6 +415,9 @@ export const CATALOG: CatalogEntry[] = [
       { key: "fontSize", label: "Font size", type: "enum", default: "13", options: [...FONT_SIZES] },
       { key: "bold", label: "Bold", type: "boolean", default: false },
       { key: "italic", label: "Italic", type: "boolean", default: false },
+      { key: "lineStyle", label: "Line", type: "enum", default: "solid", options: ["solid", "dashed", "dotted"] },
+      { key: "strokeWidth", label: "Line thickness", type: "enum", default: "1.5", options: ["1", "1.5", "2", "3", "4", "6"] },
+      { key: "shadow", label: "Shadow", type: "boolean", default: false },
     ],
   },
   {

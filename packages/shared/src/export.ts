@@ -89,7 +89,7 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
     const color = entry?.icon.color ?? "#5f6368";
     const shapeProps = n.kind === "generic.shape" ? resolvedProps(n.kind, n.props) : undefined;
     const style = shapeProps
-      ? `${DRAWIO_SHAPE[String(shapeProps.shape)] ?? "rounded=0;"}whiteSpace=wrap;html=1;fillColor=${shapeProps.fill};strokeColor=${shapeProps.stroke};fontColor=${shapeProps.textColor};${shapeProps.font !== "Sans" ? `fontFamily=${shapeProps.font};` : ""}fontSize=${shapeProps.fontSize};fontStyle=${(shapeProps.bold ? 1 : 0) + (shapeProps.italic ? 2 : 0)};`
+      ? `${DRAWIO_SHAPE[String(shapeProps.shape)] ?? "rounded=0;"}whiteSpace=wrap;html=1;fillColor=${shapeProps.fill};strokeColor=${shapeProps.stroke};fontColor=${shapeProps.textColor};${shapeProps.font !== "Sans" ? `fontFamily=${shapeProps.font};` : ""}fontSize=${shapeProps.fontSize};fontStyle=${(shapeProps.bold ? 1 : 0) + (shapeProps.italic ? 2 : 0)};strokeWidth=${shapeProps.strokeWidth};${shapeProps.lineStyle === "dashed" ? "dashed=1;" : shapeProps.lineStyle === "dotted" ? "dashed=1;dashPattern=1 3;" : ""}${shapeProps.shadow ? "shadow=1;" : ""}`
       : n.kind === "generic.note"
         ? "shape=note;whiteSpace=wrap;html=1;fillColor=#fef9c3;strokeColor=#facc15;align=left;verticalAlign=top;spacing=8;"
         : entry?.container
@@ -166,6 +166,38 @@ const DRAWIO_SHAPE: Record<string, string> = {
   "thin-arrow-down": "shape=singleArrow;direction=south;arrowWidth=0.08;arrowSize=0.12;",
   line: "line;strokeWidth=2;",
   vline: "line;strokeWidth=2;direction=south;",
+  "square": "rounded=0;aspect=fixed;",
+  "heading": "text;whiteSpace=wrap;align=left;verticalAlign=top;spacing=6;",
+  "internal-storage": "shape=internalStorage;backgroundOutline=1;",
+  "cube": "shape=cube;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;darkOpacity2=0.1;",
+  "trapezoid": "shape=trapezoid;perimeter=trapezoidPerimeter;fixedSize=1;",
+  "tape": "shape=tape;",
+  "page": "shape=note;size=16;",
+  "card": "shape=card;size=18;",
+  "callout": "shape=callout;size=20;position=0.2;position2=0.15;base=18;",
+  "callout-round": "shape=callout;rounded=1;size=20;position=0.2;position2=0.15;base=18;",
+  "actor": "shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;",
+  "delay": "shape=delay;",
+  "data-storage": "shape=dataStorage;fixedSize=1;",
+  "container": "swimlane;startSize=26;",
+  "list": "swimlane;fontStyle=0;childLayout=stackLayout;startSize=26;",
+  "curve-arrow": "curved=1;shape=mxgraph.arrows2.arrow;",
+  "diag-arrow-block": "shape=singleArrow;rotation=-45;arrowWidth=0.45;arrowSize=0.35;",
+  "diag-double-block": "shape=doubleArrow;rotation=-45;arrowWidth=0.45;arrowSize=0.3;",
+  "diag-line": "line;rotation=-45;",
+  "diag-arrow": "shape=singleArrow;rotation=-45;arrowWidth=0.08;arrowSize=0.12;",
+  "diag-double-arrow": "shape=doubleArrow;rotation=-45;arrowWidth=0.08;arrowSize=0.12;",
+  "entity": "swimlane;fontStyle=1;childLayout=stackLayout;startSize=26;",
+  "weak-entity": "shape=ext;margin=3;double=1;",
+  "class": "swimlane;fontStyle=1;align=center;startSize=26;",
+  "package": "shape=folder;tabWidth=55;tabHeight=16;tabPosition=left;",
+  "component": "shape=component;align=left;spacingLeft=36;",
+  "lifeline": "shape=umlLifeline;perimeter=lifelinePerimeter;size=40;",
+  "activation": "rounded=0;",
+  "frame": "shape=umlFrame;width=60;height=22;",
+  "initial": "ellipse;fillColor=#000000;",
+  "final": "ellipse;shape=endState;fillColor=#000000;",
+  "fork": "line;strokeWidth=6;",
 };
 
 const DRAWIO_ARROW: Record<string, string> = {
@@ -176,6 +208,11 @@ const DRAWIO_ARROW: Record<string, string> = {
   diamond: "diamond;endFill=1;",
   odiamond: "diamond;endFill=0;",
   circle: "oval;endFill=1;",
+  "er-one": "ERmandOne;endFill=0;",
+  "er-many": "ERmany;endFill=0;",
+  "er-one-many": "ERoneToMany;endFill=0;",
+  "er-zero-many": "ERzeroToMany;endFill=0;",
+  "er-zero-one": "ERzeroToOne;endFill=0;",
 };
 
 function edgeStyle(e: DiagramModel["edges"][number]): string {

@@ -269,3 +269,51 @@ describe("styled group boxes", () => {
     expect(strip(again.model)).toEqual(strip(r.model));
   });
 });
+
+describe("General, ER and UML shapes", () => {
+  it("round-trips new shapes, line styles and crow's-foot ends through draw.io", async () => {
+    const shape = (id: string, s: string, label: string, extra: Record<string, unknown> = {}) => ({ id, kind: "generic.shape", label, props: { shape: s, ...extra } });
+    const model = {
+      nodes: [
+        shape("customer", "entity", "Customer\nid: uuid PK\nname: text"),
+        shape("orders", "entity", "Order\nid: uuid PK"),
+        shape("order_class", "class", "Order\n+ id: string\n--\n+ place(): void"),
+        shape("cube", "cube", "Cache", { lineStyle: "dashed", strokeWidth: "3", shadow: true }),
+        shape("bubble", "callout-round", "Hi"),
+      ],
+      edges: [{ id: "customer__orders", from: "customer", to: "orders", arrowStart: "er-one" as const, arrowEnd: "er-zero-many" as const }],
+      layout: {
+        customer: { x: 0, y: 0, w: 170, h: 120 },
+        orders: { x: 300, y: 0, w: 170, h: 120 },
+        order_class: { x: 0, y: 200, w: 180, h: 140 },
+        cube: { x: 300, y: 200, w: 120, h: 90 },
+        bubble: { x: 500, y: 200, w: 150, h: 90 },
+      },
+    };
+    const xml = toDrawio(model as never, "Shapes");
+    expect(xml).toContain("endArrow=ERzeroToMany");
+    expect(xml).toContain("shape=cube");
+    const again = drawioToModel((await readDrawio(xml))[0]);
+    expect(again.model.nodes.map(({ id, props, label }) => ({ id, props, label }))).toEqual(model.nodes.map(({ id, props, label }) => ({ id, props, label })));
+    expect(again.model.edges[0]).toMatchObject({ arrowStart: "er-one", arrowEnd: "er-zero-many" });
+  });
+
+  it("reads draw.io's own UML and ER shapes", async () => {
+    const r = drawioToModel(
+      (
+        await readDrawio(
+          page(
+            v("a", "User", "shape=umlActor;verticalLabelPosition=bottom;", 0, 0, 30, 60) +
+              v("b", "Box", "shape=cube;whiteSpace=wrap;", 100, 0, 120, 80) +
+              v("c", "Svc", "shape=component;align=left;", 300, 0, 120, 60) +
+              v("d", "Start", "rhombus;", 500, 0, 80, 80) +
+              `<mxCell id="e1" style="edgeStyle=entityRelationEdgeStyle;endArrow=ERmany;startArrow=ERmandOne;" edge="1" parent="1" source="b" target="c"><mxGeometry relative="1" as="geometry"/></mxCell>`,
+          ),
+        )
+      )[0],
+    );
+    expect(byLabel(r, "Box")).toMatchObject({ kind: "generic.shape", props: { shape: "cube" } });
+    expect(byLabel(r, "Svc")).toMatchObject({ kind: "generic.shape", props: { shape: "component" } });
+    expect(r.model.edges[0]).toMatchObject({ arrowStart: "er-one", arrowEnd: "er-many" });
+  });
+});
