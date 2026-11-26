@@ -584,3 +584,28 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 .tile-heading b { font-size: 8px; line-height: 1; color: #27272a; }
 .tile-heading i { display: block; height: 2px; width: 100%; background: #a1a1aa; border-radius: 1px; }
 .tile-heading i:last-child { width: 70%; }
+
+/* ---------- project tabs (HA / DR, CI/CD…) ---------- */
+.project-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 2px; border-bottom: 1px solid #e4e4e7; margin: 14px 0 12px; }
+.project-tabs .ptab-wrap { position: relative; display: flex; align-items: center; }
+.project-tabs .ptab { border: 0; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; background: none; padding: 8px 12px; font-size: 13.5px; color: #52525b; display: inline-flex; gap: 6px; align-items: center; margin-bottom: -1px; }
+.project-tabs .ptab:hover { background: #f4f4f5; color: #18181b; }
+.project-tabs .ptab.on { color: #3730a3; border-bottom-color: #4f46e5; font-weight: 600; }
+.project-tabs .ptab.over { background: #eef2ff; outline: 2px dashed #818cf8; outline-offset: -2px; }
+.project-tabs .ptab.add { color: #4f46e5; }
+.project-tabs .ptab-count { font-size: 11px; background: #f4f4f5; color: #71717a; border-radius: 9px; padding: 0 6px; font-weight: 500; }
+.project-tabs .ptab.on .ptab-count { background: #e0e7ff; color: #3730a3; }
+.project-tabs .ptab-more { border: 0; background: none; padding: 2px 6px; color: #71717a; border-radius: 4px; }
+.project-tabs .ptab-more:hover { background: #f4f4f5; }
+.project-tabs .ptab-menu { position: absolute; top: 100%; left: 0; z-index: 30; margin-top: 4px; background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 4px; display: flex; flex-direction: column; min-width: 150px; }
+.project-tabs .ptab-menu > button { border: 0; background: none; text-align: left; padding: 6px 10px; border-radius: 5px; font-size: 13px; }
+.project-tabs .ptab-menu > button:hover:not(:disabled) { background: #f4f4f5; }
+.project-tabs .ptab-menu > button.danger { color: #b91c1c; }
+.project-tabs .add-menu { min-width: 280px; padding: 10px; gap: 8px; }
+.project-tabs .add-menu form { display: flex; gap: 6px; }
+.project-tabs .add-menu input { flex: 1; min-width: 0; }
+.project-tabs .ptab-suggest { display: flex; flex-wrap: wrap; gap: 4px; }
+.project-tabs .ptab-suggest button { font-size: 12px; padding: 3px 8px; border-radius: 12px; }
+.card-tab { font-size: 12px; padding: 2px 4px; max-width: 130px; }
+.card-tab-pill { font-size: 11px; background: #eef2ff; color: #3730a3; border-radius: 9px; padding: 1px 8px; align-self: center; }
+.card[draggable="true"] { cursor: grab; }

@@ -25,6 +25,7 @@ import type {
   DiagramWrite,
   Member,
   Project,
+  ProjectTab,
   Role,
   TerraformValidation,
   Version,
@@ -39,6 +40,7 @@ interface Row {
   id: string;
   tenant_id: string;
   project_id: string;
+  tab?: string | null;
   title: string;
   kind: DiagramKind;
   source: string;
@@ -55,7 +57,7 @@ interface State {
   iconPacks?: (IconPackMeta & { workspace_id: string })[];
   workspaces: { id: string; name: string; created_at: string }[];
   members: { workspace_id: string; user_id: string; role: Role; added_by: string; created_at: string }[];
-  projects: { id: string; workspace_id: string; name: string; description: string; created_at: string; updated_at: string }[];
+  projects: { id: string; workspace_id: string; name: string; description: string; tabs?: ProjectTab[]; created_at: string; updated_at: string }[];
   diagrams: Row[];
   versions: VersionRow[];
 }
@@ -183,6 +185,7 @@ const summary = (s: State, d: Row): DiagramSummary => ({
   title: d.title,
   kind: d.kind,
   project_id: d.project_id,
+  tab: d.tab ?? null,
   created_by: d.created_by,
   updated_at: d.updated_at,
   version: latest(s, d.id) || null,
@@ -291,7 +294,7 @@ export const demoApi = {
         .map((p) => {
           const ds = s.diagrams.filter((d) => d.project_id === p.id);
           const updated = [p.updated_at, ...ds.map((d) => d.updated_at)].sort().pop()!;
-          return { id: p.id, name: p.name, description: p.description, diagram_count: ds.length, updated_at: updated };
+          return { id: p.id, name: p.name, description: p.description, tabs: p.tabs ?? [], diagram_count: ds.length, updated_at: updated };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
     }),
@@ -300,13 +303,17 @@ export const demoApi = {
       needWorkspace(s, workspaceId, "editor");
       const p = { id: uuid(), workspace_id: workspaceId, name, description, created_at: now(), updated_at: now() };
       s.projects.push(p);
-      return { id: p.id, name, description, diagram_count: 0, updated_at: p.updated_at };
+      return { id: p.id, name, description, tabs: [], diagram_count: 0, updated_at: p.updated_at };
     }),
-  updateProject: (id: string, d: { name?: string; description?: string }) =>
+  updateProject: (id: string, d: { name?: string; description?: string; tabs?: ProjectTab[] }) =>
     tx((s) => {
       const { project } = needProject(s, id, "editor");
       Object.assign(project, d, { updated_at: now() });
-      return { id, name: project.name, description: project.description, diagram_count: 0, updated_at: project.updated_at } as Project;
+      if (d.tabs) {
+        const ids = new Set(d.tabs.map((t) => t.id));
+        for (const x of s.diagrams) if (x.project_id === id && x.tab && !ids.has(x.tab)) x.tab = null;
+      }
+      return { id, name: project.name, description: project.description, tabs: project.tabs ?? [], diagram_count: 0, updated_at: project.updated_at } as Project;
     }),
   deleteProject: (id: string) =>
     tx((s) => {
@@ -351,6 +358,7 @@ export const demoApi = {
         id: uuid(),
         tenant_id: "demo",
         project_id: d.projectId,
+        tab: d.tab ?? null,
         title: d.title ?? "Untitled diagram",
         kind: d.kind ?? "whiteboard",
         source: d.source ?? "",
@@ -375,6 +383,7 @@ export const demoApi = {
         ...(d.scene !== undefined ? { scene: d.scene } : {}),
         ...(d.model !== undefined ? { model: d.model } : {}),
         ...(d.projectId ? { project_id: d.projectId } : {}),
+        ...(d.tab !== undefined ? { tab: d.tab } : d.projectId && d.projectId !== diagram.project_id ? { tab: null } : {}),
         updated_at: now(),
       });
       const last = s.versions.filter((v) => v.diagram_id === id).sort((a, b) => b.version - a.version)[0];
@@ -399,6 +408,7 @@ export const demoApi = {
         ...structuredClone(diagram),
         id: uuid(),
         project_id: target,
+        tab: target === diagram.project_id ? (diagram.tab ?? null) : null,
         title: opts.title ?? `${diagram.title} (copy${opts.version ? ` of v${opts.version}` : ""})`,
         kind: src.kind,
         source: src.source,

@@ -18,6 +18,8 @@ const content = z.object({
   model: DiagramModelSchema.optional(),
   /** Names the version this save creates (e.g. "Before HA migration"). */
   message: versionName.optional(),
+  /** The project tab the diagram is filed under (null = none). Not versioned. */
+  tab: z.string().max(40).nullable().optional(),
   /** Autosave: store the content but don't record a version (versions come from explicit saves). */
   autosave: z.boolean().optional(),
 });
@@ -29,7 +31,7 @@ function assertValidModel(model: z.infer<typeof DiagramModelSchema> | undefined)
   if (errors.length) throw new HttpError(422, `invalid model: ${errors.map((e) => e.message).join("; ")}`);
 }
 
-const LIST_COLUMNS = `d.id, d.title, d.kind, d.project_id, d.created_by, d.created_at, d.updated_at,
+const LIST_COLUMNS = `d.id, d.title, d.kind, d.project_id, d.tab, d.created_by, d.created_at, d.updated_at,
   (SELECT max(version) FROM diagram_versions v WHERE v.diagram_id = d.id) AS version,
   CASE WHEN d.kind = 'cloud' THEN COALESCE(jsonb_array_length(d.model->'nodes'), 0) END AS node_count`;
 
@@ -91,12 +93,13 @@ export async function diagramRoutes(app: FastifyInstance): Promise<void> {
     const p = req.principal;
     const row = await withTenant(p.tenantId, async (c) => {
       await requireProject(c, body.projectId, p, "editor");
+      await assertTab(c, body.projectId, body.tab);
       const { rows } = await c.query(
-        `INSERT INTO diagrams (tenant_id, project_id, title, kind, source, scene, model, created_by)
+        `INSERT INTO diagrams (tenant_id, project_id, title, kind, source, scene, model, created_by, tab)
          VALUES ($1, $2, COALESCE($3, 'Untitled diagram'), COALESCE($4, 'whiteboard'), COALESCE($5, ''),
-                 COALESCE($6, '{}'::jsonb), $7, $8)
+                 COALESCE($6, '{}'::jsonb), $7, $8, $9)
          RETURNING *`,
-        [p.tenantId, body.projectId, body.title, body.kind, body.source, body.scene ?? null, body.model ?? null, p.userId],
+        [p.tenantId, body.projectId, body.title, body.kind, body.source, body.scene ?? null, body.model ?? null, p.userId, body.tab ?? null],
       );
       const version = await addVersion(c, rows[0], p.userId, body.message ?? null);
       await audit(c, p, "diagram.create", rows[0].id, { projectId: body.projectId });
@@ -113,13 +116,18 @@ export async function diagramRoutes(app: FastifyInstance): Promise<void> {
     const p = req.principal;
     return withTenant(p.tenantId, async (c) => {
       const { diagram } = await requireDiagram(c, id, p, "editor", true);
-      if (body.projectId && body.projectId !== diagram.project_id) await requireProject(c, body.projectId, p, "editor");
+      const moving = Boolean(body.projectId && body.projectId !== diagram.project_id);
+      if (moving) await requireProject(c, body.projectId!, p, "editor");
+      if (body.tab) await assertTab(c, body.projectId ?? diagram.project_id, body.tab);
+      // Moving to another project drops the tab unless a tab of that project is given.
+      const tabSet = body.tab !== undefined || moving;
       const { rows } = await c.query(
         `UPDATE diagrams SET
            title = COALESCE($2, title), source = COALESCE($3, source), scene = COALESCE($4, scene),
-           model = COALESCE($5, model), project_id = COALESCE($6, project_id), updated_at = now()
+           model = COALESCE($5, model), project_id = COALESCE($6, project_id),
+           tab = CASE WHEN $7::boolean THEN $8 ELSE tab END, updated_at = now()
          WHERE id = $1 RETURNING *`,
-        [id, body.title ?? null, body.source ?? null, body.scene ?? null, body.model ?? null, body.projectId ?? null],
+        [id, body.title ?? null, body.source ?? null, body.scene ?? null, body.model ?? null, body.projectId ?? null, tabSet, body.tab ?? null],
       );
       const latest = await latestVersion(c, id);
       const changed = !latest || !sameContent(latest, rows[0]);
@@ -155,9 +163,10 @@ export async function diagramRoutes(app: FastifyInstance): Promise<void> {
       const src = body.version ? await getVersion(c, id, body.version) : diagram;
       const title = body.title ?? `${diagram.title} (copy${body.version ? ` of v${body.version}` : ""})`;
       const { rows } = await c.query(
-        `INSERT INTO diagrams (tenant_id, project_id, title, kind, source, scene, model, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-        [p.tenantId, target, title, src.kind, src.source, src.scene, src.model, p.userId],
+        `INSERT INTO diagrams (tenant_id, project_id, title, kind, source, scene, model, created_by, tab)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        // A copy in the same project stays in the same tab.
+        [p.tenantId, target, title, src.kind, src.source, src.scene, src.model, p.userId, target === diagram.project_id ? (diagram.tab ?? null) : null],
       );
       const version = await addVersion(c, rows[0], p.userId, `Copied from "${diagram.title}"${body.version ? ` v${body.version}` : ""}`);
       await audit(c, p, "diagram.duplicate", rows[0].id, { from: id, version: body.version ?? null });
@@ -276,6 +285,13 @@ async function getVersion(c: pg.PoolClient, id: string, version: number): Promis
 }
 
 /** Both sides come back from jsonb, so key order is canonical and JSON comparison is exact. */
+/** A tab must be one of the project's tabs. */
+async function assertTab(c: { query: (q: string, v: unknown[]) => Promise<{ rows: { tabs: { id: string }[] }[] }> }, projectId: string, tab: string | null | undefined) {
+  if (!tab) return;
+  const { rows } = await c.query("SELECT tabs FROM projects WHERE id = $1", [projectId]);
+  if (!rows[0]?.tabs.some((t) => t.id === tab)) throw new HttpError(422, `project has no tab "${tab}"`);
+}
+
 function sameContent(a: { kind: string; source: string; scene: unknown; model: unknown }, b: typeof a): boolean {
   return a.kind === b.kind && a.source === b.source && JSON.stringify(a.scene) === JSON.stringify(b.scene) && JSON.stringify(a.model) === JSON.stringify(b.model);
 }

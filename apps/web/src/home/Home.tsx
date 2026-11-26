@@ -1,7 +1,7 @@
 import { type FormEvent, lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { type DiagramModel, type DrawioPage, readDrawio } from "@archcanvas/shared";
-import { Link } from "../router";
-import { api, type DiagramKind, type DiagramSummary, type Member, type Project, type Role, type Workspace } from "../api";
+import { Link, navigate, useLocation } from "../router";
+import { api, type DiagramKind, type DiagramSummary, type Member, type Project, type ProjectTab, type Role, type Workspace } from "../api";
 
 // The review dialog shows a live canvas preview, so it brings React Flow with it.
 const ImportDialog = lazy(() => import("./ImportDialog"));
@@ -22,12 +22,178 @@ export interface HomeProps {
   /** Reload workspaces and projects (after create / rename / delete). */
   reload: (select?: { workspaceId?: string; projectId?: string }) => Promise<void>;
   reloadIconPacks: () => Promise<void>;
-  onNew: (kind: DiagramKind | "sample") => void;
-  onImport: (title: string, model: DiagramModel, fileName: string) => void;
+  /** `section` is the project tab the new diagram goes into. */
+  onNew: (kind: DiagramKind | "sample", section?: string) => void;
+  onImport: (title: string, model: DiagramModel, fileName: string, section?: string) => void;
   setStatus: SetStatus;
 }
 
 const canEdit = (r: Role | undefined) => r === "owner" || r === "editor";
+
+/** Common aspects people organise a project by; anything else can be typed in. */
+const SUGGESTED_TABS = ["Architecture", "HA / DR", "CI/CD", "Security", "Networking", "Data", "Observability", "Cost", "Runbooks"];
+
+function tabId(name: string, taken: string[]): string {
+  const base =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32) || "tab";
+  let id = base;
+  for (let i = 2; taken.includes(id); i++) id = `${base}-${i}`;
+  return id;
+}
+
+/**
+ * The project's own tabs (HA / DR, CI/CD…): All, then each tab with its diagram count.
+ * Drop a diagram card on a tab to file it there. Editors add, rename, reorder and delete tabs.
+ */
+function ProjectTabs({
+  tabs,
+  active,
+  counts,
+  editable,
+  onSelect,
+  onChange,
+  onDropDiagram,
+}: {
+  tabs: ProjectTab[];
+  active: string;
+  counts: Record<string, number>;
+  editable: boolean;
+  onSelect: (id: string) => void;
+  onChange: (tabs: ProjectTab[]) => void;
+  onDropDiagram: (diagramId: string, tab: string | null) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [menu, setMenu] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const add = (name: string) => {
+    const n = name.trim().slice(0, 40);
+    if (!n) return;
+    const id = tabId(n, tabs.map((t) => t.id));
+    onChange([...tabs, { id, name: n }]);
+    onSelect(id);
+    setDraft("");
+    setAdding(false);
+  };
+  const move = (id: string, by: number) => {
+    const i = tabs.findIndex((t) => t.id === id);
+    const j = i + by;
+    if (i < 0 || j < 0 || j >= tabs.length) return;
+    const next = [...tabs];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const dropProps = (id: string | null) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes("application/x-archcanvas-diagram")) return;
+      e.preventDefault();
+      setOver(id ?? "all");
+    },
+    onDragLeave: () => setOver(null),
+    onDrop: (e: React.DragEvent) => {
+      const d = e.dataTransfer.getData("application/x-archcanvas-diagram");
+      setOver(null);
+      if (d) onDropDiagram(d, id);
+    },
+  });
+  const unused = SUGGESTED_TABS.filter((n) => !tabs.some((t) => t.name.toLowerCase() === n.toLowerCase()));
+  return (
+    <div className="project-tabs" role="tablist" aria-label="Project tabs">
+      <button role="tab" aria-selected={active === "all"} className={`ptab ${active === "all" ? "on" : ""} ${over === "all" ? "over" : ""}`} onClick={() => onSelect("all")} {...(editable ? dropProps(null) : {})}>
+        All <span className="ptab-count">{counts.all ?? 0}</span>
+      </button>
+      {tabs.map((t, i) => (
+        <div key={t.id} className="ptab-wrap">
+          <button
+            role="tab"
+            aria-selected={active === t.id}
+            className={`ptab ${active === t.id ? "on" : ""} ${over === t.id ? "over" : ""}`}
+            onClick={() => onSelect(t.id)}
+            onDoubleClick={() => {
+              if (!editable) return;
+              const name = prompt("Rename tab", t.name)?.trim();
+              if (name) onChange(tabs.map((x) => (x.id === t.id ? { ...x, name: name.slice(0, 40) } : x)));
+            }}
+            {...(editable ? dropProps(t.id) : {})}
+          >
+            {t.name} <span className="ptab-count">{counts[t.id] ?? 0}</span>
+          </button>
+          {editable && active === t.id && (
+            <button className="ptab-more" title="Tab options" aria-label={`Options for ${t.name}`} onClick={() => setMenu(menu === t.id ? null : t.id)}>
+              ⋯
+            </button>
+          )}
+          {menu === t.id && (
+            <div className="ptab-menu" onMouseLeave={() => setMenu(null)}>
+              <button
+                onClick={() => {
+                  setMenu(null);
+                  const name = prompt("Rename tab", t.name)?.trim();
+                  if (name) onChange(tabs.map((x) => (x.id === t.id ? { ...x, name: name.slice(0, 40) } : x)));
+                }}
+              >
+                Rename
+              </button>
+              <button disabled={i === 0} onClick={() => (setMenu(null), move(t.id, -1))}>
+                Move left
+              </button>
+              <button disabled={i === tabs.length - 1} onClick={() => (setMenu(null), move(t.id, 1))}>
+                Move right
+              </button>
+              <button
+                className="danger"
+                onClick={() => {
+                  setMenu(null);
+                  if (confirm(`Delete the "${t.name}" tab? Its ${counts[t.id] ?? 0} diagram(s) stay in the project, under All.`)) {
+                    onChange(tabs.filter((x) => x.id !== t.id));
+                    onSelect("all");
+                  }
+                }}
+              >
+                Delete tab
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      {editable && (
+        <div className="ptab-wrap">
+          <button className="ptab add" onClick={() => setAdding((a) => !a)} title="Add a tab (e.g. HA / DR, CI/CD)" aria-expanded={adding}>
+            + Tab
+          </button>
+          {adding && (
+            <div className="ptab-menu add-menu">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  add(draft);
+                }}
+              >
+                <input autoFocus placeholder="Tab name, e.g. HA / DR" value={draft} maxLength={40} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setAdding(false)} />
+                <button className="primary" disabled={!draft.trim()}>
+                  Add
+                </button>
+              </form>
+              {unused.length > 0 && (
+                <div className="ptab-suggest">
+                  {unused.map((n) => (
+                    <button key={n} type="button" onClick={() => add(n)}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Home(props: HomeProps) {
   const { workspaces, workspace, projects, project, onWorkspace, projectHref, reload, setStatus } = props;
@@ -199,6 +365,30 @@ function ProjectView({
   const [moving, setMoving] = useState<DiagramSummary | null>(null);
   const [filter, setFilter] = useState("");
   const editable = canEdit(role);
+  // The tab in view: ?section= in the URL, else the last one used in this project (a per-user preference).
+  const loc = useLocation();
+  const [tabs, setTabs] = useState<ProjectTab[]>(project.tabs ?? []);
+  useEffect(() => setTabs(project.tabs ?? []), [project.id, project.tabs]);
+  const [wanted, setWanted] = useState(() => loc.search.get("section") ?? localStorage.getItem(`archcanvas.projectTab.${project.id}`) ?? "all");
+  useEffect(() => setWanted(loc.search.get("section") ?? localStorage.getItem(`archcanvas.projectTab.${project.id}`) ?? "all"), [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const active = wanted === "all" || tabs.some((t) => t.id === wanted) ? wanted : "all";
+  const selectTab = (id: string) => {
+    setWanted(id);
+    localStorage.setItem(`archcanvas.projectTab.${project.id}`, id);
+    navigate(id === "all" ? loc.path : `${loc.path}?section=${encodeURIComponent(id)}`, { replace: true });
+  };
+  const section = active === "all" ? undefined : active;
+  const saveTabs = (next: ProjectTab[]) => {
+    setTabs(next);
+    void run(() => api.updateProject(project.id, { tabs: next })).then(async (ok) => {
+      if (!ok) setTabs(project.tabs ?? []);
+      await after(ok);
+    });
+  };
+  const fileUnder = (diagramId: string, tab: string | null) => {
+    setDiagrams((ds) => ds && ds.map((d) => (d.id === diagramId ? { ...d, tab } : d)));
+    void run(() => api.updateDiagram(diagramId, { tab }), tab ? `Moved to ${tabs.find((t) => t.id === tab)?.name}` : "Removed from its tab").then((ok) => !ok && load());
+  };
 
   const load = useCallback(() => {
     api.listDiagrams(project.id).then(setDiagrams, () => setDiagrams([]));
@@ -212,7 +402,11 @@ function ProjectView({
     }
   };
 
-  const shown = (diagrams ?? []).filter((d) => d.title.toLowerCase().includes(filter.toLowerCase()));
+  const inTab = (diagrams ?? []).filter((d) => active === "all" || d.tab === active);
+  const shown = inTab.filter((d) => d.title.toLowerCase().includes(filter.toLowerCase()));
+  const counts: Record<string, number> = { all: diagrams?.length ?? 0 };
+  for (const d of diagrams ?? []) if (d.tab) counts[d.tab] = (counts[d.tab] ?? 0) + 1;
+  const tabName = tabs.find((t) => t.id === active)?.name;
 
   return (
     <>
@@ -229,7 +423,7 @@ function ProjectView({
             aria-label="New diagram"
             onChange={(e) => {
               if (e.target.value === "import") fileInput.current?.click();
-              else onNew(e.target.value as DiagramKind | "sample");
+              else onNew(e.target.value as DiagramKind | "sample", section);
               e.target.value = "";
             }}
           >
@@ -275,27 +469,39 @@ function ProjectView({
         </div>
       )}
 
-      <input className="filter" placeholder="Filter diagrams" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter diagrams" />
+      {(tabs.length > 0 || editable) && (
+        <ProjectTabs tabs={tabs} active={active} counts={counts} editable={editable} onSelect={selectTab} onChange={saveTabs} onDropDiagram={fileUnder} />
+      )}
+
+      <input className="filter" placeholder={tabName ? `Filter diagrams in ${tabName}` : "Filter diagrams"} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter diagrams" />
 
       {diagrams === null ? (
         <p className="hint">Loading…</p>
       ) : shown.length === 0 ? (
         <div className="empty-card">
-          <p>{diagrams.length ? "No diagrams match." : "No diagrams in this project yet."}</p>
-          {editable && !diagrams.length && (
+          <p>{inTab.length ? "No diagrams match." : tabName ? `No diagrams in ${tabName} yet. Create one here, or drag a diagram onto the tab.` : "No diagrams in this project yet."}</p>
+          {editable && !inTab.length && (
             <div className="row">
-              <button className="primary" onClick={() => onNew("cloud")}>
+              <button className="primary" onClick={() => onNew("cloud", section)}>
                 Blank architecture
               </button>
-              <button onClick={() => onNew("sample")}>Start from sample</button>
-              <button onClick={() => onNew("whiteboard")}>New whiteboard</button>
+              <button onClick={() => onNew("sample", section)}>Start from sample</button>
+              <button onClick={() => onNew("whiteboard", section)}>New whiteboard</button>
             </div>
           )}
         </div>
       ) : (
         <div className="cards">
           {shown.map((d) => (
-            <div key={d.id} className="card">
+            <div
+              key={d.id}
+              className="card"
+              draggable={editable && tabs.length > 0}
+              onDragStart={(e) => {
+                e.dataTransfer.setData("application/x-archcanvas-diagram", d.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+            >
               <Link to={diagramHref(d.id, d.title)} className="card-main">
                 <span className="card-kind">{d.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
                 <span className="card-title">{d.title}</span>
@@ -307,6 +513,17 @@ function ProjectView({
                 <Link to={diagramHref(d.id, d.title, true)} className="card-link">
                   History
                 </Link>
+                {editable && tabs.length > 0 && (
+                  <select className="card-tab" value={d.tab ?? ""} aria-label={`Tab for ${d.title}`} title="Which tab this diagram is in" onChange={(e) => fileUnder(d.id, e.target.value || null)}>
+                    <option value="">No tab</option>
+                    {tabs.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {!editable && d.tab && <span className="card-tab-pill">{tabs.find((t) => t.id === d.tab)?.name}</span>}
                 {editable && <button onClick={() => void run(() => api.duplicateDiagram(d.id), "Duplicated").then(after)}>Duplicate</button>}
                 {editable && projects.length > 1 && <button onClick={() => setMoving(d)}>Move</button>}
                 {editable && (
@@ -334,7 +551,7 @@ function ProjectView({
             onClose={() => setImporting(null)}
             onImport={(title, model) => {
               setImporting(null);
-              onImport(title, model, importing.fileName);
+              onImport(title, model, importing.fileName, section);
             }}
           />
         </Suspense>
