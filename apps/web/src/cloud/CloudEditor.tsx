@@ -317,17 +317,19 @@ function Editor({
   // React Flow keeps each node's measured size on the node object. Carry it over when the model
   // changes, or every edit hides nodes until they're re-measured (blinking) and lines to nodes
   // whose size didn't change never come back.
-  useEffect(
-    () =>
-      setNodes((prev) => {
-        const old = new Map(prev.map((n) => [n.id, n]));
-        return flow.nodes.map((n) => {
-          const o = old.get(n.id);
-          return o?.measured ? { ...n, measured: o.measured } : n;
-        });
-      }),
-    [flow.nodes],
-  );
+  // Done during render, not in an effect: an effect hands React Flow the new nodes one render
+  // late, it reports the stale selection back, and selection flips every frame (blinking).
+  const [syncedFrom, setSyncedFrom] = useState(flow.nodes);
+  if (syncedFrom !== flow.nodes) {
+    setSyncedFrom(flow.nodes);
+    setNodes((prev) => {
+      const old = new Map(prev.map((n) => [n.id, n]));
+      return flow.nodes.map((n) => {
+        const o = old.get(n.id);
+        return o?.measured ? { ...n, measured: o.measured } : n;
+      });
+    });
+  }
 
   const onNodesChange: OnNodesChange<Node<CloudNodeData>> = useCallback((changes) => {
     // Removal goes through the model (onNodesDelete); moves and resizes are committed at the end.
@@ -797,8 +799,9 @@ function Editor({
               setSelectedIds((prev) => (prev.size === ids.size && [...ids].every((i) => prev.has(i)) ? prev : ids));
               // Only explicit actions clear the selection (pane click, Esc, delete): React Flow also
               // reports empty selections while nodes are re-rendered.
-              if (ns.length === 1 && !es.length) setSelection({ type: "node", id: ns[0].id });
-              else if (es.length === 1 && !ns.length) setSelection({ type: "edge", id: es[0].id });
+              // React Flow calls this again on every render, so only set a new selection when it changed.
+              const pick = ns.length === 1 && !es.length ? { type: "node" as const, id: ns[0].id } : es.length === 1 && !ns.length ? { type: "edge" as const, id: es[0].id } : null;
+              if (pick) setSelection((prev) => (prev?.type === pick.type && prev.id === pick.id ? prev : pick));
             }}
             onNodeClick={() => tab !== "assistant" && tab !== "flows" && setTab("properties")}
             onEdgeClick={() => setTab("properties")}
