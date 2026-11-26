@@ -18,6 +18,8 @@ const content = z.object({
   model: DiagramModelSchema.optional(),
   /** Names the version this save creates (e.g. "Before HA migration"). */
   message: versionName.optional(),
+  /** Autosave: store the content but don't record a version (versions come from explicit saves). */
+  autosave: z.boolean().optional(),
 });
 
 /** Structural errors (unknown kinds, bad nesting, dangling edges) are rejected on save. */
@@ -49,6 +51,23 @@ export async function diagramRoutes(app: FastifyInstance): Promise<void> {
         [principalIds(req.principal)],
       );
       return rows;
+    });
+  });
+
+  /** Resolves the short id at the end of a diagram URL ("/d/orders-api-612b054b") to the full id. */
+  app.get("/api/diagrams/lookup/:short", async (req) => {
+    const { short } = parse(z.object({ short: z.string().regex(/^[0-9a-f-]{8,36}$/i, "expected a hex id prefix") }), req.params);
+    return withTenant(req.principal.tenantId, async (c) => {
+      const { rows } = await c.query<{ id: string }>(
+        `SELECT d.id FROM diagrams d JOIN projects pr ON pr.id = d.project_id
+         WHERE d.id::text LIKE $1 || '%'
+           AND pr.workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ANY($2))
+         LIMIT 2`,
+        [short.toLowerCase(), principalIds(req.principal)],
+      );
+      if (!rows.length) throw new HttpError(404, "diagram not found");
+      if (rows.length > 1) throw new HttpError(409, "that short id matches more than one diagram; use the full link");
+      return { id: rows[0].id };
     });
   });
 
@@ -104,9 +123,10 @@ export async function diagramRoutes(app: FastifyInstance): Promise<void> {
       );
       const latest = await latestVersion(c, id);
       const changed = !latest || !sameContent(latest, rows[0]);
-      const version = changed || body.message ? await addVersion(c, rows[0], p.userId, body.message ?? null) : latest!.version;
-      await audit(c, p, "diagram.update", id, { version, moved: Boolean(body.projectId && body.projectId !== diagram.project_id) });
-      return { ...rows[0], version, versionCreated: changed || Boolean(body.message) };
+      const create = !latest || ((changed || Boolean(body.message)) && !body.autosave);
+      const version = create ? await addVersion(c, rows[0], p.userId, body.message ?? null) : latest!.version;
+      if (!body.autosave) await audit(c, p, "diagram.update", id, { version, moved: Boolean(body.projectId && body.projectId !== diagram.project_id) });
+      return { ...rows[0], version, versionCreated: create };
     });
   });
 

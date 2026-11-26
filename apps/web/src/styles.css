@@ -384,3 +384,263 @@ button.link.danger { color: #b91c1c; }
 .demo-banner { background: #eef2ff; color: #3730a3; font-size: 12.5px; padding: 6px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .demo-banner a { color: inherit; }
 .demo-banner .link { margin-left: auto; color: #4338ca; }
+
+/* ---------- links that used to be buttons (URL navigation) ---------- */
+a.logo { font-weight: 700; color: #18181b; text-decoration: none; padding: 4px 6px; }
+.crumbs a { color: #52525b; text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+a.version-badge, span.version-badge { display: inline-block; border: 1px solid #d4d4d8; border-radius: 999px; padding: 4px 10px; font-size: 12px; color: inherit; text-decoration: none; white-space: nowrap; background: #fff; }
+a.version-badge:hover { background: #f4f4f5; }
+span.version-badge.disabled { color: #a1a1aa; }
+.project-list a { display: flex; justify-content: space-between; padding: 7px 10px; border-radius: 6px; color: inherit; text-decoration: none; }
+.project-list a:hover { background: #f4f4f5; }
+.project-list a.active { background: #eef2ff; color: #3730a3; font-weight: 600; }
+a.card-main { display: flex; flex-direction: column; gap: 4px; padding: 14px; color: inherit; text-decoration: none; }
+a.card-link { font-size: 12px; padding: 4px 8px; color: #52525b; text-decoration: none; border-radius: 6px; }
+a.card-link:hover { background: #f4f4f5; }
+
+/* ---------- unified palette ---------- */
+.palette { width: auto; padding: 0; gap: 0; }
+.palette-inner { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.palette-search { width: 100%; }
+.seg { border-bottom: 1px solid #f4f4f5; padding-bottom: 6px; }
+.seg-head { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; padding: 6px 2px; text-align: left; font-size: 12px; font-weight: 600; color: #3f3f46; }
+.seg-head .chev { width: 12px; color: #a1a1aa; }
+.seg-head .seg-title { flex: 1; text-transform: uppercase; letter-spacing: .03em; font-size: 11px; }
+.seg-head .count { font-weight: 400; color: #a1a1aa; font-size: 11px; }
+.seg-note { margin: 0 0 4px 18px; font-size: 11px; color: #71717a; }
+.seg:first-of-type .seg-note { color: #16a34a; }
+.tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 4px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 6px; border: 1px solid transparent; border-radius: 8px; background: none; font-size: 11px; line-height: 1.2; cursor: grab; }
+.tile:hover:not(:disabled) { border-color: #c7d2fe; background: #f8faff; }
+.tile:active { cursor: grabbing; }
+.tile img, .tile .ricon, .tile .tile-ph { width: 32px; height: 32px; object-fit: contain; }
+.tile span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-align: center; color: #3f3f46; }
+.palette-foot { padding: 4px 2px 12px; }
+
+/* ---------- resizable panels ---------- */
+.resizer { width: 5px; margin: 0 -2px; cursor: col-resize; z-index: 20; flex-shrink: 0; position: relative; }
+.resizer::after { content: ""; position: absolute; inset: 0 2px; background: transparent; transition: background .15s; }
+.resizer:hover::after, body.resizing .resizer::after { background: #a5b4fc; }
+body.resizing { cursor: col-resize; user-select: none; }
+.inspector { width: auto; }
+
+/* ---------- canvas editing ---------- */
+.toggle.on { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
+.align-bar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #e4e4e7; border-radius: 10px; padding: 4px 8px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.align-bar button { min-width: 30px; padding: 4px 8px; font-size: 13px; }
+.ctx-menu { position: absolute; z-index: 30; min-width: 190px; background: #fff; border: 1px solid #e4e4e7; border-radius: 10px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.14); display: flex; flex-direction: column; }
+.ctx-menu button { display: flex; justify-content: space-between; gap: 16px; border: 0; background: none; padding: 6px 10px; text-align: left; font-size: 13px; border-radius: 6px; }
+.ctx-menu button:hover:not(:disabled) { background: #f4f4f5; }
+.ctx-menu kbd { font: 11px ui-monospace, Menlo, monospace; color: #a1a1aa; }
+.ctx-menu hr { border: 0; border-top: 1px solid #f4f4f5; margin: 4px 0; }
+.inline-edit { font: inherit; font-weight: 600; width: 100%; padding: 1px 4px; border: 1px solid #a5b4fc; border-radius: 4px; background: #fff; }
+textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
+.edge-label { position: absolute; pointer-events: all; background: #fff; padding: 1px 5px; border-radius: 4px; font-size: 11px; color: #3c4043; cursor: default; }
+.edge-label .inline-edit { font-size: 11px; width: 140px; }
+.note { width: 100%; height: 100%; background: #fef9c3; border: 1px solid #facc15; border-radius: 6px; padding: 8px 10px; font-size: 12.5px; color: #422006; box-shadow: 0 1px 2px rgba(0,0,0,.08); white-space: pre-wrap; overflow: hidden; }
+.note.selected { outline: 2px solid #ca8a04; outline-offset: 2px; }
+.note .note-text { height: 100%; }
+.gnode.doc { border-style: dashed; background: rgba(250,250,250,.5); }
+.react-flow__node.selected .rnode, .rnode.selected { outline: 2px solid #4f46e5; outline-offset: 2px; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: #4f46e5 !important; stroke-width: 2.5 !important; }
+.react-flow__handle { width: 8px; height: 8px; background: #fff; border: 1.5px solid #6366f1; opacity: 0; transition: opacity .15s; }
+.react-flow__node:hover .react-flow__handle, .react-flow__node.selected .react-flow__handle, .react-flow.connecting .react-flow__handle { opacity: 1; }
+
+/* ---------- general shapes and connectors ---------- */
+.shape-node { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.shape-node .shape-svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.shape-node .shape-label { position: relative; max-width: 82%; max-height: 90%; overflow: hidden; text-align: center; font-size: var(--shape-font-size, 13px); line-height: 1.3; white-space: pre-wrap; word-break: break-word; }
+.shape-node .shape-label.low { margin-top: 12%; }
+.shape-node .shape-label .inline-edit { text-align: center; min-width: 90px; }
+.shape-node.text-only .shape-label { max-width: 100%; }
+.shape-node.added .shape-svg { filter: drop-shadow(0 0 3px rgba(30,142,62,.7)); }
+.shape-node.changed .shape-svg { filter: drop-shadow(0 0 3px rgba(242,153,0,.7)); }
+.react-flow__handle.side-handle { width: 9px; height: 9px; }
+.prop-row { display: flex; gap: 8px; }
+.prop-row > label { flex: 1; min-width: 0; }
+.prop-row select { width: 100%; }
+.color-label input[type="color"] { width: 100%; height: 30px; padding: 2px; }
+.tile svg.shape-svg { width: auto; height: auto; max-height: 30px; }
+
+/* ---------- right-click style menu ---------- */
+.ctx-menu { min-width: 230px; max-width: 280px; max-height: calc(100% - 16px); overflow: auto; }
+.ctx-menu .ctx-item { display: flex; justify-content: space-between; gap: 16px; border: 0; background: none; padding: 6px 10px; text-align: left; font-size: 13px; border-radius: 6px; }
+.ctx-menu .ctx-item:hover:not(:disabled) { background: #f4f4f5; }
+.ctx-swatches { padding: 4px 10px 6px; display: flex; flex-direction: column; gap: 4px; }
+.ctx-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #71717a; font-weight: 600; }
+.ctx-swatches > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.swatch { width: 20px; height: 20px; padding: 0; border-radius: 5px; border: 1px solid #d4d4d8; cursor: pointer; }
+.swatch.on { outline: 2px solid #4f46e5; outline-offset: 1px; }
+.swatch.custom { position: relative; overflow: hidden; background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red); }
+.swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.ctx-shapes { display: grid !important; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.shape-pick { padding: 3px; border: 1px solid transparent; border-radius: 5px; background: none; display: flex; justify-content: center; }
+.shape-pick:hover, .shape-pick.on { border-color: #a5b4fc; background: #eef2ff; }
+.shape-pick svg { width: auto; height: auto; }
+.shape-pick { align-items: center; min-height: 26px; }
+.ctx-seg { display: flex !important; gap: 2px; }
+.ctx-seg button { flex: 1; font-size: 11.5px; padding: 3px 4px; border-radius: 5px; white-space: nowrap; }
+.ctx-seg button.on { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
+.ctx-seg.heads button { font-size: 12px; padding: 2px; }
+.tile-text { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font: 700 22px Georgia, serif; color: #3f3f46; }
+/* Connection points: visible on hover, larger on shapes. */
+.react-flow__node:hover .react-flow__handle { opacity: 1; }
+.react-flow__handle.side-handle { width: 10px; height: 10px; border-width: 2px; }
+
+/* ---------- draw.io-style selection and in-place text editing ---------- */
+.shape-node .react-flow__resize-control.line.sel-line { border-color: #1a73e8; border-style: dashed; border-width: 0; }
+.shape-node .react-flow__resize-control.line.sel-line.top,
+.shape-node .react-flow__resize-control.line.sel-line.bottom { border-top-width: 1px; }
+.shape-node .react-flow__resize-control.line.sel-line.left,
+.shape-node .react-flow__resize-control.line.sel-line.right { border-left-width: 1px; }
+.shape-node .react-flow__resize-control.handle.sel-handle { width: 7px; height: 7px; border-radius: 1px; background: #1a73e8; border: 1px solid #fff; }
+.edit-in-place { outline: 1px dashed #71717a; outline-offset: 3px; min-width: 24px; min-height: 1.3em; cursor: text; white-space: pre-wrap; user-select: text; -webkit-user-select: text; caret-color: currentColor; }
+.edit-in-place::selection { background: #b4d5fe; }
+.shape-node .shape-label:has(.edit-in-place) { overflow: visible; }
+/* Smaller connection points on shapes, like draw.io's. */
+.react-flow__node-shape .react-flow__handle.side-handle { width: 8px; height: 8px; border-width: 1.5px; opacity: 0; }
+.react-flow__node-shape:hover .react-flow__handle.side-handle,
+.react-flow__node-shape.selected .react-flow__handle.side-handle { opacity: 1; }
+
+/* ---------- styled group boxes (AWS / Azure / GCP / Kubernetes boundaries) ---------- */
+.gnode { border-radius: 4px; }
+.gnode.head-icon { border-radius: 10px; }
+.gnode .gnode-head { min-height: 32px; }
+.gnode.head-tab .gnode-head { padding: 0 10px 0 0; gap: 10px; align-items: center; }
+.gnode.head-tab { border-radius: 0; }
+.gnode-tab { width: 32px; height: 32px; flex: none; display: flex; align-items: center; justify-content: center; margin: -1px 0 0 -1px; }
+.gnode-tab .ricon-img, .gnode-tab .ricon { display: block; border-radius: 0; }
+.gnode-tab.mono .ricon-img { filter: brightness(0) invert(1); }
+.gnode-tab.mono .ricon { background: transparent !important; }
+.gnode-tab.plain { border: 1px solid; box-sizing: border-box; }
+.gnode.head-tab .gnode-label { font-weight: 500; font-size: 13px; }
+.gnode.head-label .gnode-head { padding: 6px 10px; }
+.gnode.head-center .gnode-head { justify-content: center; padding-top: 8px; }
+.gnode.head-center .gnode-label { font-weight: 500; font-size: 13px; }
+.gnode.selected { outline: none; }
+.gnode .react-flow__resize-control.line.sel-line { border-color: #1a73e8; border-style: dashed; border-width: 0; }
+.gnode .react-flow__resize-control.line.sel-line.top, .gnode .react-flow__resize-control.line.sel-line.bottom { border-top-width: 1px; }
+.gnode .react-flow__resize-control.line.sel-line.left, .gnode .react-flow__resize-control.line.sel-line.right { border-left-width: 1px; }
+.gnode .react-flow__resize-control.handle.sel-handle { width: 7px; height: 7px; border-radius: 1px; background: #1a73e8; border: 1px solid #fff; }
+.tile-box { width: 34px; height: 26px; border-width: 1.5px; border-radius: 2px; display: block; }
+.swatch.none { background: linear-gradient(to top right, #fff calc(50% - 1px), #dc2626 50%, #fff calc(50% + 1px)); }
+.ctx-seg .thick { display: inline-block; width: 22px; border-top: solid currentColor; vertical-align: middle; }
+/* React Flow's built-in look for type "group" nodes (border, padding, white background) doubles our boxes. */
+.react-flow__node-group { border: 0 !important; padding: 0 !important; background: transparent !important; border-radius: 0 !important; box-shadow: none !important; }
+.autosave { font-size: 12px; color: #71717a; white-space: nowrap; }
+.edge-label.movable { cursor: move; }
+.edge-label.dragging { opacity: .85; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+.edge-label-lead { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.edge-label-lead line { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 2 3; }
+.ctx-font { display: flex !important; gap: 4px; align-items: center; }
+.ctx-font select { font-size: 12px; padding: 2px 4px; }
+.ctx-font select:first-child { flex: 1; min-width: 0; }
+.ctx-font button { width: 26px; padding: 2px 0; font-size: 13px; }
+.ctx-font button.on { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
+/* Labels above the lines (whose z-index puts them above groups), so they can be grabbed and edited. */
+.react-flow__edgelabel-renderer { z-index: 40000 !important; }
+
+/* ---------- label placement and row layouts for shapes ---------- */
+.shape-node .shape-svg.shadow { filter: drop-shadow(2px 3px 2px rgba(0,0,0,.22)); }
+.shape-node .shape-label.at-below { position: absolute; top: 100%; max-width: none; white-space: nowrap; margin-top: 4px; }
+.shape-node .shape-label.at-head { position: absolute; top: 0; left: 0; right: 0; height: min(40px, 30%); display: flex; align-items: center; justify-content: center; max-width: none; }
+.shape-node .shape-label.at-tag { position: absolute; top: 3px; left: 8px; max-width: 40%; font-size: calc(var(--shape-font-size, 13px) - 1px); font-weight: 600; text-align: left; }
+.shape-node .shape-label.at-body { margin-top: 16px; }
+.shape-node .shape-label.at-right { margin-left: 22px; }
+.shape-node .shape-label.at-bubble { position: absolute; top: 0; left: 0; right: 0; height: 74%; display: flex; align-items: center; justify-content: center; max-width: none; padding: 0 8px; }
+.shape-node .shape-label.at-front { margin: 14px 14px 0 0; }
+.shape-node .shape-label.rows-editing { position: absolute; inset: 4px; max-width: none; max-height: none; text-align: left; }
+.shape-node .rows { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; font-size: var(--shape-font-size, 13px); line-height: 1.35; }
+.shape-node .rows-title { height: 26px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 700; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shape-node .rows-group { padding: 3px 0; }
+.shape-node .rows-group + .rows-group { border-top: 1px solid; }
+.shape-node .rows-line { padding: 1px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shape-node .rows.list .rows-group { padding: 0; }
+.shape-node .rows.list .rows-line { padding: 4px 8px; }
+.shape-node .rows.list .rows-line + .rows-line { border-top: 1px solid; }
+.shape-node .rows.heading { padding: 4px 6px; text-align: left; }
+.shape-node .rows-heading { font-size: 1.45em; font-weight: 700; margin-bottom: 4px; }
+.shape-node .rows-para { white-space: pre-wrap; word-break: break-word; }
+
+/* ---------- format toolbar above the canvas (draw.io style) ---------- */
+.cloud-canvas > .format-bar { position: absolute; top: 0; left: 0; right: 0; height: 38px; z-index: 20; display: flex; align-items: center; gap: 2px; padding: 0 8px; background: #fff; border-bottom: 1px solid #e4e4e7; overflow-x: auto; }
+.cloud-canvas > .react-flow { position: absolute !important; top: 38px; left: 0; right: 0; bottom: 0; height: auto !important; }
+.format-bar button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; padding: 0; border: 1px solid transparent; background: none; border-radius: 6px; color: #3f3f46; flex: none; }
+.format-bar button:hover:not(:disabled) { background: #f4f4f5; }
+.format-bar button.on { background: #eef2ff; border-color: #c7d2fe; color: #3730a3; }
+.format-bar button:disabled { color: #c4c4c8; }
+.format-bar .fb-sep { width: 1px; height: 20px; background: #e4e4e7; margin: 0 6px; flex: none; }
+.format-bar .fb-zoom { height: 28px; font-size: 12.5px; padding: 0 4px; width: 74px; flex: none; }
+.format-bar .fb-color { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 28px; border-radius: 6px; color: #3f3f46; cursor: pointer; flex: none; }
+.format-bar .fb-color:hover:not(.disabled) { background: #f4f4f5; }
+.format-bar .fb-color.disabled { color: #c4c4c8; cursor: default; }
+.format-bar .fb-color input { position: absolute; inset: 0; opacity: 0; cursor: inherit; }
+.format-bar .fb-swatch { width: 18px; height: 3px; border-radius: 1px; margin-top: 1px; border: 1px solid rgba(0,0,0,.15); }
+.format-bar .fb-insert { position: relative; }
+.format-bar .fb-menu { position: fixed; margin-top: 4px; background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 4px; display: flex; flex-direction: column; min-width: 180px; z-index: 50; }
+.format-bar .fb-menu button { width: auto; justify-content: flex-start; padding: 6px 10px; height: auto; font-size: 13px; }
+.tile-heading { width: 38px; height: 30px; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; justify-content: center; }
+.tile-heading b { font-size: 8px; line-height: 1; color: #27272a; }
+.tile-heading i { display: block; height: 2px; width: 100%; background: #a1a1aa; border-radius: 1px; }
+.tile-heading i:last-child { width: 70%; }
+
+/* ---------- canvas tabs (pages) along the bottom, draw.io style ---------- */
+.cloud-canvas > .react-flow { bottom: 34px !important; }
+.page-tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; z-index: 20; display: flex; align-items: stretch; gap: 1px; padding: 0 8px; background: #f4f4f5; border-top: 1px solid #e4e4e7; overflow-x: auto; overflow-y: visible; }
+.page-tab { display: flex; align-items: center; gap: 4px; padding: 0 12px; font-size: 12.5px; color: #52525b; cursor: pointer; border-right: 1px solid #e4e4e7; white-space: nowrap; user-select: none; max-width: 220px; }
+.page-tab span { overflow: hidden; text-overflow: ellipsis; }
+.page-tab:hover { background: #fafafa; color: #18181b; }
+.page-tab.on { background: #fff; color: #18181b; font-weight: 600; box-shadow: inset 0 2px 0 #4f46e5; }
+.page-tab .page-more { border: 0; background: none; padding: 0 2px; font-size: 12px; color: #71717a; line-height: 1; border-radius: 4px; }
+.page-tab .page-more:hover { background: #f4f4f5; }
+.page-rename { font: inherit; width: 130px; padding: 1px 4px; }
+.page-add { border: 0; background: none; font-size: 17px; color: #4f46e5; padding: 0 12px; border-radius: 0; }
+.page-add:hover { background: #fff; }
+.page-menu { position: fixed; transform: translateY(-100%); margin-top: -6px; background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 4px; display: flex; flex-direction: column; min-width: 150px; z-index: 60; }
+.page-menu button { border: 0; background: none; text-align: left; padding: 6px 10px; border-radius: 5px; font-size: 13px; }
+.page-menu button:hover:not(:disabled) { background: #f4f4f5; }
+.page-menu button.danger { color: #b91c1c; }
+.ctx-pages { display: flex !important; flex-wrap: wrap; gap: 4px; }
+.ctx-pages button { font-size: 12px; padding: 3px 8px; border-radius: 12px; }
+.static-pages { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 10; display: flex; gap: 2px; background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; padding: 3px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.static-pages button { border: 0; background: none; padding: 4px 10px; font-size: 12px; border-radius: 5px; color: #52525b; }
+.static-pages button.on { background: #eef2ff; color: #3730a3; font-weight: 600; }
+
+/* ---------- icon items, draw.io style: icon fills the box, name underneath ---------- */
+.react-flow__node-resource .rnode {
+  width: 100%; height: 100%; padding: 0; gap: 0; justify-content: center;
+  background: transparent; border: 0; border-radius: 0; box-shadow: none;
+}
+.react-flow__node-resource .rnode.selected, .react-flow__node.selected .rnode { outline: none; }
+.react-flow__node-resource .rnode .ricon-img, .react-flow__node-resource .rnode .ricon { border-radius: 10px; }
+.rnode-caption {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px;
+  width: max-content; max-width: 180px; text-align: center; line-height: 1.3;
+}
+.react-flow__node-resource .rnode-label { font-size: 12.5px; font-weight: 500; color: #202124; white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; text-overflow: clip; }
+.react-flow__node-resource .rnode-kind { font-size: 10.5px; color: #80868b; white-space: nowrap; }
+.react-flow__node-resource .rnode-badge { top: -6px; right: -6px; }
+.react-flow__node-resource .react-flow__resize-control.line.sel-line { border-color: #1a73e8; border-style: dashed; border-width: 0; }
+.react-flow__node-resource .react-flow__resize-control.line.sel-line.top, .react-flow__node-resource .react-flow__resize-control.line.sel-line.bottom { border-top-width: 1px; }
+.react-flow__node-resource .react-flow__resize-control.line.sel-line.left, .react-flow__node-resource .react-flow__resize-control.line.sel-line.right { border-left-width: 1px; }
+.react-flow__node-resource .react-flow__resize-control.handle.sel-handle { width: 7px; height: 7px; border-radius: 1px; background: #1a73e8; border: 1px solid #fff; }
+.react-flow__node-resource .react-flow__handle.side-handle { width: 8px; height: 8px; border-width: 1.5px; opacity: 0; }
+.react-flow__node-resource:hover .react-flow__handle.side-handle, .react-flow__node-resource.selected .react-flow__handle.side-handle { opacity: 1; }
+.react-flow__node-resource .rnode.added .ricon-img, .react-flow__node-resource .rnode.added .ricon { box-shadow: 0 0 0 3px rgba(30,142,62,.5); }
+.react-flow__node-resource .rnode.changed .ricon-img, .react-flow__node-resource .rnode.changed .ricon { box-shadow: 0 0 0 3px rgba(242,153,0,.55); }
+.react-flow__node-resource .rnode.added, .react-flow__node-resource .rnode.changed { box-shadow: none; }
+.react-flow__node.hl .rnode { box-shadow: none; }
+.react-flow__node.hl .rnode .ricon-img, .react-flow__node.hl .rnode .ricon { box-shadow: 0 0 0 3px rgba(79,70,229,.55), 0 6px 18px rgba(79,70,229,.25); }
+/* in-place editing everywhere: same font and spot as the text, no box */
+.edge-label .edit-in-place, .gnode-head .edit-in-place { min-width: 30px; }
+.rnode-caption .edit-in-place { min-width: 40px; display: inline-block; }
+
+/* ---------- rotate handle (draw.io style) ---------- */
+.rotate-handle { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 1px solid #1a73e8; color: #1a73e8; display: flex; align-items: center; justify-content: center; cursor: grab; z-index: 5; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.rotate-handle:active { cursor: grabbing; }
+.rotate-handle::after { content: ""; position: absolute; top: 100%; left: 50%; width: 1px; height: 10px; background: #1a73e8; }
+.rnode-icon { display: flex; transition: none; }
+.fb-lines { display: inline-flex; align-items: center; gap: 2px; }
+.format-bar .fb-lines button { width: 36px; }
+.format-bar .fb-sep.thin { margin: 0 3px; height: 16px; }

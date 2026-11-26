@@ -1,4 +1,4 @@
-import { catalogEntry, resolvedProps } from "./catalog.js";
+import { catalogEntry, resolvedProps, withNames } from "./catalog.js";
 import { type DiagramEdge, type DiagramModel, type DiagramNode, nearestAncestor, nodeById } from "./model.js";
 import { compileTerraform } from "./terraform.js";
 
@@ -52,7 +52,8 @@ const typeOf = (n: DiagramNode) => catalogEntry(n.kind)?.label ?? n.kind;
 
 // ------------------------------------------------------------------ integrations
 
-export function describeIntegrations(m: DiagramModel): Integration[] {
+export function describeIntegrations(model: DiagramModel): Integration[] {
+  const m = withNames(model);
   const resources = compileTerraform(m).resources;
   return m.edges.map((e) => describeEdge(m, e, resources)).filter((x): x is Integration => Boolean(x));
 }
@@ -310,7 +311,8 @@ function terraformFor(resources: string[], a: string, b: string): string[] {
  * nodes nothing calls) and follows connections in order. Pub/Sub topics are async
  * boundaries: publishing ends the request flow, and each topic starts its own workflow.
  */
-export function generateWorkflows(m: DiagramModel): Workflow[] {
+export function generateWorkflows(model: DiagramModel): Workflow[] {
+  const m = withNames(model);
   const integrations = new Map(describeIntegrations(m).map((i) => [i.edgeId, i]));
   const out = new Map<string, DiagramEdge[]>();
   for (const e of m.edges) out.set(e.from, [...(out.get(e.from) ?? []), e]);

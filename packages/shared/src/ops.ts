@@ -6,17 +6,54 @@ import {
   type DiagramNode,
   NODE_ID,
   nodeById,
+  ARROWHEADS,
+  type Arrowhead,
   type Protocol,
   PROTOCOLS,
+  type Routing,
+  type Side,
+  SIDES,
 } from "./model.js";
+import { pageOf, pagesOf } from "./pages.js";
 
 /** Every change to a model, by a person or the agent, is one of these operations. */
 export type Op =
-  | { op: "add_node"; id: string; kind: string; label: string; parentId?: string; props?: Record<string, unknown>; icon?: string }
-  | { op: "update_node"; id: string; label?: string; parentId?: string | null; props?: Record<string, unknown>; icon?: string | null }
+  | { op: "add_node"; id: string; kind: string; label: string; parentId?: string; props?: Record<string, unknown>; icon?: string; page?: string }
+  | { op: "update_node"; id: string; label?: string; parentId?: string | null; props?: Record<string, unknown>; icon?: string | null; page?: string }
   | { op: "remove_node"; id: string }
-  | { op: "connect"; from: string; to: string; label?: string; protocol?: Protocol }
+  | ({ op: "connect"; from: string; to: string; label?: string; protocol?: Protocol; routing?: Routing } & EdgeStyle)
+  | ({
+      op: "update_edge";
+      from: string;
+      to: string;
+      label?: string | null;
+      protocol?: Protocol | null;
+      routing?: Routing | null;
+    } & { [K in keyof EdgeStyle]?: EdgeStyle[K] | null })
   | { op: "disconnect"; from: string; to: string };
+
+/** Visual connection options (no effect on Terraform or workflows). */
+export interface EdgeStyle {
+  dash?: "solid" | "dashed" | "dotted";
+  arrowStart?: Arrowhead;
+  arrowEnd?: Arrowhead;
+  color?: string;
+  fromHandle?: Side;
+  toHandle?: Side;
+  labelDx?: number;
+  labelDy?: number;
+}
+const STYLE_KEYS = ["dash", "arrowStart", "arrowEnd", "color", "fromHandle", "toHandle", "labelDx", "labelDy"] as const;
+
+function checkStyle(o: Partial<Record<(typeof STYLE_KEYS)[number], unknown>>): string | undefined {
+  for (const k of ["arrowStart", "arrowEnd"] as const) if (o[k] != null && !ARROWHEADS.includes(o[k] as Arrowhead)) return `${k} must be one of ${ARROWHEADS.join(", ")}`;
+  for (const k of ["fromHandle", "toHandle"] as const) if (o[k] != null && !SIDES.includes(o[k] as Side)) return `${k} must be one of ${SIDES.join(", ")}`;
+  if (o.dash != null && !["solid", "dashed", "dotted"].includes(String(o.dash))) return "dash must be solid, dashed or dotted";
+  if (o.color != null && !/^#[0-9a-fA-F]{6}$/.test(String(o.color))) return "color must be #rrggbb";
+  for (const k of ["labelDx", "labelDy"] as const)
+    if (o[k] != null && (!Number.isInteger(o[k]) || Math.abs(o[k] as number) > 3000)) return `${k} must be a whole number of pixels (±3000)`;
+  return undefined;
+}
 
 export type OpResult = { ok: true; model: DiagramModel } | { ok: false; error: string };
 
@@ -36,6 +73,10 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       const node: DiagramNode = { id: op.id, kind: op.kind, label: op.label || entry.label, props: { ...op.props } };
       if (op.parentId) node.parentId = op.parentId;
       if (op.icon) node.icon = op.icon.slice(0, 240);
+      if (op.page && !op.parentId) {
+        if (!pagesOf(m).some((p) => p.id === op.page)) return fail(`no tab "${op.page}"`);
+        if (op.page !== pagesOf(m)[0].id || m.pages?.length) node.page = op.page;
+      }
       return ok({ ...m, nodes: [...m.nodes, node] });
     }
     case "update_node": {
@@ -59,6 +100,14 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       }
       const layout = { ...m.layout };
       if (op.parentId !== undefined) delete layout[node.id];
+      if (op.page !== undefined && op.page !== pageOf(m, node.id)) {
+        // Moving to another tab: it leaves its group, and lines to things left behind go.
+        if (!pagesOf(m).some((p) => p.id === op.page)) return fail(`no tab "${op.page}"`);
+        delete next.parentId;
+        next.page = op.page;
+        const moved = { ...m, layout, nodes: m.nodes.map((n) => (n.id === node.id ? next : n)) };
+        return ok({ ...moved, edges: moved.edges.filter((e) => pageOf(moved, e.from) === pageOf(moved, e.to)) });
+      }
       return ok({ ...m, layout, nodes: m.nodes.map((n) => (n.id === node.id ? next : n)) });
     }
     case "remove_node": {
@@ -77,6 +126,7 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       if (!nodeById(m, op.from)) return fail(`no node with id "${op.from}"`);
       if (!nodeById(m, op.to)) return fail(`no node with id "${op.to}"`);
       if (op.from === op.to) return fail("cannot connect a node to itself");
+      if (pageOf(m, op.from) !== pageOf(m, op.to)) return fail(`"${op.from}" and "${op.to}" are on different tabs`);
       if (catalogEntry(nodeById(m, op.from)!.kind)?.container || catalogEntry(nodeById(m, op.to)!.kind)?.container)
         return fail("connect resources, not groups (project, region, VPC, subnet)");
       if (op.protocol && !PROTOCOLS.includes(op.protocol)) return fail(`protocol must be one of ${PROTOCOLS.join(", ")}`);
@@ -85,7 +135,26 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       const edge: DiagramEdge = { id, from: op.from, to: op.to };
       if (op.label) edge.label = op.label;
       if (op.protocol) edge.protocol = op.protocol;
+      if (op.routing) edge.routing = op.routing;
+      const styleErr = checkStyle(op);
+      if (styleErr) return fail(styleErr);
+      for (const k of STYLE_KEYS) if (op[k] != null) (edge as Record<string, unknown>)[k] = op[k];
       return ok({ ...m, edges: [...m.edges, edge] });
+    }
+    case "update_edge": {
+      const id = edgeId(op.from, op.to);
+      const e = m.edges.find((x) => x.id === id);
+      if (!e) return fail(`"${op.from}" is not connected to "${op.to}"`);
+      if (op.protocol && !PROTOCOLS.includes(op.protocol)) return fail(`protocol must be one of ${PROTOCOLS.join(", ")}`);
+      const styleErr = checkStyle(op);
+      if (styleErr) return fail(styleErr);
+      const next: DiagramEdge = { ...e };
+      for (const k of ["label", "protocol", "routing", ...STYLE_KEYS] as const) {
+        const v = op[k];
+        if (v === null || v === "") delete next[k];
+        else if (v !== undefined) (next as Record<string, unknown>)[k] = k === "label" ? String(v).slice(0, 60) : v;
+      }
+      return ok({ ...m, edges: m.edges.map((x) => (x.id === id ? next : x)) });
     }
     case "disconnect": {
       const id = edgeId(op.from, op.to);

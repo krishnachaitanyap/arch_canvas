@@ -1,4 +1,4 @@
-import { CATALOG, catalogEntry } from "./catalog.js";
+import { CATALOG, catalogEntry, withNames } from "./catalog.js";
 import { toMermaid } from "./export.js";
 import { describeIntegrations, generateWorkflows, type Workflow } from "./flows.js";
 import { ancestorsOf, type DiagramModel, nodeById } from "./model.js";
@@ -10,7 +10,8 @@ import { validateModel } from "./validate.js";
  * how each integration works, review findings and what Terraform would deploy.
  * Renders in GitHub, GitLab, Notion, Confluence and most wikis.
  */
-export function toArchitectureDoc(m: DiagramModel, title: string, workflows: Workflow[] = generateWorkflows(m)): string {
+export function toArchitectureDoc(model: DiagramModel, title: string, workflows: Workflow[] = generateWorkflows(model)): string {
+  const m = withNames(model);
   const L: string[] = [];
   const name = (id: string) => nodeById(m, id)?.label ?? id;
   const resources = m.nodes.filter((n) => !catalogEntry(n.kind)?.container);

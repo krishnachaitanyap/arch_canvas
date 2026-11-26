@@ -4,6 +4,7 @@ import {
   type Confidence,
   type DiagramModel,
   type DrawioPage,
+  drawioPagesToModel,
   drawioToModel,
   generateWorkflows,
   type ImportItem,
@@ -24,17 +25,23 @@ export default function ImportDialog({
   pages,
   onImport,
   onClose,
+  merge = false,
 }: {
   fileName: string;
   pages: DrawioPage[];
   onImport: (title: string, model: DiagramModel) => void;
   onClose: () => void;
+  /** Adding to the open diagram rather than creating a new one. */
+  merge?: boolean;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const baseName = fileName.replace(/(\.drawio)?\.(drawio|xml|svg)$/i, "");
   const [title, setTitle] = useState(pages.length > 1 ? `${baseName} – ${pages[0].name}` : baseName);
   const [showAll, setShowAll] = useState(false);
+  // A multi-page file becomes one diagram with a canvas tab per page (unless adding into a diagram).
+  const [allPages, setAllPages] = useState(!merge && pages.length > 1);
+  const [pageOverrides, setPageOverrides] = useState<Record<number, Record<string, string | null>>>({});
   const page = pages[pageIndex];
 
   const result = useMemo(() => drawioToModel(page, overrides), [page, overrides]);
@@ -48,10 +55,10 @@ export default function ImportDialog({
   const set = (item: ImportItem, kind: string | null) => setOverrides((o) => ({ ...o, [item.cellId]: kind }));
 
   return (
-    <Modal title={`Import ${fileName}`} onClose={onClose} wide>
+    <Modal title={merge ? `Add ${fileName} to this diagram` : `Import ${fileName}`} onClose={onClose} wide>
       <div className="import">
         <div className="import-top">
-          <label>
+          <label hidden={merge}>
             Diagram name
             <input value={title} onChange={(e) => setTitle(e.target.value)} />
           </label>
@@ -62,9 +69,10 @@ export default function ImportDialog({
                 value={pageIndex}
                 onChange={(e) => {
                   const i = Number(e.target.value);
+                  setPageOverrides((o) => ({ ...o, [pageIndex]: overrides }));
                   setPageIndex(i);
-                  setOverrides({});
-                  setTitle(`${baseName} – ${pages[i].name}`);
+                  setOverrides(pageOverrides[i] ?? {});
+                  if (!allPages) setTitle(`${baseName} – ${pages[i].name}`);
                 }}
               >
                 {pages.map((p, i) => (
@@ -73,6 +81,19 @@ export default function ImportDialog({
                   </option>
                 ))}
               </select>
+            </label>
+          )}
+          {pages.length > 1 && !merge && (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={allPages}
+                onChange={(e) => {
+                  setAllPages(e.target.checked);
+                  setTitle(e.target.checked ? baseName : `${baseName} – ${page.name}`);
+                }}
+              />
+              Import all {pages.length} pages as canvas tabs
             </label>
           )}
         </div>
@@ -146,11 +167,15 @@ export default function ImportDialog({
         </div>
 
         <div className="row end">
-          <span className="hint">After import you get Terraform, workflows, the architecture doc and a presentation. Nothing is saved until you click Save.</span>
+          <span className="hint">
+            {merge
+              ? "The shapes are added to the right of what's already on the canvas. Nothing is saved until you click Save."
+              : "After import you get workflows, the architecture doc, a presentation, and Terraform for the Google Cloud parts. Nothing is saved until you click Save."}
+          </span>
           <div className="spacer" />
           <button onClick={onClose}>Cancel</button>
-          <button className="primary" disabled={!result.model.nodes.length || !title.trim()} onClick={() => onImport(title.trim(), result.model)}>
-            Import {resources} resources
+          <button className="primary" disabled={!result.model.nodes.length || !title.trim()} onClick={() => onImport(title.trim(), allPages ? drawioPagesToModel(pages, { ...pageOverrides, [pageIndex]: overrides }) : result.model)}>
+            {merge ? `Add ${result.model.nodes.length} shapes to this diagram` : allPages ? `Import ${pages.length} pages as tabs` : `Import ${resources} resources`}
           </button>
         </div>
       </div>

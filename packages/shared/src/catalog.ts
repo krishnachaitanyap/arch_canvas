@@ -3,7 +3,7 @@
  * properties form, the agent's knowledge of what it can draw, validation rules, and the
  * Terraform compiler (see terraform.ts for the per-kind mappings).
  */
-export type PropType = "string" | "number" | "boolean" | "enum";
+export type PropType = "string" | "number" | "boolean" | "enum" | "color";
 
 export interface PropSpec {
   key: string;
@@ -55,7 +55,172 @@ const C = {
   devops: "#12b5cb",
 };
 
-const ALL_GROUPS = ["gcp.project", "gcp.region", "gcp.vpc", "gcp.subnet"];
+/** How a group's box is drawn: border pattern, thickness, colours and its title. */
+export const BORDER_STYLES = ["solid", "dashed", "dotted", "none"] as const;
+export const BORDER_WIDTHS = ["1", "1.5", "2", "3", "4"] as const;
+/** tab: icon in a coloured corner tab (AWS style) · icon: icon and title · label: title only · center: centred title. */
+export const GROUP_HEADERS = ["tab", "icon", "label", "center"] as const;
+export type GroupStyle = { color: string; border: (typeof BORDER_STYLES)[number]; borderWidth: (typeof BORDER_WIDTHS)[number]; fill: string; header: (typeof GROUP_HEADERS)[number] };
+export const GROUP_STYLE_KEYS = ["color", "border", "borderWidth", "fill", "header"] as const;
+
+function groupStyleProps(d: Partial<GroupStyle> & { color: string }): PropSpec[] {
+  return [
+    { key: "color", label: "Colour", type: "color", default: d.color, description: "Border and title colour" },
+    { key: "border", label: "Border", type: "enum", default: d.border ?? "dashed", options: [...BORDER_STYLES] },
+    { key: "borderWidth", label: "Thickness", type: "enum", default: d.borderWidth ?? "1.5", options: [...BORDER_WIDTHS] },
+    { key: "fill", label: "Fill", type: "color", default: d.fill ?? "none", description: "Background colour, or none" },
+    { key: "header", label: "Title", type: "enum", default: d.header ?? "icon", options: [...GROUP_HEADERS] },
+  ];
+}
+
+/** Fonts for shape and text labels (the web app maps them to font stacks). */
+export const FONTS = ["Sans", "Helvetica", "Arial", "Verdana", "Georgia", "Times New Roman", "Courier New", "Comic Sans MS", "Handwritten"] as const;
+export const FONT_SIZES = ["10", "11", "12", "13", "14", "16", "18", "20", "24", "28", "32", "40", "48"] as const;
+
+/** Shapes for flowcharts and general diagrams (generic.shape's `shape` property). */
+export const SHAPES = [
+  "rectangle",
+  "rounded",
+  "terminator",
+  "ellipse",
+  "circle",
+  "diamond",
+  "parallelogram",
+  "hexagon",
+  "document",
+  "cylinder",
+  "predefined",
+  "manual-input",
+  "triangle",
+  "cloud",
+  "text",
+  // Arrows and lines (draw.io's "Arrows" palette)
+  "arrow-right",
+  "arrow-left",
+  "arrow-up",
+  "arrow-down",
+  "arrow-left-right",
+  "arrow-up-down",
+  "chevron",
+  "thin-arrow-right",
+  "thin-arrow-left",
+  "thin-arrow-up",
+  "thin-arrow-down",
+  "line",
+  "vline",
+  "square",
+  "heading",
+  "internal-storage",
+  "cube",
+  "trapezoid",
+  "tape",
+  "page",
+  "card",
+  "callout",
+  "callout-round",
+  "actor",
+  "delay",
+  "data-storage",
+  "container",
+  "list",
+  "curve-arrow",
+  "diag-arrow-block",
+  "diag-double-block",
+  "diag-line",
+  "diag-arrow",
+  "diag-double-arrow",
+  "entity",
+  "weak-entity",
+  "class",
+  "package",
+  "component",
+  "lifeline",
+  "activation",
+  "frame",
+  "initial",
+  "final",
+  "fork",
+] as const;
+/** The arrow and line shapes, listed in their own palette section. */
+export const ARROW_SHAPES: ShapeName[] = ["curve-arrow", "diag-arrow", "diag-double-arrow", "diag-line", "diag-arrow-block", "diag-double-block", "arrow-right", "arrow-left", "arrow-up", "arrow-down", "arrow-left-right", "arrow-up-down", "chevron", "thin-arrow-right", "thin-arrow-left", "thin-arrow-up", "thin-arrow-down", "line", "vline"];
+export type ShapeName = (typeof SHAPES)[number];
+
+/** Flowchart meaning of each shape, for the palette and tooltips. */
+export const SHAPE_LABELS: Record<ShapeName, { title: string; label: string; size: [number, number] }> = {
+  rectangle: { title: "Process", label: "Process", size: [160, 70] },
+  rounded: { title: "Rounded rectangle", label: "Step", size: [160, 70] },
+  terminator: { title: "Start / end", label: "Start", size: [150, 56] },
+  ellipse: { title: "Ellipse", label: "Event", size: [150, 80] },
+  circle: { title: "Connector", label: "A", size: [64, 64] },
+  diamond: { title: "Decision", label: "Decision?", size: [150, 100] },
+  parallelogram: { title: "Input / output", label: "Input", size: [170, 70] },
+  hexagon: { title: "Preparation", label: "Prepare", size: [160, 70] },
+  document: { title: "Document", label: "Report", size: [150, 80] },
+  cylinder: { title: "Database", label: "Data store", size: [120, 90] },
+  predefined: { title: "Predefined process", label: "Subroutine", size: [170, 70] },
+  "manual-input": { title: "Manual input", label: "Enter data", size: [160, 70] },
+  triangle: { title: "Triangle", label: "", size: [100, 90] },
+  cloud: { title: "Cloud", label: "Cloud", size: [170, 100] },
+  text: { title: "Text", label: "Text", size: [160, 40] },
+  "arrow-right": { title: "Arrow right", label: "", size: [140, 70] },
+  "arrow-left": { title: "Arrow left", label: "", size: [140, 70] },
+  "arrow-up": { title: "Arrow up", label: "", size: [70, 140] },
+  "arrow-down": { title: "Arrow down", label: "", size: [70, 140] },
+  "arrow-left-right": { title: "Two-way arrow", label: "", size: [160, 70] },
+  "arrow-up-down": { title: "Two-way arrow (vertical)", label: "", size: [70, 160] },
+  chevron: { title: "Chevron / step", label: "Step", size: [150, 70] },
+  "thin-arrow-right": { title: "Thin arrow right", label: "", size: [160, 24] },
+  "thin-arrow-left": { title: "Thin arrow left", label: "", size: [160, 24] },
+  "thin-arrow-up": { title: "Thin arrow up", label: "", size: [24, 160] },
+  "thin-arrow-down": { title: "Thin arrow down", label: "", size: [24, 160] },
+  line: { title: "Line", label: "", size: [160, 12] },
+  vline: { title: "Vertical line", label: "", size: [12, 160] },
+  "square": { title: "Square", label: "", size: [80, 80] },
+  "heading": { title: "Heading and text", label: "Heading\nWrite a paragraph of text here. It wraps to the box.", size: [200, 110] },
+  "internal-storage": { title: "Internal storage", label: "", size: [100, 100] },
+  "cube": { title: "Cube", label: "", size: [120, 90] },
+  "trapezoid": { title: "Trapezoid", label: "", size: [140, 70] },
+  "tape": { title: "Tape", label: "", size: [140, 80] },
+  "page": { title: "Page / note", label: "", size: [90, 110] },
+  "card": { title: "Card", label: "", size: [90, 110] },
+  "callout": { title: "Callout", label: "", size: [150, 90] },
+  "callout-round": { title: "Speech bubble", label: "", size: [150, 90] },
+  "actor": { title: "Actor", label: "Actor", size: [40, 70] },
+  "delay": { title: "Delay", label: "", size: [90, 80] },
+  "data-storage": { title: "Stored data", label: "", size: [120, 80] },
+  "container": { title: "Container", label: "Container", size: [200, 150] },
+  "list": { title: "List", label: "List\nItem 1\nItem 2\nItem 3", size: [150, 120] },
+  "curve-arrow": { title: "Curved arrow", label: "", size: [100, 90] },
+  "diag-arrow-block": { title: "Diagonal block arrow", label: "", size: [90, 90] },
+  "diag-double-block": { title: "Diagonal two-way block arrow", label: "", size: [90, 90] },
+  "diag-line": { title: "Diagonal line", label: "", size: [90, 90] },
+  "diag-arrow": { title: "Diagonal arrow", label: "", size: [90, 90] },
+  "diag-double-arrow": { title: "Diagonal two-way arrow", label: "", size: [90, 90] },
+  "entity": { title: "Entity (table)", label: "Customer\nid: uuid PK\nname: text\nemail: text", size: [170, 120] },
+  "weak-entity": { title: "Weak entity", label: "Order line", size: [150, 60] },
+  "class": { title: "Class", label: "Order\n+ id: string\n+ total: number\n--\n+ place(): void\n+ cancel(): void", size: [180, 140] },
+  "package": { title: "Package", label: "package", size: [160, 110] },
+  "component": { title: "Component", label: "Component", size: [160, 80] },
+  "lifeline": { title: "Lifeline", label: "Object", size: [100, 260] },
+  "activation": { title: "Activation bar", label: "", size: [14, 110] },
+  "frame": { title: "Frame (fragment)", label: "alt", size: [260, 170] },
+  "initial": { title: "Initial state", label: "", size: [30, 30] },
+  "final": { title: "Final state", label: "", size: [34, 34] },
+  "fork": { title: "Fork / join bar", label: "", size: [150, 10] },
+};
+
+/** Palette sections, as in draw.io (a shape may appear in several). */
+export const SHAPE_SECTIONS: Record<"general" | "flowchart" | "er" | "uml", ShapeName[]> = {
+  general: ["rectangle", "rounded", "text", "heading", "ellipse", "square", "circle", "predefined", "diamond", "parallelogram", "hexagon", "triangle", "cylinder", "cloud", "document", "internal-storage", "cube", "chevron", "trapezoid", "tape", "page", "card", "callout", "callout-round", "actor", "delay", "data-storage", "container", "list"],
+  flowchart: ["rectangle", "rounded", "terminator", "diamond", "parallelogram", "predefined", "document", "cylinder", "manual-input", "hexagon", "circle", "delay", "data-storage", "internal-storage", "card", "triangle", "ellipse"],
+  er: ["entity", "weak-entity"],
+  uml: ["class", "package", "component", "actor", "lifeline", "activation", "frame", "page", "initial", "final", "fork"],
+};
+/** Shapes whose text is laid out in rows (a title, then lines or compartments). */
+export const ROW_SHAPES = new Set<string>(["class", "entity", "list", "container", "heading"]);
+export const LINE_STYLES = ["solid", "dashed", "dotted"] as const;
+
+const ALL_GROUPS = ["gcp.project", "gcp.region", "gcp.vpc", "gcp.subnet", "generic.group"];
 
 export const CATALOG: CatalogEntry[] = [
   {
@@ -75,7 +240,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: [],
     icon: { abbr: "PRJ", color: C.group },
-    props: [],
+    props: groupStyleProps({ color: C.group }),
   },
   {
     kind: "gcp.region",
@@ -85,7 +250,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: ["gcp.project"],
     icon: { abbr: "RGN", color: C.group },
-    props: [{ key: "region", label: "Region", type: "enum", default: "us-central1", options: REGIONS }],
+    props: [{ key: "region", label: "Region", type: "enum", default: "us-central1", options: REGIONS }, ...groupStyleProps({ color: C.group })],
   },
   {
     kind: "gcp.vpc",
@@ -95,7 +260,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: IN_PROJECT,
     icon: { abbr: "VPC", color: C.network },
-    props: [],
+    props: groupStyleProps({ color: C.network }),
   },
   {
     kind: "gcp.subnet",
@@ -105,7 +270,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: ["gcp.vpc"],
     icon: { abbr: "SUB", color: C.network },
-    props: [{ key: "cidr", label: "CIDR range", type: "string", default: "10.10.0.0/24" }],
+    props: [{ key: "cidr", label: "CIDR range", type: "string", default: "10.10.0.0/24" }, ...groupStyleProps({ color: C.network })],
   },
   {
     kind: "gcp.cloud_run",
@@ -224,6 +389,47 @@ export const CATALOG: CatalogEntry[] = [
     props: [],
   },
   {
+    kind: "generic.group",
+    label: "Group",
+    category: "Other",
+    description:
+      "A documentation-only boundary: a team, an environment, an AWS VPC or account, an on-prem data center. Can hold anything; not deployed by Terraform.",
+    container: true,
+    parents: ALL_GROUPS,
+    icon: { abbr: "GRP", color: "#71717a" },
+    props: groupStyleProps({ color: "#71717a" }),
+  },
+  {
+    kind: "generic.shape",
+    label: "Shape",
+    category: "Other",
+    description: "A flowchart or basic shape (process, decision, start/end, input/output, document, database…). Documentation only.",
+    parents: ALL_GROUPS,
+    icon: { abbr: "SHP", color: "#475569" },
+    props: [
+      { key: "shape", label: "Shape", type: "enum", default: "rectangle", options: [...SHAPES] },
+      { key: "fill", label: "Fill", type: "color", default: "#ffffff" },
+      { key: "stroke", label: "Border", type: "color", default: "#000000" },
+      { key: "textColor", label: "Text", type: "color", default: "#18181b" },
+      { key: "font", label: "Font", type: "enum", default: "Sans", options: [...FONTS] },
+      { key: "fontSize", label: "Font size", type: "enum", default: "13", options: [...FONT_SIZES] },
+      { key: "bold", label: "Bold", type: "boolean", default: false },
+      { key: "italic", label: "Italic", type: "boolean", default: false },
+      { key: "lineStyle", label: "Line", type: "enum", default: "solid", options: ["solid", "dashed", "dotted"] },
+      { key: "strokeWidth", label: "Line thickness", type: "enum", default: "1.5", options: ["1", "1.5", "2", "3", "4", "6"] },
+      { key: "shadow", label: "Shadow", type: "boolean", default: false },
+    ],
+  },
+  {
+    kind: "generic.note",
+    label: "Note",
+    category: "Other",
+    description: "A text note on the canvas. Not part of workflows or Terraform.",
+    parents: ALL_GROUPS,
+    icon: { abbr: "TXT", color: "#ca8a04" },
+    props: [],
+  },
+  {
     kind: "generic.component",
     label: "Component",
     category: "Other",
@@ -236,12 +442,22 @@ export const CATALOG: CatalogEntry[] = [
 ];
 
 /** Kinds that exist only on the diagram and are never deployed. */
-export const DOC_ONLY_KINDS = new Set(["generic.client", "generic.component"]);
+export const DOC_ONLY_KINDS = new Set(["generic.client", "generic.component", "generic.group", "generic.note", "generic.shape"]);
+
+// Documentation-only groups may wrap anything (an "Org" boundary around projects, a team
+// around services), so every kind accepts one as a parent.
+for (const e of CATALOG) if (!e.parents.includes("generic.group")) e.parents.push("generic.group");
 
 const BY_KIND = new Map(CATALOG.map((e) => [e.kind, e]));
 
 export function catalogEntry(kind: string): CatalogEntry | undefined {
   return BY_KIND.get(kind);
+}
+
+/** The model with empty names filled in from the item's type, for text that reads people (workflows, docs). */
+export function withNames<M extends { nodes: { kind: string; label: string }[] }>(m: M): M {
+  if (m.nodes.every((n) => n.label.trim())) return m;
+  return { ...m, nodes: m.nodes.map((n) => (n.label.trim() ? n : { ...n, label: catalogEntry(n.kind)?.label ?? n.kind })) };
 }
 
 /** Props with catalog defaults applied. Unknown keys are dropped. */
@@ -266,6 +482,9 @@ export function coerce(spec: PropSpec, v: unknown): string | number | boolean | 
       return typeof v === "boolean" ? v : v === "true" ? true : v === "false" ? false : undefined;
     case "enum":
       return spec.options?.includes(String(v)) ? String(v) : undefined;
+    case "color":
+      // "none" = transparent (no fill / no border).
+      return /^#[0-9a-fA-F]{6}$/.test(String(v)) || String(v).toLowerCase() === "none" ? String(v).toLowerCase() : undefined;
     default:
       return String(v);
   }

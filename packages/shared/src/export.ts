@@ -1,5 +1,26 @@
-import { catalogEntry } from "./catalog.js";
+import { catalogEntry, resolvedProps } from "./catalog.js";
+import { DRAWIO_AWS_GROUP, TAB_ICONS } from "./groups.js";
 import { childrenOf, type DiagramModel, type DiagramNode } from "./model.js";
+import { pageModel, pagesOf } from "./pages.js";
+
+/** draw.io style for a group box: its border, fill and title, and AWS's group shape for AWS icons. */
+function groupStyle(n: DiagramNode): string {
+  const p = resolvedProps(n.kind, n.props);
+  const color = String(p.color);
+  const border = String(p.border);
+  const line =
+    border === "none"
+      ? "strokeColor=none;"
+      : `strokeColor=${color};strokeWidth=${p.borderWidth};${border === "dashed" ? "dashed=1;" : border === "dotted" ? "dashed=1;dashPattern=1 3;" : "dashed=0;"}`;
+  const fill = `fillColor=${p.fill === "none" ? "none" : p.fill};`;
+  const base = `html=1;whiteSpace=wrap;container=1;collapsible=0;recursiveResize=0;verticalAlign=top;fontColor=${color};${line}${fill}`;
+  if (p.header === "tab" && n.icon && TAB_ICONS.has(n.icon)) {
+    const name = n.icon.slice(4);
+    const gr = /subnet/i.test(name) ? "group_security_group" : Object.entries(DRAWIO_AWS_GROUP).find(([, v]) => v === name)?.[0];
+    if (gr) return `shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.${gr};points=[];outlineConnect=0;gradientColor=none;fontSize=12;fontStyle=0;align=left;spacingLeft=30;${base}`;
+  }
+  return p.header === "center" ? `rounded=0;align=center;spacingTop=4;${base}` : `rounded=0;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;${base}`;
+}
 
 /**
  * Exporters to other tools' formats. They read positions from model.layout (relative to the
@@ -47,7 +68,21 @@ const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\n/g, "&#xa;");
 
 /** draw.io / diagrams.net file (.drawio). Groups become containers, so moving one in draw.io moves its contents. */
+/** draw.io file: one draw.io page per canvas tab (a single page named after the title otherwise). */
 export function toDrawio(m: DiagramModel, title = "Architecture"): string {
+  const pages = pagesOf(m);
+  const diagrams =
+    m.pages && m.pages.length > 1
+      ? pages.map((p) => drawioDiagram(pageModel(m, p.id), p.name, `archcanvas-${p.id}`))
+      : [drawioDiagram(m, title, "archcanvas")];
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="ArchCanvas" type="device">
+${diagrams.join("\n")}
+</mxfile>
+`;
+}
+
+function drawioDiagram(m: DiagramModel, name: string, id: string): string {
   const boxes = resolveLayout(m);
   const cells: string[] = ['<mxCell id="0" />', '<mxCell id="1" parent="0" />'];
   const cellId = (id: string) => `n_${id}`;
@@ -67,10 +102,22 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
     const entry = catalogEntry(n.kind);
     const b = boxes.get(n.id)!;
     const color = entry?.icon.color ?? "#5f6368";
-    const style = entry?.container
-      ? `rounded=1;arcSize=4;whiteSpace=wrap;html=1;container=1;collapsible=0;dashed=1;fillColor=none;strokeColor=${color};verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=${color};`
-      : `rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=${color};strokeWidth=2;fontColor=#202124;`;
-    const value = entry?.container ? `${entry.label}: ${n.label}` : `<b>${esc(n.label)}</b><br><font color="${color}" style="font-size:10px">${esc(entry?.label ?? n.kind)}</font>`;
+    const shapeProps = n.kind === "generic.shape" ? resolvedProps(n.kind, n.props) : undefined;
+    const style = shapeProps
+      ? `${DRAWIO_SHAPE[String(shapeProps.shape)] ?? "rounded=0;"}whiteSpace=wrap;html=1;fillColor=${shapeProps.fill};strokeColor=${shapeProps.stroke};fontColor=${shapeProps.textColor};${shapeProps.font !== "Sans" ? `fontFamily=${shapeProps.font};` : ""}fontSize=${shapeProps.fontSize};fontStyle=${(shapeProps.bold ? 1 : 0) + (shapeProps.italic ? 2 : 0)};strokeWidth=${shapeProps.strokeWidth};${shapeProps.lineStyle === "dashed" ? "dashed=1;" : shapeProps.lineStyle === "dotted" ? "dashed=1;dashPattern=1 3;" : ""}${shapeProps.shadow ? "shadow=1;" : ""}`
+      : n.kind === "generic.note"
+        ? "shape=note;whiteSpace=wrap;html=1;fillColor=#fef9c3;strokeColor=#facc15;align=left;verticalAlign=top;spacing=8;"
+        : entry?.container
+          ? groupStyle(n)
+          : `rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=${color};strokeWidth=2;fontColor=#202124;`;
+    const value =
+      shapeProps || n.kind === "generic.note"
+        ? esc(n.label).replace(/&#xa;/g, "<br>")
+        : entry?.container
+          ? n.kind === "generic.group"
+            ? esc(n.label)
+            : `${entry.label}: ${n.label}`
+          : `<b>${esc(n.label)}</b><br><font color="${color}" style="font-size:10px">${esc(entry?.label ?? n.kind)}</font>`;
     // <object> carries ArchCanvas metadata as draw.io custom properties (Edit Data), so
     // re-importing is lossless and people can set types in draw.io itself.
     const props =
@@ -78,7 +125,7 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
       (n.icon ? ` archcanvas_icon="${esc(n.icon)}"` : "");
     cells.push(
       `<object id="${cellId(n.id)}" label="${esc(value)}" archcanvas_kind="${esc(n.kind)}" archcanvas_id="${esc(n.id)}"${props}>` +
-        `<mxCell style="${style}" vertex="1" parent="${n.parentId ? cellId(n.parentId) : "1"}">` +
+        `<mxCell style="${style}${m.layout[n.id]?.r ? `rotation=${m.layout[n.id].r};` : ""}" vertex="1" parent="${n.parentId ? cellId(n.parentId) : "1"}">` +
         `<mxGeometry x="${Math.round(b.x)}" y="${Math.round(b.y)}" width="${Math.round(b.w)}" height="${Math.round(b.h)}" as="geometry" />` +
         `</mxCell></object>`,
     );
@@ -87,22 +134,138 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
     const label = e.label ?? e.protocol ?? "";
     cells.push(
       `<object id="e_${esc(e.id)}" label="${esc(label)}"${e.protocol ? ` archcanvas_protocol="${e.protocol}"` : ""}>` +
-        `<mxCell style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#5f6368;" edge="1" parent="1" source="${cellId(e.from)}" target="${cellId(e.to)}">` +
+        `<mxCell style="${edgeStyle(e)}" edge="1" parent="1" source="${cellId(e.from)}" target="${cellId(e.to)}">` +
         `<mxGeometry relative="1" as="geometry" /></mxCell></object>`,
     );
   }
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="ArchCanvas" type="device">
-  <diagram id="archcanvas" name="${esc(title)}">
+  return `  <diagram id="${esc(id)}" name="${esc(name)}">
     <mxGraphModel grid="1" gridSize="10" guides="1" connect="1" arrows="1" page="0" math="0" shadow="0">
       <root>
         ${cells.join("\n        ")}
       </root>
     </mxGraphModel>
-  </diagram>
-</mxfile>
-`;
+  </diagram>`;
 }
+
+/** draw.io style for each ArchCanvas shape. */
+const DRAWIO_SHAPE: Record<string, string> = {
+  rectangle: "rounded=0;",
+  rounded: "rounded=1;",
+  terminator: "rounded=1;arcSize=50;",
+  ellipse: "ellipse;",
+  circle: "ellipse;aspect=fixed;",
+  diamond: "rhombus;",
+  parallelogram: "shape=parallelogram;perimeter=parallelogramPerimeter;fixedSize=1;",
+  hexagon: "shape=hexagon;perimeter=hexagonPerimeter2;fixedSize=1;",
+  document: "shape=document;boundedLbl=1;",
+  cylinder: "shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=12;",
+  predefined: "shape=process;backgroundOutline=1;",
+  "manual-input": "shape=manualInput;",
+  triangle: "triangle;direction=north;",
+  cloud: "ellipse;shape=cloud;",
+  text: "text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;",
+  "arrow-right": "shape=singleArrow;arrowWidth=0.45;arrowSize=0.35;",
+  "arrow-left": "shape=singleArrow;direction=west;arrowWidth=0.45;arrowSize=0.35;",
+  "arrow-up": "shape=singleArrow;direction=north;arrowWidth=0.45;arrowSize=0.35;",
+  "arrow-down": "shape=singleArrow;direction=south;arrowWidth=0.45;arrowSize=0.35;",
+  "arrow-left-right": "shape=doubleArrow;arrowWidth=0.45;arrowSize=0.3;",
+  "arrow-up-down": "shape=doubleArrow;direction=south;arrowWidth=0.45;arrowSize=0.3;",
+  chevron: "shape=step;perimeter=stepPerimeter;fixedSize=1;",
+  "thin-arrow-right": "shape=singleArrow;arrowWidth=0.08;arrowSize=0.12;",
+  "thin-arrow-left": "shape=singleArrow;direction=west;arrowWidth=0.08;arrowSize=0.12;",
+  "thin-arrow-up": "shape=singleArrow;direction=north;arrowWidth=0.08;arrowSize=0.12;",
+  "thin-arrow-down": "shape=singleArrow;direction=south;arrowWidth=0.08;arrowSize=0.12;",
+  line: "line;strokeWidth=2;",
+  vline: "line;strokeWidth=2;direction=south;",
+  "square": "rounded=0;aspect=fixed;",
+  "heading": "text;whiteSpace=wrap;align=left;verticalAlign=top;spacing=6;",
+  "internal-storage": "shape=internalStorage;backgroundOutline=1;",
+  "cube": "shape=cube;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;darkOpacity2=0.1;",
+  "trapezoid": "shape=trapezoid;perimeter=trapezoidPerimeter;fixedSize=1;",
+  "tape": "shape=tape;",
+  "page": "shape=note;size=16;",
+  "card": "shape=card;size=18;",
+  "callout": "shape=callout;size=20;position=0.2;position2=0.15;base=18;",
+  "callout-round": "shape=callout;rounded=1;size=20;position=0.2;position2=0.15;base=18;",
+  "actor": "shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;",
+  "delay": "shape=delay;",
+  "data-storage": "shape=dataStorage;fixedSize=1;",
+  "container": "swimlane;startSize=26;",
+  "list": "swimlane;fontStyle=0;childLayout=stackLayout;startSize=26;",
+  "curve-arrow": "curved=1;shape=mxgraph.arrows2.arrow;",
+  "diag-arrow-block": "shape=singleArrow;rotation=-45;arrowWidth=0.45;arrowSize=0.35;",
+  "diag-double-block": "shape=doubleArrow;rotation=-45;arrowWidth=0.45;arrowSize=0.3;",
+  "diag-line": "line;rotation=-45;",
+  "diag-arrow": "shape=singleArrow;rotation=-45;arrowWidth=0.08;arrowSize=0.12;",
+  "diag-double-arrow": "shape=doubleArrow;rotation=-45;arrowWidth=0.08;arrowSize=0.12;",
+  "entity": "swimlane;fontStyle=1;childLayout=stackLayout;startSize=26;",
+  "weak-entity": "shape=ext;margin=3;double=1;",
+  "class": "swimlane;fontStyle=1;align=center;startSize=26;",
+  "package": "shape=folder;tabWidth=55;tabHeight=16;tabPosition=left;",
+  "component": "shape=component;align=left;spacingLeft=36;",
+  "lifeline": "shape=umlLifeline;perimeter=lifelinePerimeter;size=40;",
+  "activation": "rounded=0;",
+  "frame": "shape=umlFrame;width=60;height=22;",
+  "initial": "ellipse;fillColor=#000000;",
+  "final": "ellipse;shape=endState;fillColor=#000000;",
+  "fork": "line;strokeWidth=6;",
+};
+
+const DRAWIO_ARROW: Record<string, string> = {
+  none: "none;",
+  arrow: "block;endFill=1;",
+  open: "open;endFill=0;",
+  triangle: "block;endFill=0;",
+  diamond: "diamond;endFill=1;",
+  odiamond: "diamond;endFill=0;",
+  circle: "oval;endFill=1;",
+  "er-one": "ERmandOne;endFill=0;",
+  "er-many": "ERmany;endFill=0;",
+  "er-one-many": "ERoneToMany;endFill=0;",
+  "er-zero-many": "ERzeroToMany;endFill=0;",
+  "er-zero-one": "ERzeroToOne;endFill=0;",
+};
+
+function edgeStyle(e: DiagramModel["edges"][number]): string {
+  const route = e.routing === "straight" ? "" : e.routing === "curved" ? "curved=1;" : "edgeStyle=orthogonalEdgeStyle;rounded=1;";
+  const end = DRAWIO_ARROW[e.arrowEnd ?? "arrow"];
+  // draw.io uses startFill for the start marker.
+  const start = DRAWIO_ARROW[e.arrowStart ?? "none"].replace("endFill", "startFill");
+  const dash = e.dash === "dashed" ? "dashed=1;" : e.dash === "dotted" ? "dashed=1;dashPattern=1 3;" : "";
+  return `${route}html=1;endArrow=${end}startArrow=${start}${dash}strokeColor=${e.color ?? "#5f6368"};`;
+}
+
+/** Mermaid flowchart node syntax per shape. */
+const MERMAID_SHAPE: Record<string, [string, string]> = {
+  rectangle: ['["', '"]'],
+  rounded: ['("', '")'],
+  terminator: ['(["', '"])'],
+  ellipse: ['(("', '"))'],
+  circle: ['(("', '"))'],
+  diamond: ['{"', '"}'],
+  parallelogram: ['[/"', '"/]'],
+  hexagon: ['{{"', '"}}'],
+  document: ['["', '"]'],
+  cylinder: ['[("', '")]'],
+  predefined: ['[["', '"]]'],
+  "manual-input": ['[/"', '"\\]'],
+  triangle: ['["', '"]'],
+  cloud: ['("', '")'],
+  text: ['["', '"]'],
+  "arrow-right": ['>"', '"]'],
+  "arrow-left": ['>"', '"]'],
+  "arrow-up": ['>"', '"]'],
+  "arrow-down": ['>"', '"]'],
+  "arrow-left-right": ['>"', '"]'],
+  "arrow-up-down": ['>"', '"]'],
+  chevron: ['>"', '"]'],
+  "thin-arrow-right": ['>"', '"]'],
+  "thin-arrow-left": ['>"', '"]'],
+  "thin-arrow-up": ['>"', '"]'],
+  "thin-arrow-down": ['>"', '"]'],
+  line: ['["', '"]'],
+  vline: ['["', '"]'],
+};
 
 /** Mermaid flowchart: groups become subgraphs. Renders in GitHub, GitLab, Notion and Confluence. */
 export function toMermaid(m: DiagramModel): string {
@@ -116,6 +279,10 @@ export function toMermaid(m: DiagramModel): string {
         lines.push(`${ind}subgraph ${n.id}["${q(`${entry.label}: ${n.label}`)}"]`);
         emit(n.id, depth + 1);
         lines.push(`${ind}end`);
+      } else if (n.kind === "generic.shape" || n.kind === "generic.note") {
+        // Plain shapes read like a flowchart: the text only.
+        const shape = MERMAID_SHAPE[String(resolvedProps(n.kind, n.props).shape ?? "rectangle")] ?? MERMAID_SHAPE.rectangle;
+        lines.push(`${ind}${n.id}${shape[0]}${q(n.label).replace(/\n/g, "<br/>")}${shape[1]}`);
       } else {
         const shape = n.kind === "gcp.cloud_sql" || n.kind === "gcp.memorystore_redis" ? [`[("`, `")]`] : n.kind === "generic.client" ? [`(["`, `"])`] : [`["`, `"]`];
         lines.push(`${ind}${n.id}${shape[0]}${q(n.label)}<br/><small>${q(entry?.label ?? n.kind)}</small>${shape[1]}`);
@@ -125,7 +292,10 @@ export function toMermaid(m: DiagramModel): string {
   emit(undefined, 1);
   for (const e of m.edges) {
     const label = e.label ?? e.protocol;
-    lines.push(label ? `  ${e.from} -->|${q(label)}| ${e.to}` : `  ${e.from} --> ${e.to}`);
+    const noHead = (e.arrowEnd ?? "arrow") === "none";
+    const both = e.arrowStart && e.arrowStart !== "none";
+    const link = e.dash && e.dash !== "solid" ? (noHead ? "-.-" : both ? "<-.->" : "-.->") : noHead ? "---" : both ? "<-->" : "-->";
+    lines.push(label ? `  ${e.from} ${link}|${q(label)}| ${e.to}` : `  ${e.from} ${link} ${e.to}`);
   }
   return lines.join("\n") + "\n";
 }

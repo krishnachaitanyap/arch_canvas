@@ -193,3 +193,15 @@ That slice touches every layer with about 8 resources. After that, widening the 
 **Next**
 - Route connections along ELK paths so lines don't cross nodes (visible in the screenshots).
 - Draw.io export of component icons as images.
+
+## draw.io-style editing, unified palette, URL routing (2026-11-26)
+
+**Done**
+- Model: `generic.group` (a documentation boundary that can wrap anything), `generic.note`, connection `routing`, and an `update_edge` operation. draw.io import keeps unrecognised named boxes as groups.
+- Editing: drop from the palette at the cursor or into a group, drag shapes between groups (moving up past disallowed nesting), groups grow to fit, resizable groups and notes, inline rename (double-click or F2) for shapes and line labels, box select, multi-select align and distribute, copy, cut, paste and duplicate (including groups with their contents), reconnecting line ends, line styles, right-click menus, snap to grid, arrow-key nudging, ⌘S. Auto layout runs only for new diagrams or on request. `geometry.ts` is unit-tested.
+- One palette with segments (Google Cloud, basics, AWS groups, services and resources, Lucide, logos, uploaded packs), synonym search, and resizable side panels.
+- URL routing on the History API: workspace, project, new diagram, diagram, history and presentation URLs; a guard against leaving with unsaved changes (including back/forward); `?tab=` and `?wf=` parameters.
+
+**Next**
+- Route connections along ELK paths so lines don't cross nodes.
+- Collaboration (Yjs) and comments.

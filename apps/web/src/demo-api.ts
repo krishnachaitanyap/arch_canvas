@@ -330,6 +330,13 @@ export const demoApi = {
         })
         .map((d) => ({ ...summary(s, d), project_name: s.projects.find((p) => p.id === d.project_id)?.name }));
     }),
+  lookupDiagram: (short: string) =>
+    tx((s) => {
+      const hits = s.diagrams.filter((d) => d.id.startsWith(short.toLowerCase()) && roleIn(s, s.projects.find((p) => p.id === d.project_id)?.workspace_id ?? ""));
+      if (!hits.length) fail("diagram not found");
+      if (hits.length > 1) fail("that short id matches more than one diagram; use the full link");
+      return { id: hits[0].id };
+    }),
   getDiagram: (id: string) =>
     tx((s) => {
       const { diagram, project, role } = needDiagram(s, id, "viewer");
@@ -372,8 +379,9 @@ export const demoApi = {
       });
       const last = s.versions.filter((v) => v.diagram_id === id).sort((a, b) => b.version - a.version)[0];
       const changed = !last || !same(diagram, last);
-      const version = changed || d.message ? addVersion(s, diagram, d.message ?? null) : last.version;
-      return { ...full(s, diagram), version, versionCreated: changed || Boolean(d.message) };
+      const create = !last || ((changed || Boolean(d.message)) && !d.autosave);
+      const version = create ? addVersion(s, diagram, d.message ?? null) : last.version;
+      return { ...full(s, diagram), version, versionCreated: create };
     }),
   deleteDiagram: (id: string) =>
     tx((s) => {

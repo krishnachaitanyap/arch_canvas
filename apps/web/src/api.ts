@@ -67,7 +67,7 @@ export interface Version extends VersionSummary {
   model: DiagramModel | null;
 }
 
-export type DiagramWrite = Partial<Pick<Diagram, "title" | "kind" | "source" | "scene" | "model">> & { message?: string; projectId?: string };
+export type DiagramWrite = Partial<Pick<Diagram, "title" | "kind" | "source" | "scene" | "model">> & { message?: string; projectId?: string; autosave?: boolean };
 
 export interface AppConfig {
   /** Browser-only demo build (no server). */
@@ -172,6 +172,7 @@ const serverApi = {
       `/api/diagrams${projectId ? `?projectId=${projectId}` : ""}`,
     ),
   getDiagram: (id: string) => request<Diagram>(`/api/diagrams/${id}`),
+  lookupDiagram: (short: string) => request<{ id: string }>(`/api/diagrams/lookup/${encodeURIComponent(short)}`),
   createDiagram: (d: DiagramWrite & { projectId: string }) =>
     request<Diagram>("/api/diagrams", { method: "POST", body: JSON.stringify(d) }),
   updateDiagram: (id: string, d: DiagramWrite) => request<Diagram>(`/api/diagrams/${id}`, { method: "PUT", body: JSON.stringify(d) }),
