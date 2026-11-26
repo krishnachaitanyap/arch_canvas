@@ -230,7 +230,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
                         {it.key === "basic:text" ? (
                           <span className="tile-text">T</span>
                         ) : it.kind === "generic.shape" ? (
-                          <ShapeOutline shape={String(it.props?.shape)} w={36} h={it.props?.shape === "circle" ? 30 : 26} fill="#fff" stroke="#475569" sw={1.3} />
+                          <ShapeOutline shape={String(it.props?.shape)} w={36} h={it.props?.shape === "circle" ? 30 : 26} fill="#fff" stroke="#27272a" sw={1.3} />
                         ) : it.svg ? (
                           <img src={iconDataUrl(it.svg)} alt="" width={32} height={32} loading="lazy" draggable={false} />
                         ) : (

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
   type Edge,
@@ -141,7 +141,47 @@ function InlineText({ id, value, className, multiline, onCommit }: { id: string;
     },
     onFocus: (e: { target: HTMLInputElement | HTMLTextAreaElement }) => e.target.select(),
   };
-  return multiline ? <textarea {...props} rows={3} /> : <input {...props} />;
+  return multiline ? <EditInPlace className={className} value={value} onDone={(v, commit) => { ctx.setEditing(null); if (commit && v.trim() && v.trim() !== value) onCommit(v.trim()); }} /> : <input {...props} />;
+}
+
+/**
+ * Edits text where it is drawn, as draw.io does: same font and position, no box, all text
+ * selected to start. Enter adds a line; ⌘/Ctrl+Enter or clicking away saves; Esc cancels.
+ */
+function EditInPlace({ value, className, onDone }: { value: string; className?: string; onDone: (v: string, commit: boolean) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const finished = useRef(false);
+  useEffect(() => {
+    const el = ref.current!;
+    el.innerText = value;
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const finish = (commit: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
+    onDone(ref.current?.innerText.replace(/\n$/, "") ?? value, commit);
+  };
+  return (
+    <div
+      ref={ref}
+      className={`edit-in-place nodrag nopan nowheel ${className ?? ""}`}
+      contentEditable="plaintext-only"
+      suppressContentEditableWarning
+      spellCheck={false}
+      onBlur={() => finish(true)}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Escape") finish(false);
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) finish(true);
+      }}
+    />
+  );
 }
 
 function ResourceNode({ id, data, selected }: NodeProps<CloudNode>) {
@@ -297,8 +337,15 @@ function ShapeNode({ id, data, selected, width, height }: NodeProps<CloudNode>) 
       style={{ color: String(p.textColor) }}
       onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
     >
-      <NodeResizer isVisible={selected && ctx.editable} minWidth={40} minHeight={24} color="#4f46e5" onResizeEnd={(_, r) => ctx.resized(id, { x: r.x, y: r.y, w: r.width, h: r.height })} />
-      <ShapeOutline shape={shape} w={w} h={h} fill={String(p.fill)} stroke={selected ? "#4f46e5" : String(p.stroke)} />
+      <NodeResizer
+        isVisible={selected && ctx.editable}
+        minWidth={40}
+        minHeight={24}
+        lineClassName="sel-line"
+        handleClassName="sel-handle"
+        onResizeEnd={(_, r) => ctx.resized(id, { x: r.x, y: r.y, w: r.width, h: r.height })}
+      />
+      <ShapeOutline shape={shape} w={w} h={h} fill={String(p.fill)} stroke={String(p.stroke)} />
       <div className={`shape-label ${shape === "cylinder" ? "low" : ""}`}>
         <InlineText id={id} value={data.node.label} multiline onCommit={(v) => ctx.rename(id, v)} />
       </div>

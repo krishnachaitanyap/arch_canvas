@@ -283,7 +283,7 @@ export const CATALOG: CatalogEntry[] = [
     props: [
       { key: "shape", label: "Shape", type: "enum", default: "rectangle", options: [...SHAPES] },
       { key: "fill", label: "Fill", type: "color", default: "#ffffff" },
-      { key: "stroke", label: "Border", type: "color", default: "#475569" },
+      { key: "stroke", label: "Border", type: "color", default: "#000000" },
       { key: "textColor", label: "Text", type: "color", default: "#18181b" },
     ],
   },

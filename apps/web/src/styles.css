@@ -486,3 +486,18 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 /* Connection points: visible on hover, larger on shapes. */
 .react-flow__node:hover .react-flow__handle { opacity: 1; }
 .react-flow__handle.side-handle { width: 10px; height: 10px; border-width: 2px; }
+
+/* ---------- draw.io-style selection and in-place text editing ---------- */
+.shape-node .react-flow__resize-control.line.sel-line { border-color: #1a73e8; border-style: dashed; border-width: 0; }
+.shape-node .react-flow__resize-control.line.sel-line.top,
+.shape-node .react-flow__resize-control.line.sel-line.bottom { border-top-width: 1px; }
+.shape-node .react-flow__resize-control.line.sel-line.left,
+.shape-node .react-flow__resize-control.line.sel-line.right { border-left-width: 1px; }
+.shape-node .react-flow__resize-control.handle.sel-handle { width: 7px; height: 7px; border-radius: 1px; background: #1a73e8; border: 1px solid #fff; }
+.edit-in-place { outline: 1px dashed #71717a; outline-offset: 3px; min-width: 24px; min-height: 1.3em; cursor: text; white-space: pre-wrap; user-select: text; -webkit-user-select: text; caret-color: currentColor; }
+.edit-in-place::selection { background: #b4d5fe; }
+.shape-node .shape-label:has(.edit-in-place) { overflow: visible; }
+/* Smaller connection points on shapes, like draw.io's. */
+.react-flow__node-shape .react-flow__handle.side-handle { width: 8px; height: 8px; border-width: 1.5px; opacity: 0; }
+.react-flow__node-shape:hover .react-flow__handle.side-handle,
+.react-flow__node-shape.selected .react-flow__handle.side-handle { opacity: 1; }

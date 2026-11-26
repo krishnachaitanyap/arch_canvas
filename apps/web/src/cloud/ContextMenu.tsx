@@ -30,8 +30,8 @@ export interface MenuActions {
 }
 
 const FILLS = ["#ffffff", "#f4f4f5", "#dae8fc", "#d5e8d4", "#fff2cc", "#ffe6cc", "#f8cecc", "#e1d5e7"];
-const STROKES = ["#475569", "#18181b", "#6c8ebf", "#82b366", "#d6b656", "#d79b00", "#b85450", "#9673a6"];
-const TEXTS = ["#18181b", "#475569", "#1d4ed8", "#15803d", "#b45309", "#b91c1c", "#7c3aed", "#ffffff"];
+const STROKES = ["#000000", "#64748b", "#6c8ebf", "#82b366", "#d6b656", "#d79b00", "#b85450", "#9673a6"];
+const TEXTS = ["#000000", "#475569", "#1d4ed8", "#15803d", "#b45309", "#b91c1c", "#7c3aed", "#ffffff"];
 const LINES = ["#5f6368", "#18181b", "#1d4ed8", "#15803d", "#d97706", "#b91c1c", "#7c3aed", "#94a3b8"];
 const HEADS: [Arrowhead, string][] = [
   ["none", "—"],
@@ -132,7 +132,7 @@ export function ContextMenu({
                       disabled={readOnly}
                       onClick={() => actions.styleShapes(t.id, { shape: s })}
                     >
-                      <ShapeOutline shape={s} w={26} h={18} fill="#fff" stroke="#475569" sw={1.2} />
+                      <ShapeOutline shape={s} w={26} h={18} fill="#fff" stroke="#000" sw={1.2} />
                     </button>
                   ))}
                 </div>
