@@ -1,4 +1,4 @@
-import { BORDER_WIDTHS, CATALOG, catalogEntry, SHAPE_LABELS, type ShapeName } from "./catalog.js";
+import { BORDER_WIDTHS, CATALOG, catalogEntry, FONT_SIZES, FONTS, SHAPE_LABELS, type ShapeName } from "./catalog.js";
 import { DRAWIO_AWS_GROUP } from "./groups.js";
 import { type Arrowhead, type DiagramEdge, type DiagramModel, emptyModel, NODE_ID, type Protocol } from "./model.js";
 import { applyOp, type Op } from "./ops.js";
@@ -227,6 +227,14 @@ function styleMap(style: string): Record<string, string> {
 function shapeOf(c: DrawioCell, plainToo: boolean): ShapeName | undefined {
   const s = c.style.toLowerCase();
   const m = styleMap(c.style);
+  if (/shape=singlearrow/.test(s)) {
+    const thin = Number(m.arrowwidth ?? 0.3) < 0.2;
+    const dir = m.direction === "west" ? "left" : m.direction === "north" ? "up" : m.direction === "south" ? "down" : "right";
+    return `${thin ? "thin-" : ""}arrow-${dir}` as ShapeName;
+  }
+  if (/shape=doublearrow/.test(s)) return m.direction === "south" || m.direction === "north" ? "arrow-up-down" : "arrow-left-right";
+  if (/shape=step/.test(s)) return "chevron";
+  if (/(^|;)line(;|$)/.test(s)) return m.direction === "south" || m.direction === "north" ? "vline" : "line";
   if (/rhombus|flowchart\.decision/.test(s)) return "diamond";
   if (/flowchart\.terminator|flowchart\.start/.test(s) || (m.rounded === "1" && Number(m.arcsize) >= 40)) return "terminator";
   if (/parallelogram|flowchart\.data\b/.test(s)) return "parallelogram";
@@ -253,7 +261,23 @@ function shapeProps(c: DrawioCell, shape: ShapeName): Record<string, unknown> {
     ...(hex(m.fillcolor) ? { fill: hex(m.fillcolor) } : {}),
     ...(hex(m.strokecolor) ? { stroke: hex(m.strokecolor) } : {}),
     ...(hex(m.fontcolor) ? { textColor: hex(m.fontcolor) } : {}),
+    ...fontProps(m),
   };
+}
+
+/** Font, size, bold and italic from a draw.io style (sizes snap to the nearest offered size). */
+function fontProps(m: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const family = FONTS.find((f) => f.toLowerCase() === (m.fontfamily ?? "").toLowerCase());
+  if (family) out.font = family;
+  if (m.fontsize && Number(m.fontsize) > 0) {
+    const n = Number(m.fontsize);
+    out.fontSize = [...FONT_SIZES].reduce((best, x) => (Math.abs(Number(x) - n) < Math.abs(Number(best) - n) ? x : best));
+  }
+  const style = Number(m.fontstyle ?? 0);
+  if (style & 1) out.bold = true;
+  if (style & 2) out.italic = true;
+  return out;
 }
 
 const ARROWS: Record<string, Arrowhead> = { none: "none", block: "arrow", classic: "arrow", open: "open", diamond: "diamond", oval: "circle" };

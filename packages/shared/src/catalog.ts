@@ -73,6 +73,10 @@ function groupStyleProps(d: Partial<GroupStyle> & { color: string }): PropSpec[]
   ];
 }
 
+/** Fonts for shape and text labels (the web app maps them to font stacks). */
+export const FONTS = ["Sans", "Helvetica", "Arial", "Verdana", "Georgia", "Times New Roman", "Courier New", "Comic Sans MS", "Handwritten"] as const;
+export const FONT_SIZES = ["10", "11", "12", "13", "14", "16", "18", "20", "24", "28", "32", "40", "48"] as const;
+
 /** Shapes for flowcharts and general diagrams (generic.shape's `shape` property). */
 export const SHAPES = [
   "rectangle",
@@ -90,7 +94,23 @@ export const SHAPES = [
   "triangle",
   "cloud",
   "text",
+  // Arrows and lines (draw.io's "Arrows" palette)
+  "arrow-right",
+  "arrow-left",
+  "arrow-up",
+  "arrow-down",
+  "arrow-left-right",
+  "arrow-up-down",
+  "chevron",
+  "thin-arrow-right",
+  "thin-arrow-left",
+  "thin-arrow-up",
+  "thin-arrow-down",
+  "line",
+  "vline",
 ] as const;
+/** The arrow and line shapes, listed in their own palette section. */
+export const ARROW_SHAPES: ShapeName[] = ["arrow-right", "arrow-left", "arrow-up", "arrow-down", "arrow-left-right", "arrow-up-down", "chevron", "thin-arrow-right", "thin-arrow-left", "thin-arrow-up", "thin-arrow-down", "line", "vline"];
 export type ShapeName = (typeof SHAPES)[number];
 
 /** Flowchart meaning of each shape, for the palette and tooltips. */
@@ -110,6 +130,19 @@ export const SHAPE_LABELS: Record<ShapeName, { title: string; label: string; siz
   triangle: { title: "Triangle", label: "", size: [100, 90] },
   cloud: { title: "Cloud", label: "Cloud", size: [170, 100] },
   text: { title: "Text", label: "Text", size: [160, 40] },
+  "arrow-right": { title: "Arrow right", label: "", size: [140, 70] },
+  "arrow-left": { title: "Arrow left", label: "", size: [140, 70] },
+  "arrow-up": { title: "Arrow up", label: "", size: [70, 140] },
+  "arrow-down": { title: "Arrow down", label: "", size: [70, 140] },
+  "arrow-left-right": { title: "Two-way arrow", label: "", size: [160, 70] },
+  "arrow-up-down": { title: "Two-way arrow (vertical)", label: "", size: [70, 160] },
+  chevron: { title: "Chevron / step", label: "Step", size: [150, 70] },
+  "thin-arrow-right": { title: "Thin arrow right", label: "", size: [160, 24] },
+  "thin-arrow-left": { title: "Thin arrow left", label: "", size: [160, 24] },
+  "thin-arrow-up": { title: "Thin arrow up", label: "", size: [24, 160] },
+  "thin-arrow-down": { title: "Thin arrow down", label: "", size: [24, 160] },
+  line: { title: "Line", label: "", size: [160, 12] },
+  vline: { title: "Vertical line", label: "", size: [12, 160] },
 };
 
 const ALL_GROUPS = ["gcp.project", "gcp.region", "gcp.vpc", "gcp.subnet", "generic.group"];
@@ -303,6 +336,10 @@ export const CATALOG: CatalogEntry[] = [
       { key: "fill", label: "Fill", type: "color", default: "#ffffff" },
       { key: "stroke", label: "Border", type: "color", default: "#000000" },
       { key: "textColor", label: "Text", type: "color", default: "#18181b" },
+      { key: "font", label: "Font", type: "enum", default: "Sans", options: [...FONTS] },
+      { key: "fontSize", label: "Font size", type: "enum", default: "13", options: [...FONT_SIZES] },
+      { key: "bold", label: "Bold", type: "boolean", default: false },
+      { key: "italic", label: "Italic", type: "boolean", default: false },
     ],
   },
   {

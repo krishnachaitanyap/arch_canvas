@@ -89,7 +89,7 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
     const color = entry?.icon.color ?? "#5f6368";
     const shapeProps = n.kind === "generic.shape" ? resolvedProps(n.kind, n.props) : undefined;
     const style = shapeProps
-      ? `${DRAWIO_SHAPE[String(shapeProps.shape)] ?? "rounded=0;"}whiteSpace=wrap;html=1;fillColor=${shapeProps.fill};strokeColor=${shapeProps.stroke};fontColor=${shapeProps.textColor};`
+      ? `${DRAWIO_SHAPE[String(shapeProps.shape)] ?? "rounded=0;"}whiteSpace=wrap;html=1;fillColor=${shapeProps.fill};strokeColor=${shapeProps.stroke};fontColor=${shapeProps.textColor};${shapeProps.font !== "Sans" ? `fontFamily=${shapeProps.font};` : ""}fontSize=${shapeProps.fontSize};fontStyle=${(shapeProps.bold ? 1 : 0) + (shapeProps.italic ? 2 : 0)};`
       : n.kind === "generic.note"
         ? "shape=note;whiteSpace=wrap;html=1;fillColor=#fef9c3;strokeColor=#facc15;align=left;verticalAlign=top;spacing=8;"
         : entry?.container
@@ -153,6 +153,19 @@ const DRAWIO_SHAPE: Record<string, string> = {
   triangle: "triangle;direction=north;",
   cloud: "ellipse;shape=cloud;",
   text: "text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;",
+  "arrow-right": "shape=singleArrow;arrowWidth=0.45;arrowSize=0.35;",
+  "arrow-left": "shape=singleArrow;direction=west;arrowWidth=0.45;arrowSize=0.35;",
+  "arrow-up": "shape=singleArrow;direction=north;arrowWidth=0.45;arrowSize=0.35;",
+  "arrow-down": "shape=singleArrow;direction=south;arrowWidth=0.45;arrowSize=0.35;",
+  "arrow-left-right": "shape=doubleArrow;arrowWidth=0.45;arrowSize=0.3;",
+  "arrow-up-down": "shape=doubleArrow;direction=south;arrowWidth=0.45;arrowSize=0.3;",
+  chevron: "shape=step;perimeter=stepPerimeter;fixedSize=1;",
+  "thin-arrow-right": "shape=singleArrow;arrowWidth=0.08;arrowSize=0.12;",
+  "thin-arrow-left": "shape=singleArrow;direction=west;arrowWidth=0.08;arrowSize=0.12;",
+  "thin-arrow-up": "shape=singleArrow;direction=north;arrowWidth=0.08;arrowSize=0.12;",
+  "thin-arrow-down": "shape=singleArrow;direction=south;arrowWidth=0.08;arrowSize=0.12;",
+  line: "line;strokeWidth=2;",
+  vline: "line;strokeWidth=2;direction=south;",
 };
 
 const DRAWIO_ARROW: Record<string, string> = {
@@ -191,6 +204,19 @@ const MERMAID_SHAPE: Record<string, [string, string]> = {
   triangle: ['["', '"]'],
   cloud: ['("', '")'],
   text: ['["', '"]'],
+  "arrow-right": ['>"', '"]'],
+  "arrow-left": ['>"', '"]'],
+  "arrow-up": ['>"', '"]'],
+  "arrow-down": ['>"', '"]'],
+  "arrow-left-right": ['>"', '"]'],
+  "arrow-up-down": ['>"', '"]'],
+  chevron: ['>"', '"]'],
+  "thin-arrow-right": ['>"', '"]'],
+  "thin-arrow-left": ['>"', '"]'],
+  "thin-arrow-up": ['>"', '"]'],
+  "thin-arrow-down": ['>"', '"]'],
+  line: ['["', '"]'],
+  vline: ['["', '"]'],
 };
 
 /** Mermaid flowchart: groups become subgraphs. Renders in GitHub, GitLab, Notion and Confluence. */

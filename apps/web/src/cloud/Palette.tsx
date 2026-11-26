@@ -1,7 +1,7 @@
 import { type DragEvent, useEffect, useMemo, useState } from "react";
-import { AWS_GROUPS, awsGroupStyle, CATALOG, type Category, type GroupPreset, iconDataUrl, OTHER_GROUPS, iconScore, type IconEntry, SHAPE_LABELS, type ShapeName, SHAPES } from "@archcanvas/shared";
+import { ARROW_SHAPES, AWS_GROUPS, awsGroupStyle, CATALOG, type Category, type GroupPreset, iconDataUrl, OTHER_GROUPS, iconScore, type IconEntry, SHAPE_LABELS, type ShapeName, SHAPES } from "@archcanvas/shared";
 import { allPacks, loadPack, useIconsVersion } from "../icons/registry";
-import { ResourceIcon, ShapeOutline } from "./flow";
+import { ResourceIcon, ShapeOutline, thumbSize } from "./flow";
 
 /** What a palette tile adds to the canvas. */
 export interface PaletteItem {
@@ -95,13 +95,15 @@ const multiCloudItems: PaletteItem[] = [
   c("External API / SaaS", "lucide:cloud", "external api saas third party vendor"),
 ];
 
-const shapeItems: PaletteItem[] = SHAPES.map((shape) => ({
+const shapeTile = (shape: ShapeName): PaletteItem => ({
   key: `shape:${shape}`,
   kind: "generic.shape",
   label: SHAPE_LABELS[shape].label,
   props: { shape },
-  hint: `${SHAPE_LABELS[shape].title} shape flowchart ${shape}`,
-}));
+  hint: `${SHAPE_LABELS[shape].title} shape ${ARROW_SHAPES.includes(shape) ? "arrow line direction" : "flowchart"} ${shape.replace(/-/g, " ")}`,
+});
+const shapeItems: PaletteItem[] = SHAPES.filter((s) => !ARROW_SHAPES.includes(s)).map(shapeTile);
+const arrowItems: PaletteItem[] = ARROW_SHAPES.map(shapeTile);
 
 const gcpItems: PaletteItem[] = CATALOG.filter((c) => c.kind.startsWith("gcp."))
   .sort((a, b) => GCP_ORDER.indexOf(a.category) - GCP_ORDER.indexOf(b.category))
@@ -147,6 +149,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
       { id: "gcp", title: "Google Cloud", note: "Deploys with Terraform", items: gcpItems, defaultOpen: true },
       { id: "basics", title: "Diagram basics", items: basicItems, defaultOpen: true },
       { id: "shapes", title: "Flowchart & shapes", note: "Connect them with lines; set arrowheads and dashes in Properties", items: shapeItems, defaultOpen: true },
+      { id: "arrows", title: "Arrows & lines", note: "Free-standing arrows to resize and colour; to link two things, drag between their connection points", items: arrowItems, defaultOpen: true },
       { id: "boundaries", title: "Boundaries · Azure, Kubernetes, on-prem", note: "Groups to nest things in; change border, thickness and colour by right-clicking", items: boundaryItems, defaultOpen: true },
       { id: "multicloud", title: "Multi-cloud & on-prem", note: "Documentation; mix freely with any cloud", items: multiCloudItems, defaultOpen: true },
     ];
@@ -244,7 +247,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
                         {it.key === "basic:text" ? (
                           <span className="tile-text">T</span>
                         ) : it.kind === "generic.shape" ? (
-                          <ShapeOutline shape={String(it.props?.shape)} w={36} h={it.props?.shape === "circle" ? 30 : 26} fill="#fff" stroke="#27272a" sw={1.3} />
+                          <ShapeOutline shape={String(it.props?.shape)} w={thumbSize(String(it.props?.shape), 38, 30)[0]} h={thumbSize(String(it.props?.shape), 38, 30)[1]} fill="#fff" stroke="#27272a" sw={1.3} />
                         ) : it.kind === "generic.group" && !it.icon && it.props ? (
                           <span
                             className="tile-box"

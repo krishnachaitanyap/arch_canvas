@@ -39,14 +39,18 @@ export interface EdgeStyle {
   color?: string;
   fromHandle?: Side;
   toHandle?: Side;
+  labelDx?: number;
+  labelDy?: number;
 }
-const STYLE_KEYS = ["dash", "arrowStart", "arrowEnd", "color", "fromHandle", "toHandle"] as const;
+const STYLE_KEYS = ["dash", "arrowStart", "arrowEnd", "color", "fromHandle", "toHandle", "labelDx", "labelDy"] as const;
 
 function checkStyle(o: Partial<Record<(typeof STYLE_KEYS)[number], unknown>>): string | undefined {
   for (const k of ["arrowStart", "arrowEnd"] as const) if (o[k] != null && !ARROWHEADS.includes(o[k] as Arrowhead)) return `${k} must be one of ${ARROWHEADS.join(", ")}`;
   for (const k of ["fromHandle", "toHandle"] as const) if (o[k] != null && !SIDES.includes(o[k] as Side)) return `${k} must be one of ${SIDES.join(", ")}`;
   if (o.dash != null && !["solid", "dashed", "dotted"].includes(String(o.dash))) return "dash must be solid, dashed or dotted";
   if (o.color != null && !/^#[0-9a-fA-F]{6}$/.test(String(o.color))) return "color must be #rrggbb";
+  for (const k of ["labelDx", "labelDy"] as const)
+    if (o[k] != null && (!Number.isInteger(o[k]) || Math.abs(o[k] as number) > 3000)) return `${k} must be a whole number of pixels (±3000)`;
   return undefined;
 }
 

@@ -132,6 +132,9 @@ function Editor({
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [proposalLayout, setProposalLayout] = useState<DiagramModel["layout"] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const lastTitle = useRef(title);
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
@@ -545,6 +548,12 @@ function Editor({
       const e = modelRef.current.edges.find((x) => x.id === edgeId);
       if (e) op({ op: "update_edge", from: e.from, to: e.to, label });
     },
+    moveEdgeLabel: (edgeId, dx, dy) => {
+      const e = modelRef.current.edges.find((x) => x.id === edgeId);
+      // Dropped back near the middle: snap onto the line again.
+      const home = Math.hypot(dx, dy) < 6;
+      if (e) op({ op: "update_edge", from: e.from, to: e.to, labelDx: home ? null : dx, labelDy: home ? null : dy });
+    },
     resized: (id, box) => {
       const m = modelRef.current;
       commit({ ...m, layout: growGroups({ ...m, layout: { ...m.layout, [id]: { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) } } }) });
@@ -584,22 +593,37 @@ function Editor({
 
   // ---------------------------------------------------------------- save / export
 
-  async function save() {
-    setSaving(true);
+  /** Save creates a version; autosave (a moment after each change) only stores the content. */
+  async function save(auto = false) {
+    const sent = modelRef.current;
+    if (auto) setAutoSaving(true);
+    else setSaving(true);
     try {
       if (!diagramId && !projectId) throw new Error("Pick a project first");
       const d = diagramId
-        ? await api.updateDiagram(diagramId, { title, kind: "cloud", model })
-        : await api.createDiagram({ projectId: projectId!, title, kind: "cloud", model });
-      setDirty(false);
-      setStatus({ kind: "ok", text: d.versionCreated === false ? "No changes since the last version" : `Saved as v${d.version}` });
-      onSaved(d);
+        ? await api.updateDiagram(diagramId, { title, kind: "cloud", model: sent, ...(auto ? { autosave: true } : {}) })
+        : await api.createDiagram({ projectId: projectId!, title, kind: "cloud", model: sent });
+      // Changes made while saving stay unsaved (the next autosave picks them up).
+      if (modelRef.current === sent) setDirty(false);
+      setSavedAt(new Date());
+      if (!auto) setStatus({ kind: "ok", text: d.versionCreated === false ? "No changes since the last version" : `Saved as v${d.version}` });
+      if (!auto || d.title !== lastTitle.current) onSaved(d);
+      lastTitle.current = d.title;
     } catch (e) {
-      setStatus({ kind: "error", text: (e as Error).message });
+      setStatus({ kind: "error", text: `${auto ? "Autosave failed: " : ""}${(e as Error).message}` });
     } finally {
-      setSaving(false);
+      if (auto) setAutoSaving(false);
+      else setSaving(false);
     }
   }
+
+  // Autosave saved diagrams 1.5 s after the last change (not while the assistant's proposal is pending).
+  useEffect(() => {
+    if ((!dirty && title === lastTitle.current) || !title.trim() || !diagramId || !canEdit || readOnly || saving || autoSaving || proposal) return;
+    const t = setTimeout(() => void save(true), 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, model, title, diagramId, canEdit, readOnly, saving, autoSaving, proposal]);
 
   // Save shortcut works even while typing in a field.
   useEffect(() => {
@@ -705,9 +729,21 @@ function Editor({
         <option value="json">ArchCanvas JSON</option>
       </select>
       {canEdit ? (
-        <button className="primary" onClick={() => void save()} disabled={saving || readOnly} title="Save (⌘S)">
-          {saving ? "Saving…" : dirty || !diagramId ? "Save" : "Saved"}
-        </button>
+        <>
+          {diagramId && !readOnly && (
+            <span className="autosave" title={savedAt ? `Last saved ${savedAt.toLocaleTimeString()}` : "Changes save automatically"}>
+              {autoSaving ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"}
+            </span>
+          )}
+          <button
+            className="primary"
+            onClick={() => void save()}
+            disabled={saving || readOnly}
+            title={diagramId ? "Save a version you can compare and restore (⌘S). Changes also save automatically." : "Save (⌘S)"}
+          >
+            {saving ? "Saving…" : diagramId ? "Save version" : "Save"}
+          </button>
+        </>
       ) : (
         <span className="kind-pill">View only</span>
       )}

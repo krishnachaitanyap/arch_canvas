@@ -450,7 +450,7 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 /* ---------- general shapes and connectors ---------- */
 .shape-node { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .shape-node .shape-svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.shape-node .shape-label { position: relative; max-width: 82%; max-height: 90%; overflow: hidden; text-align: center; font-size: 13px; line-height: 1.3; white-space: pre-wrap; word-break: break-word; }
+.shape-node .shape-label { position: relative; max-width: 82%; max-height: 90%; overflow: hidden; text-align: center; font-size: var(--shape-font-size, 13px); line-height: 1.3; white-space: pre-wrap; word-break: break-word; }
 .shape-node .shape-label.low { margin-top: 12%; }
 .shape-node .shape-label .inline-edit { text-align: center; min-width: 90px; }
 .shape-node.text-only .shape-label { max-width: 100%; }
@@ -461,7 +461,7 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 .prop-row > label { flex: 1; min-width: 0; }
 .prop-row select { width: 100%; }
 .color-label input[type="color"] { width: 100%; height: 30px; padding: 2px; }
-.tile svg.shape-svg { width: 36px; height: 30px; }
+.tile svg.shape-svg { width: auto; height: auto; max-height: 30px; }
 
 /* ---------- right-click style menu ---------- */
 .ctx-menu { min-width: 230px; max-width: 280px; max-height: calc(100% - 16px); overflow: auto; }
@@ -477,7 +477,8 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 .ctx-shapes { display: grid !important; grid-template-columns: repeat(5, 1fr); gap: 3px; }
 .shape-pick { padding: 3px; border: 1px solid transparent; border-radius: 5px; background: none; display: flex; justify-content: center; }
 .shape-pick:hover, .shape-pick.on { border-color: #a5b4fc; background: #eef2ff; }
-.shape-pick svg { width: 26px; height: 18px; }
+.shape-pick svg { width: auto; height: auto; }
+.shape-pick { align-items: center; min-height: 26px; }
 .ctx-seg { display: flex !important; gap: 2px; }
 .ctx-seg button { flex: 1; font-size: 11.5px; padding: 3px 4px; border-radius: 5px; white-space: nowrap; }
 .ctx-seg button.on { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
@@ -527,3 +528,15 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 .ctx-seg .thick { display: inline-block; width: 22px; border-top: solid currentColor; vertical-align: middle; }
 /* React Flow's built-in look for type "group" nodes (border, padding, white background) doubles our boxes. */
 .react-flow__node-group { border: 0 !important; padding: 0 !important; background: transparent !important; border-radius: 0 !important; box-shadow: none !important; }
+.autosave { font-size: 12px; color: #71717a; white-space: nowrap; }
+.edge-label.movable { cursor: move; }
+.edge-label.dragging { opacity: .85; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+.edge-label-lead { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.edge-label-lead line { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 2 3; }
+.ctx-font { display: flex !important; gap: 4px; align-items: center; }
+.ctx-font select { font-size: 12px; padding: 2px 4px; }
+.ctx-font select:first-child { flex: 1; min-width: 0; }
+.ctx-font button { width: 26px; padding: 2px 0; font-size: 13px; }
+.ctx-font button.on { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
+/* Labels above the lines (whose z-index puts them above groups), so they can be grabbed and edited. */
+.react-flow__edgelabel-renderer { z-index: 40000 !important; }

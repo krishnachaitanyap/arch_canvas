@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { type Arrowhead, BORDER_WIDTHS, catalogEntry, type DiagramModel, resolvedProps, SHAPE_LABELS, SHAPES } from "@archcanvas/shared";
-import { ShapeOutline } from "./flow";
+import { type Arrowhead, BORDER_WIDTHS, catalogEntry, type DiagramModel, FONT_SIZES, FONTS, resolvedProps, SHAPE_LABELS, SHAPES } from "@archcanvas/shared";
+import { FONT_STACKS, ShapeOutline, thumbSize } from "./flow";
 
 export interface MenuState {
   x: number;
@@ -21,7 +21,7 @@ export interface MenuActions {
   addNote: (at: { x: number; y: number }) => void;
   addGroup: (at: { x: number; y: number }) => void;
   /** Set style properties on the clicked item and any other selected items that have them. */
-  styleNodes: (id: string, props: Record<string, string>) => void;
+  styleNodes: (id: string, props: Record<string, string | boolean>) => void;
   arrange: (id: string, where: "front" | "back") => void;
   edge: (edgeId: string, patch: Record<string, string | null>) => void;
   reverse: (edgeId: string) => void;
@@ -143,6 +143,31 @@ export function ContextMenu({
               {swatches("Border", STROKES, String(shape.stroke), (c) => actions.styleNodes(t.id, { stroke: c }))}
               {swatches("Text", TEXTS, String(shape.textColor), (c) => actions.styleNodes(t.id, { textColor: c }))}
               <div className="ctx-swatches">
+                <span className="ctx-label">Font</span>
+                <div className="ctx-font">
+                  <select value={String(shape.font)} disabled={readOnly} onChange={(e) => actions.styleNodes(t.id, { font: e.target.value })} aria-label="Font">
+                    {FONTS.map((f) => (
+                      <option key={f} value={f} style={{ fontFamily: FONT_STACKS[f] }}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={String(shape.fontSize)} disabled={readOnly} onChange={(e) => actions.styleNodes(t.id, { fontSize: e.target.value })} aria-label="Font size">
+                    {FONT_SIZES.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                  <button className={shape.bold ? "on" : ""} disabled={readOnly} title="Bold" onClick={() => actions.styleNodes(t.id, { bold: !shape.bold })}>
+                    <b>B</b>
+                  </button>
+                  <button className={shape.italic ? "on" : ""} disabled={readOnly} title="Italic" onClick={() => actions.styleNodes(t.id, { italic: !shape.italic })}>
+                    <i>I</i>
+                  </button>
+                </div>
+              </div>
+              <div className="ctx-swatches">
                 <span className="ctx-label">Shape</span>
                 <div className="ctx-shapes">
                   {SHAPES.map((s) => (
@@ -153,7 +178,7 @@ export function ContextMenu({
                       disabled={readOnly}
                       onClick={() => actions.styleNodes(t.id, { shape: s })}
                     >
-                      <ShapeOutline shape={s} w={26} h={18} fill="#fff" stroke="#000" sw={1.2} />
+                      <ShapeOutline shape={s} w={thumbSize(s, 26, 20)[0]} h={thumbSize(s, 26, 20)[1]} fill="#fff" stroke="#000" sw={1.2} />
                     </button>
                   ))}
                 </div>
@@ -234,6 +259,7 @@ export function ContextMenu({
           </div>
           {swatches("Colour", LINES, edge.color ?? "#5f6368", (c) => actions.edge(t.id, { color: c }))}
           <hr />
+          {(edge.labelDx || edge.labelDy) ? item("Put label back on the line", () => actions.edge(t.id, { labelDx: null, labelDy: null }), { disabled: readOnly }) : null}
           {item("Reverse direction", () => actions.reverse(t.id), { disabled: readOnly })}
           {item("Delete connection", () => actions.remove(t), { disabled: readOnly, danger: true })}
         </>

@@ -12,6 +12,7 @@ import {
   type NodeProps,
   NodeResizer,
   Position,
+  useViewport,
 } from "@xyflow/react";
 import {
   Archive,
@@ -108,6 +109,8 @@ export interface EditorActions {
   setEditing: (id: string | null) => void;
   rename: (id: string, label: string) => void;
   renameEdge: (edgeId: string, label: string) => void;
+  /** Drop a line's label somewhere else (offset from the middle of the line). */
+  moveEdgeLabel: (edgeId: string, dx: number, dy: number) => void;
   resized: (id: string, box: { x: number; y: number; w: number; h: number }) => void;
 }
 export const EditorContext = createContext<EditorActions>({
@@ -116,6 +119,7 @@ export const EditorContext = createContext<EditorActions>({
   setEditing: () => undefined,
   rename: () => undefined,
   renameEdge: () => undefined,
+  moveEdgeLabel: () => undefined,
   resized: () => undefined,
 });
 
@@ -273,6 +277,69 @@ function NoteNode({ id, data, selected }: NodeProps<CloudNode>) {
   );
 }
 
+/** CSS font stacks for the catalog's FONTS. */
+export const FONT_STACKS: Record<string, string> = {
+  Sans: 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif',
+  Helvetica: "Helvetica, Arial, sans-serif",
+  Arial: "Arial, Helvetica, sans-serif",
+  Verdana: "Verdana, Geneva, sans-serif",
+  Georgia: "Georgia, serif",
+  "Times New Roman": '"Times New Roman", Times, serif',
+  "Courier New": '"Courier New", Courier, monospace',
+  "Comic Sans MS": '"Comic Sans MS", "Comic Neue", cursive',
+  Handwritten: '"Bradley Hand", "Segoe Print", "Comic Neue", cursive',
+};
+
+/** Thumbnail size for a shape in a box (keeps its proportions; circles stay round). */
+export function thumbSize(shape: string, maxW: number, maxH: number): [number, number] {
+  const [w, h] = SHAPE_LABELS[shape as ShapeName]?.size ?? [160, 70];
+  const k = Math.min(maxW / w, maxH / h);
+  return [Math.max(6, Math.round(w * k)), Math.max(6, Math.round(h * k))];
+}
+
+type SvgCommon = { fill: string; stroke: string; strokeWidth: number; vectorEffect: "non-scaling-stroke" };
+
+/**
+ * Arrow shapes, drawn pointing right along a length L and thickness T, then turned to face
+ * their direction: block arrows, two-way arrows, chevrons and thin arrows.
+ */
+function arrowShape(shape: string, w: number, h: number, p: number, common: SvgCommon): React.ReactNode {
+  const dir = shape.endsWith("left") && !shape.endsWith("left-right") ? "left" : shape.endsWith("up") ? "up" : shape.endsWith("down") && !shape.endsWith("up-down") ? "down" : shape.endsWith("up-down") ? "down" : "right";
+  const vertical = dir === "up" || dir === "down";
+  const L = vertical ? h : w;
+  const T = vertical ? w : h;
+  // (along, across) → (x, y) for the arrow's direction.
+  const at = (a: number, c: number) => (dir === "right" ? [a, c] : dir === "left" ? [w - a, c] : dir === "down" ? [c, a] : [c, h - a]).join(",");
+  const pts = (list: [number, number][]) => list.map(([a, c]) => at(a, c)).join(" ");
+  if (shape.startsWith("thin-")) {
+    const hl = Math.min(14, L * 0.3);
+    const hw = Math.min(T / 2 - p, 7);
+    return (
+      <>
+        <polyline points={pts([[p, T / 2], [L - hl, T / 2]])} {...common} fill="none" strokeWidth={common.strokeWidth + 0.4} />
+        <polygon points={pts([[L - hl, T / 2 - hw], [L - p, T / 2], [L - hl, T / 2 + hw]])} {...common} fill={common.stroke} />
+      </>
+    );
+  }
+  const head = Math.min(L * 0.38, T * 0.9);
+  const y1 = T * 0.27;
+  const y2 = T * 0.73;
+  if (shape === "chevron") {
+    const k = Math.min(L * 0.3, T * 0.5);
+    return <polygon points={pts([[p, p], [L - k, p], [L - p, T / 2], [L - k, T - p], [p, T - p], [p + k, T / 2]])} {...common} />;
+  }
+  if (shape.endsWith("left-right") || shape.endsWith("up-down")) {
+    const hd = Math.min(L * 0.3, T * 0.9);
+    return (
+      <polygon
+        points={pts([[p, T / 2], [hd, p], [hd, y1], [L - hd, y1], [L - hd, p], [L - p, T / 2], [L - hd, T - p], [L - hd, y2], [hd, y2], [hd, T - p]])}
+        {...common}
+      />
+    );
+  }
+  return <polygon points={pts([[p, y1], [L - head, y1], [L - head, p], [L - p, T / 2], [L - head, T - p], [L - head, y2], [p, y2]])} {...common} />;
+}
+
 /** SVG outline for a general shape at its real pixel size (so it stays crisp when resized). */
 export function ShapeOutline({ shape, w, h, fill, stroke, sw = 1.6 }: { shape: string; w: number; h: number; fill: string; stroke: string; sw?: number }) {
   const p = sw / 2 + 0.5;
@@ -344,7 +411,15 @@ export function ShapeOutline({ shape, w, h, fill, stroke, sw = 1.6 }: { shape: s
     case "text":
       el = null;
       break;
+    case "line":
+      el = <line x1={p} y1={h / 2} x2={W} y2={h / 2} {...common} strokeWidth={sw + 0.4} />;
+      break;
+    case "vline":
+      el = <line x1={w / 2} y1={p} x2={w / 2} y2={H} {...common} strokeWidth={sw + 0.4} />;
+      break;
     default:
+      if (shape.includes("arrow") || shape === "chevron") el = arrowShape(shape, w, h, p, common);
+      else
       el = <rect x={p} y={p} width={W - p} height={H - p} {...common} />;
   }
   return (
@@ -364,7 +439,13 @@ function ShapeNode({ id, data, selected, width, height }: NodeProps<CloudNode>) 
   return (
     <div
       className={`shape-node ${data.status ?? ""} ${selected ? "selected" : ""} ${shape === "text" ? "text-only" : ""}`}
-      style={{ color: String(p.textColor) }}
+      style={{
+        color: String(p.textColor),
+        fontFamily: FONT_STACKS[String(p.font)] ?? undefined,
+        ["--shape-font-size" as string]: `${p.fontSize}px`,
+        fontWeight: p.bold ? 700 : undefined,
+        fontStyle: p.italic ? "italic" : undefined,
+      }}
       onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
     >
       <NodeResizer
@@ -395,7 +476,19 @@ const SIDE_POS: Record<Side, Position> = { t: Position.Top, r: Position.Right, b
 export const nodeTypes = { resource: ResourceNode, group: GroupNode, note: NoteNode, shape: ShapeNode };
 
 /** Connection drawn orthogonal, straight or curved, with a label you can double-click to edit. */
-type EdgeData = { routing?: Routing; label?: string; editable?: boolean; color: string; width: number; dash?: string; arrowStart?: Arrowhead; arrowEnd?: Arrowhead; status?: string };
+type EdgeData = {
+  routing?: Routing;
+  label?: string;
+  editable?: boolean;
+  color: string;
+  width: number;
+  dash?: string;
+  arrowStart?: Arrowhead;
+  arrowEnd?: Arrowhead;
+  labelDx?: number;
+  labelDy?: number;
+  status?: string;
+};
 
 /** Arrowhead drawn in the line's colour; `auto-start-reverse` lets one marker serve both ends. */
 function Marker({ id, kind, color }: { id: string; kind: Arrowhead; color: string }) {
@@ -449,15 +542,61 @@ function SmartEdge(props: EdgeProps<Edge<EdgeData>>) {
       />
       {(text || editing) && (
         <EdgeLabelRenderer>
-          <div
-            className="edge-label nodrag nopan"
-            style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}
-            onDoubleClick={() => ctx.editable && ctx.setEditing(`edge:${id}`)}
-          >
+          <EdgeLabel id={id} x={lx} y={ly} dx={data?.labelDx ?? 0} dy={data?.labelDy ?? 0} editing={editing} moved={Boolean(data?.labelDx || data?.labelDy)}>
             <InlineText id={`edge:${id}`} value={data?.label ?? text} onCommit={(v) => ctx.renameEdge(id, v)} />
-          </div>
+          </EdgeLabel>
         </EdgeLabelRenderer>
       )}
+    </>
+  );
+}
+
+/**
+ * A line's label. Drag it anywhere (it stays attached to the line and follows it when shapes
+ * move, as in draw.io); double-click to edit. A dotted lead-in shows which line it belongs to.
+ */
+function EdgeLabel({ id, x, y, dx, dy, editing, moved, children }: { id: string; x: number; y: number; dx: number; dy: number; editing: boolean; moved: boolean; children: React.ReactNode }) {
+  const ctx = useContext(EditorContext);
+  const { zoom } = useViewport();
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const start = useRef<{ px: number; py: number; moved: boolean } | null>(null);
+  const ox = dx + (drag?.x ?? 0);
+  const oy = dy + (drag?.y ?? 0);
+  return (
+    <>
+      {(moved || drag) && (
+        <svg className="edge-label-lead" style={{ transform: `translate(${Math.min(x, x + ox)}px, ${Math.min(y, y + oy)}px)` }} width={Math.abs(ox) + 1} height={Math.abs(oy) + 1}>
+          <line x1={ox < 0 ? -ox : 0} y1={oy < 0 ? -oy : 0} x2={ox < 0 ? 0 : ox} y2={oy < 0 ? 0 : oy} />
+        </svg>
+      )}
+      <div
+        className={`edge-label nodrag nopan ${drag ? "dragging" : ""} ${ctx.editable && !editing ? "movable" : ""}`}
+        style={{ transform: `translate(-50%, -50%) translate(${x + ox}px, ${y + oy}px)` }}
+        onDoubleClick={() => ctx.editable && ctx.setEditing(`edge:${id}`)}
+        onPointerDown={(e) => {
+          if (!ctx.editable || editing || e.button !== 0) return;
+          e.stopPropagation();
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          start.current = { px: e.clientX, py: e.clientY, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const s = start.current;
+          if (!s) return;
+          const mx = (e.clientX - s.px) / zoom;
+          const my = (e.clientY - s.py) / zoom;
+          if (!s.moved && Math.hypot(mx, my) < 3) return;
+          s.moved = true;
+          setDrag({ x: mx, y: my });
+        }}
+        onPointerUp={() => {
+          const s = start.current;
+          start.current = null;
+          if (s?.moved && drag) ctx.moveEdgeLabel(id, Math.round(dx + drag.x), Math.round(dy + drag.y));
+          setDrag(null);
+        }}
+      >
+        {children}
+      </div>
     </>
   );
 }
@@ -551,6 +690,8 @@ export function toFlow(
         dash: e.dash,
         arrowStart: e.arrowStart,
         arrowEnd: e.arrowEnd,
+        labelDx: e.labelDx ?? 0,
+        labelDy: e.labelDy ?? 0,
         status,
       },
       reconnectable: Boolean(opts.editable),

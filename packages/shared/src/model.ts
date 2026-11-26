@@ -47,6 +47,9 @@ export const EdgeSchema = z.object({
   /** Which side of each shape the line attaches to (t/r/b/l); automatic when unset. */
   fromHandle: z.enum(SIDES).optional(),
   toHandle: z.enum(SIDES).optional(),
+  /** Where the label sits, relative to the middle of the line (dragged like in draw.io). */
+  labelDx: z.number().int().min(-3000).max(3000).optional(),
+  labelDy: z.number().int().min(-3000).max(3000).optional(),
 });
 
 export type Routing = "orthogonal" | "straight" | "curved";
