@@ -18,7 +18,7 @@ export interface HomeProps {
   me: string;
   onWorkspace: (id: string) => void;
   projectHref: (id: string) => string;
-  diagramHref: (id: string, history?: boolean) => string;
+  diagramHref: (id: string, title: string, history?: boolean) => string;
   /** Reload workspaces and projects (after create / rename / delete). */
   reload: (select?: { workspaceId?: string; projectId?: string }) => Promise<void>;
   reloadIconPacks: () => Promise<void>;
@@ -296,7 +296,7 @@ function ProjectView({
         <div className="cards">
           {shown.map((d) => (
             <div key={d.id} className="card">
-              <Link to={diagramHref(d.id)} className="card-main">
+              <Link to={diagramHref(d.id, d.title)} className="card-main">
                 <span className="card-kind">{d.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
                 <span className="card-title">{d.title}</span>
                 <span className="hint">
@@ -304,7 +304,7 @@ function ProjectView({
                 </span>
               </Link>
               <div className="card-actions">
-                <Link to={diagramHref(d.id, true)} className="card-link">
+                <Link to={diagramHref(d.id, d.title, true)} className="card-link">
                   History
                 </Link>
                 {editable && <button onClick={() => void run(() => api.duplicateDiagram(d.id), "Duplicated").then(after)}>Duplicate</button>}

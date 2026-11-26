@@ -1,11 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type DiagramModel, emptyModel, SAMPLE_MODEL } from "@archcanvas/shared";
 import { resetDemo } from "./demo-api";
 import { api, type AppConfig, type Diagram, type DiagramKind, devUser, type Project, type Role, setDevUser, type Workspace } from "./api";
 import { Home } from "./home/Home";
 import { setWorkspacePacks } from "./icons/registry";
 import type { CurrentState } from "./history/VersionHistory";
-import { Link, navigate, type NewKind, parseRoute, paths, setNavigationBlocker, useLocation } from "./router";
+import { diagramRef, Link, navigate, type NewKind, parseRoute, paths, refId, setNavigationBlocker, slugMap, useLocation } from "./router";
 
 // Each editor is its own chunk: the whiteboard pulls in Excalidraw + Mermaid, the cloud editor React Flow + ELK.
 const CloudEditor = lazy(() => import("./cloud/CloudEditor").then((m) => ({ default: m.CloudEditor })));
@@ -58,13 +58,35 @@ export function App() {
   }, []);
   const getCurrent = useCallback(() => currentRef.current?.() ?? null, []);
 
-  // Which workspace / project is in view comes from the URL (or from the open diagram).
+  // Which workspace / project is in view comes from the URL slugs (or from the open diagram);
+  // /dashboard shows the one you used last.
+  const wsSlugs = useMemo(() => slugMap((workspaces ?? []).map((w) => ({ id: w.id, name: w.name }))), [workspaces]);
+  const lastWs = workspaces?.find((w) => w.id === localStorage.getItem(LS_WS))?.id ?? workspaces?.[0]?.id ?? null;
   const wsId =
-    route.name === "workspace" || route.name === "project" || route.name === "new" ? route.ws : route.name === "diagram" ? (doc?.workspaceId ?? null) : null;
-  const projectId = route.name === "project" || route.name === "new" ? route.project : route.name === "diagram" ? (doc?.projectId ?? null) : null;
+    route.name === "workspace" || route.name === "project" || route.name === "new"
+      ? (wsSlugs.idOf.get(route.ws) ?? null)
+      : route.name === "diagram"
+        ? (doc?.workspaceId ?? null)
+        : route.name === "dashboard"
+          ? lastWs
+          : null;
   const workspace = workspaces?.find((w) => w.id === wsId) ?? null;
   const projectList = projects && projects.ws === wsId ? projects.list : [];
+  const projSlugs = useMemo(() => slugMap(projectList.map((p) => ({ id: p.id, name: p.name }))), [projectList]);
+  const defaultProject = projectList.find((p) => p.id === localStorage.getItem(LS_PROJECT))?.id ?? projectList[0]?.id ?? null;
+  const projectId =
+    route.name === "project" || route.name === "new"
+      ? (projSlugs.idOf.get(route.project) ?? null)
+      : route.name === "diagram"
+        ? (doc?.projectId ?? null)
+        : route.name === "dashboard" || route.name === "workspace"
+          ? defaultProject
+          : null;
   const project = projectList.find((p) => p.id === projectId) ?? null;
+  const wsSlug = (id: string | null | undefined) => (id ? (wsSlugs.slugOf.get(id) ?? id) : "");
+  const projSlug = (id: string | null | undefined) => (id ? (projSlugs.slugOf.get(id) ?? id) : "");
+  const projectPath = (ws: string | null | undefined, p: string | null | undefined) => (ws && p ? paths.project(wsSlug(ws), projSlug(p)) : ws ? paths.workspace(wsSlug(ws)) : paths.dashboard());
+  const docRef = doc?.id ? diagramRef(doc.loaded?.title ?? doc.title, doc.id) : null;
 
   const loadWorkspaces = useCallback(async () => {
     try {
@@ -97,35 +119,50 @@ export function App() {
     if (projectId) localStorage.setItem(LS_PROJECT, projectId);
   }, [projectId]);
 
-  // Resolve "/" and "/w/:ws" to a concrete page.
+  // "/" → /dashboard; old /w/:uuid/p/:uuid links → slug URLs; unknown slugs → /dashboard.
   useEffect(() => {
     if (!workspaces) return;
-    if (route.name === "root" || route.name === "notfound") {
-      if (route.name === "notfound") setStatus({ kind: "error", text: `Nothing at ${loc.path}` });
-      const ws = workspaces.find((w) => w.id === localStorage.getItem(LS_WS)) ?? workspaces[0];
-      if (ws) navigate(paths.workspace(ws.id), { replace: true, force: true });
-    } else if (route.name === "workspace") {
-      if (!workspaces.some((w) => w.id === route.ws)) {
-        setStatus({ kind: "error", text: "That workspace doesn't exist or you don't have access." });
-        navigate("/", { replace: true, force: true });
-      } else if (projects?.ws === route.ws) {
-        const p = projects.list.find((x) => x.id === localStorage.getItem(LS_PROJECT)) ?? projects.list[0];
-        if (p) navigate(paths.project(route.ws, p.id), { replace: true, force: true });
-      }
+    if (route.name === "root") return void navigate(paths.dashboard(), { replace: true, force: true });
+    if (route.name === "notfound") {
+      setStatus({ kind: "error", text: `Nothing at ${loc.path}` });
+      return void navigate(paths.dashboard(), { replace: true, force: true });
     }
-  }, [route.name, workspaces, projects, loc.path, route]);
+    if (route.name === "legacy") {
+      const ws = workspaces.find((w) => w.id === route.wsId);
+      if (!ws) return void navigate(paths.dashboard(), { replace: true, force: true });
+      if (!route.projectId) return void navigate(paths.workspace(wsSlug(ws.id)), { replace: true, force: true });
+      if (projects?.ws !== ws.id) return void loadProjects(ws.id);
+      const p = projects.list.find((x) => x.id === route.projectId);
+      const pSlug = p ? slugMap(projects.list.map((x) => ({ id: x.id, name: x.name }))).slugOf.get(p.id) : undefined;
+      return void navigate(pSlug ? paths.project(wsSlug(ws.id), pSlug) : paths.workspace(wsSlug(ws.id)), { replace: true, force: true });
+    }
+    if ((route.name === "workspace" || route.name === "project" || route.name === "new") && !wsSlugs.idOf.has(route.ws)) {
+      setStatus({ kind: "error", text: "That workspace doesn't exist or you don't have access." });
+      return void navigate(paths.dashboard(), { replace: true, force: true });
+    }
+    if ((route.name === "project" || route.name === "new") && projects?.ws === wsId && !projSlugs.idOf.has(route.project)) {
+      setStatus({ kind: "error", text: "That project doesn't exist." });
+      return void navigate(paths.workspace(route.ws), { replace: true, force: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc.path, workspaces, projects]);
 
   // Load or create the document the URL points at.
   const routeKey = loc.path;
   useEffect(() => {
     if (route.name === "diagram") {
-      if (doc?.id === route.id) return;
+      const short = refId(route.ref);
+      if (doc?.id?.startsWith(short)) return;
       let cancelled = false;
-      void api.getDiagram(route.id).then(
+      const id = short.length === 36 ? Promise.resolve(short) : api.lookupDiagram(short).then((r) => r.id);
+      void id.then(api.getDiagram).then(
         (d) => {
           if (cancelled) return;
           currentRef.current = null;
           setDoc(docFrom(d));
+          // Canonical link: current title slug + short id (old or hand-typed links still work).
+          const canonical = diagramRef(d.title, d.id);
+          if (route.ref !== canonical) navigate(paths.diagram(canonical, route.view, window.location.search), { replace: true, force: true });
         },
         (e) => {
           if (cancelled) return;
@@ -139,8 +176,8 @@ export function App() {
     }
     if (route.name === "new") {
       if (doc && !doc.id && doc.newRoute === routeKey) return;
-      if (!workspaces) return; // wait for workspaces
-      const role = workspaces.find((w) => w.id === route.ws)?.role;
+      if (!workspaces || !wsId || !projectId) return; // wait until the slugs resolve
+      const role = workspaces.find((w) => w.id === wsId)?.role;
       if (!role) {
         setStatus({ kind: "error", text: "That workspace doesn't exist or you don't have access." });
         navigate("/", { replace: true, force: true });
@@ -151,6 +188,8 @@ export function App() {
         navigate(paths.project(route.ws, route.project), { replace: true, force: true });
         return;
       }
+      const ws = wsId;
+      const proj = projectId;
       currentRef.current = null;
       if (route.kind === "import") {
         const p = pendingImport.current;
@@ -159,7 +198,7 @@ export function App() {
           navigate(paths.project(route.ws, route.project), { replace: true, force: true });
           return;
         }
-        setDoc({ key: nextKey++, id: null, newRoute: routeKey, workspaceId: route.ws, projectId: route.project, kind: "cloud", title: p.title, loaded: null, model: p.model, role, version: null, imported: true });
+        setDoc({ key: nextKey++, id: null, newRoute: routeKey, workspaceId: ws, projectId: proj, kind: "cloud", title: p.title, loaded: null, model: p.model, role, version: null, imported: true });
         const n = p.model.nodes.length;
         setStatus({ kind: "ok", text: `Imported ${n} item${n === 1 ? "" : "s"} from ${p.fileName}. Check Flows, Terraform and Review, then Save.` });
         return;
@@ -168,8 +207,8 @@ export function App() {
         key: nextKey++,
         id: null,
         newRoute: routeKey,
-        workspaceId: route.ws,
-        projectId: route.project,
+        workspaceId: ws,
+        projectId: proj,
         kind: route.kind === "whiteboard" ? "whiteboard" : "cloud",
         title: route.kind === "whiteboard" ? "Untitled whiteboard" : route.kind === "sample" ? "GCP web app (sample)" : "Untitled architecture",
         loaded: null,
@@ -184,7 +223,7 @@ export function App() {
       currentRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeKey, workspaces]);
+  }, [routeKey, workspaces, wsId, projectId]);
 
   useEffect(() => {
     if (status?.kind !== "ok") return;
@@ -209,11 +248,12 @@ export function App() {
       if (doc && getCurrent()?.dirty) e.preventDefault();
     };
     window.addEventListener("beforeunload", onUnload);
-    const here = doc ? (doc.id ? `/d/${doc.id}` : doc.newRoute) : undefined;
+    const here = doc?.newRoute;
     setNavigationBlocker(
       doc
         ? (to) => {
-            const staying = doc.id ? to.startsWith(`/d/${doc.id}`) : to === here;
+            const seg = to.split("/");
+            const staying = doc.id ? seg[1] === "d" && Boolean(seg[2]) && doc.id.startsWith(refId(seg[2])) : to === here;
             return staying || !getCurrent()?.dirty || confirm("You have unsaved changes. Leave without saving?");
           }
         : null,
@@ -242,24 +282,31 @@ export function App() {
       if (!target || (ws && !ws.some((w) => w.id === target))) return void navigate("/", { replace: true, force: true });
       const list = await api.projects(target).catch(() => [] as Project[]);
       setProjects({ ws: target, list });
+      const wsS = slugMap((ws ?? workspaces ?? []).map((w) => ({ id: w.id, name: w.name }))).slugOf.get(target) ?? target;
+      const pS = slugMap(list.map((p) => ({ id: p.id, name: p.name }))).slugOf;
       if (select.workspaceId || select.projectId) {
         const p = list.find((x) => x.id === select.projectId) ?? list.find((x) => x.id === projectId) ?? list[0];
-        navigate(p ? paths.project(target, p.id) : paths.workspace(target));
-      } else if (projectId && !list.some((x) => x.id === projectId)) navigate(list[0] ? paths.project(target, list[0].id) : paths.workspace(target), { replace: true });
+        navigate(p ? paths.project(wsS, pS.get(p.id)!) : paths.workspace(wsS));
+      } else if (route.name !== "dashboard" && route.name !== "workspace") {
+        // Renamed or deleted: keep the URL in step with the new slugs.
+        const p = list.find((x) => x.id === projectId) ?? list[0];
+        navigate(p ? paths.project(wsS, pS.get(p.id)!) : paths.workspace(wsS), { replace: true, force: true });
+      }
     },
-    [wsId, projectId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [wsId, projectId, workspaces, route.name],
   );
 
   const onSaved = (d: Diagram) => {
     setDoc((cur) => (cur ? { ...cur, id: d.id, version: d.version, newRoute: undefined } : cur));
-    if (!doc?.id) navigate(paths.diagram(d.id), { replace: true, force: true });
+    if (!doc?.id || d.title !== doc.loaded?.title) navigate(paths.diagram(diagramRef(d.title, d.id), view, window.location.search), { replace: true, force: true });
     if (wsId) void loadProjects(wsId);
   };
 
   const canEdit = doc?.role === "owner" || doc?.role === "editor";
   const view = route.name === "diagram" ? route.view : "edit";
   const tab = loc.search.get("tab") ?? undefined;
-  const homePath = wsId && projectId ? paths.project(wsId, projectId) : wsId ? paths.workspace(wsId) : "/";
+  const homePath = projectPath(wsId, projectId);
 
   return (
     <div className="app">
@@ -292,9 +339,9 @@ export function App() {
         {doc ? (
           <>
             <nav className="crumbs">
-              <Link to={paths.workspace(doc.workspaceId)}>{doc.loaded?.workspace_name ?? workspace?.name ?? "Workspace"}</Link>
+              <Link to={paths.workspace(wsSlug(doc.workspaceId))}>{doc.loaded?.workspace_name ?? workspace?.name ?? "Workspace"}</Link>
               <span>/</span>
-              <Link to={paths.project(doc.workspaceId, doc.projectId)}>{doc.loaded?.project_name ?? project?.name ?? "Project"}</Link>
+              <Link to={projectPath(doc.workspaceId, doc.projectId)}>{doc.loaded?.project_name ?? project?.name ?? "Project"}</Link>
               <span>/</span>
             </nav>
             <input
@@ -306,7 +353,7 @@ export function App() {
             />
             <span className="kind-pill">{doc.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
             {doc.id ? (
-              <Link to={paths.diagram(doc.id, "history")} className="version-badge" title="Version history and compare">
+              <Link to={paths.diagram(docRef!, "history")} className="version-badge" title="Version history and compare">
                 {doc.version ? `v${doc.version}` : "v?"} · History
               </Link>
             ) : (
@@ -362,14 +409,14 @@ export function App() {
               config={config}
               initialTab={(tab as never) ?? (doc.imported && doc.model.edges.length ? "flows" : undefined)}
               onTabChange={(t) => {
-                const base = doc.id ? paths.diagram(doc.id) : (doc.newRoute ?? loc.path);
+                const base = docRef ? paths.diagram(docRef) : (doc.newRoute ?? loc.path);
                 navigate(t === "assistant" ? base : `${base}?tab=${t}`, { replace: true, force: true });
               }}
               presenting={view === "present" ? { start: loc.search.get("wf") ? Number(loc.search.get("wf")) : undefined } : null}
               onPresent={(start) =>
-                doc.id ? navigate(paths.diagram(doc.id, "present", start !== undefined ? `?wf=${start}` : "")) : setStatus({ kind: "error", text: "Save the diagram to present it." })
+                docRef ? navigate(paths.diagram(docRef, "present", start !== undefined ? `?wf=${start}` : "")) : setStatus({ kind: "error", text: "Save the diagram to present it." })
               }
-              onExitPresent={() => doc.id && navigate(paths.diagram(doc.id))}
+              onExitPresent={() => docRef && navigate(paths.diagram(docRef))}
             />
           ) : (
             <WhiteboardEditor
@@ -391,12 +438,12 @@ export function App() {
               title={doc.title}
               canEdit={canEdit}
               getCurrent={getCurrent}
-              onClose={() => navigate(paths.diagram(doc.id!))}
+              onClose={() => navigate(paths.diagram(docRef!))}
               onRestored={() => {
                 currentRef.current = null;
                 void api.getDiagram(doc.id!).then((d) => {
                   setDoc({ ...docFrom(d), key: nextKey++ });
-                  navigate(paths.diagram(d.id), { force: true });
+                  navigate(paths.diagram(diagramRef(d.title, d.id)), { force: true });
                 });
               }}
               onDuplicated={(id) => navigate(paths.diagram(id))}
@@ -413,16 +460,16 @@ export function App() {
           projects={projectList}
           project={project}
           me={devUser() ?? config?.devUser ?? ""}
-          onWorkspace={(id) => navigate(paths.workspace(id))}
-          projectHref={(id) => (wsId ? paths.project(wsId, id) : "/")}
-          diagramHref={(id, history) => paths.diagram(id, history ? "history" : "edit")}
+          onWorkspace={(id) => navigate(paths.workspace(wsSlug(id)))}
+          projectHref={(id) => projectPath(wsId, id)}
+          diagramHref={(id, title, history) => paths.diagram(diagramRef(title, id), history ? "history" : "edit")}
           reload={reload}
           reloadIconPacks={reloadIconPacks}
-          onNew={(kind) => wsId && projectId && navigate(paths.newDiagram(wsId, projectId, kind as NewKind))}
+          onNew={(kind) => wsId && projectId && navigate(paths.newDiagram(wsSlug(wsId), projSlug(projectId), kind as NewKind))}
           onImport={(title, model, fileName) => {
             if (!wsId || !projectId) return;
             pendingImport.current = { title, model, fileName };
-            navigate(paths.newDiagram(wsId, projectId, "import"));
+            navigate(paths.newDiagram(wsSlug(wsId), projSlug(projectId), "import"));
           }}
           setStatus={setStatus}
         />
