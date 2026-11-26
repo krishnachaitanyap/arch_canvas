@@ -168,3 +168,16 @@ That slice touches every layer with about 8 resources. After that, widening the 
 - Let users define, name and save their own workflows (for example "Checkout"), including steps that repeat a connection.
 - Sequence-diagram view of a workflow.
 - Speaker notes, and exporting the presentation to PDF or slides.
+
+## draw.io import (2026-11-26)
+
+**Done**
+- `xml.ts` (XML reader that works in browser and Node) and `drawio-import.ts`: plain, compressed and SVG files, multiple pages, and mapping of GCP, AWS and Azure icons, shapes and labels, with confidence and a reason for each.
+- Groups are detected from explicit containers and from visual enclosure. Nesting GCP doesn't allow is moved up with a warning. Connections attached to groups or skipped shapes are reported.
+- The draw.io export now carries ArchCanvas metadata in `<object>` custom properties, so a round trip is exact (tests compare the Terraform and workflows).
+- Import review dialog with overrides and a live preview; the editor opens on the Flows tab after import.
+
+**Next**
+- Ask the AI to suggest mappings for unrecognised shapes, with the user confirming.
+- Import into an existing diagram (merge), and `.drawio.png`.
+- More catalog kinds so fewer AWS and Azure services are approximated (GKE, Cloud Functions, BigQuery, Spanner).

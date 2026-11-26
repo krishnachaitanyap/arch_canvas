@@ -51,10 +51,18 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
   const boxes = resolveLayout(m);
   const cells: string[] = ['<mxCell id="0" />', '<mxCell id="1" parent="0" />'];
   const cellId = (id: string) => `n_${id}`;
-  // Parents must precede children in the file.
+  // Parents must precede children in the file; otherwise keep the model's order so a
+  // re-import reproduces the same model (and the same Terraform).
   const ordered: DiagramNode[] = [];
-  const visit = (pid: string | undefined) => childrenOf(m, pid).forEach((n) => (ordered.push(n), visit(n.id)));
-  visit(undefined);
+  const placed = new Set<string>();
+  const emit = (n: DiagramNode, guard = 0) => {
+    if (placed.has(n.id) || guard > 50) return;
+    const parent = n.parentId ? m.nodes.find((x) => x.id === n.parentId) : undefined;
+    if (parent) emit(parent, guard + 1);
+    placed.add(n.id);
+    ordered.push(n);
+  };
+  m.nodes.forEach((n) => emit(n));
   for (const n of ordered) {
     const entry = catalogEntry(n.kind);
     const b = boxes.get(n.id)!;
@@ -63,18 +71,22 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
       ? `rounded=1;arcSize=4;whiteSpace=wrap;html=1;container=1;collapsible=0;dashed=1;fillColor=none;strokeColor=${color};verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=${color};`
       : `rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=${color};strokeWidth=2;fontColor=#202124;`;
     const value = entry?.container ? `${entry.label}: ${n.label}` : `<b>${esc(n.label)}</b><br><font color="${color}" style="font-size:10px">${esc(entry?.label ?? n.kind)}</font>`;
+    // <object> carries ArchCanvas metadata as draw.io custom properties (Edit Data), so
+    // re-importing is lossless and people can set types in draw.io itself.
+    const props = Object.keys(n.props).length ? ` archcanvas_props="${esc(JSON.stringify(n.props))}"` : "";
     cells.push(
-      `<mxCell id="${cellId(n.id)}" value="${entry?.container ? esc(value) : esc(value)}" style="${style}" vertex="1" parent="${
-        n.parentId ? cellId(n.parentId) : "1"
-      }"><mxGeometry x="${Math.round(b.x)}" y="${Math.round(b.y)}" width="${Math.round(b.w)}" height="${Math.round(b.h)}" as="geometry" /></mxCell>`,
+      `<object id="${cellId(n.id)}" label="${esc(value)}" archcanvas_kind="${esc(n.kind)}" archcanvas_id="${esc(n.id)}"${props}>` +
+        `<mxCell style="${style}" vertex="1" parent="${n.parentId ? cellId(n.parentId) : "1"}">` +
+        `<mxGeometry x="${Math.round(b.x)}" y="${Math.round(b.y)}" width="${Math.round(b.w)}" height="${Math.round(b.h)}" as="geometry" />` +
+        `</mxCell></object>`,
     );
   }
   for (const e of m.edges) {
     const label = e.label ?? e.protocol ?? "";
     cells.push(
-      `<mxCell id="e_${esc(e.id)}" value="${esc(label)}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#5f6368;" edge="1" parent="1" source="${cellId(
-        e.from,
-      )}" target="${cellId(e.to)}"><mxGeometry relative="1" as="geometry" /></mxCell>`,
+      `<object id="e_${esc(e.id)}" label="${esc(label)}"${e.protocol ? ` archcanvas_protocol="${e.protocol}"` : ""}>` +
+        `<mxCell style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#5f6368;" edge="1" parent="1" source="${cellId(e.from)}" target="${cellId(e.to)}">` +
+        `<mxGeometry relative="1" as="geometry" /></mxCell></object>`,
     );
   }
   return `<?xml version="1.0" encoding="UTF-8"?>

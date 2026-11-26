@@ -40,7 +40,7 @@ import { autoLayout, hasLayout, structureKey } from "./layout";
 import { Palette, Properties, Review, type Selection, TerraformPanel } from "./panels";
 import { slug } from "../util";
 
-type Tab = "assistant" | "properties" | "flows" | "review" | "terraform";
+export type Tab = "assistant" | "properties" | "flows" | "review" | "terraform";
 
 interface Proposal {
   base: DiagramModel;
@@ -60,6 +60,7 @@ export interface EditorProps {
   title: string;
   toolbar: HTMLElement | null;
   config: AppConfig | null;
+  initialTab?: Tab;
   setStatus: (s: { kind: "ok" | "error"; text: string } | null) => void;
   onSaved: (d: Diagram) => void;
 }
@@ -72,7 +73,7 @@ export function CloudEditor(props: EditorProps) {
   );
 }
 
-function Editor({ diagramId, projectId, canEdit, registerCurrent, initial, title, toolbar, config, setStatus, onSaved }: EditorProps) {
+function Editor({ diagramId, projectId, canEdit, registerCurrent, initial, title, toolbar, config, initialTab, setStatus, onSaved }: EditorProps) {
   const rf = useReactFlow();
   const [model, setModel] = useState<DiagramModel>(initial);
   const modelRef = useRef(model);
@@ -80,7 +81,7 @@ function Editor({ diagramId, projectId, canEdit, registerCurrent, initial, title
   const [past, setPast] = useState<DiagramModel[]>([]);
   const [future, setFuture] = useState<DiagramModel[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
-  const [tab, setTab] = useState<Tab>("assistant");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "assistant");
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [proposalLayout, setProposalLayout] = useState<DiagramModel["layout"] | null>(null);
   const [saving, setSaving] = useState(false);

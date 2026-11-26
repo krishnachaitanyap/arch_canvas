@@ -1,0 +1,33 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="orders" name="Orders platform (AWS)">
+    <mxGraphModel grid="1" gridSize="10">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="users" value="Shoppers" style="sketch=0;outlineConnect=0;fontColor=#232F3E;shape=mxgraph.aws4.users;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="1"><mxGeometry x="-160" y="230" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="cloud" value="AWS Cloud" style="points=[];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud_alt;strokeColor=#232F3E;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;container=1;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="900" height="640" as="geometry" /></mxCell>
+        <mxCell id="vpc" value="VPC" style="points=[];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;strokeColor=#248814;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;container=1;" vertex="1" parent="cloud"><mxGeometry x="40" y="40" width="820" height="460" as="geometry" /></mxCell>
+        <mxCell id="subnet" value="Private subnet 10.0.1.0/24" style="points=[];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;strokeColor=#147EBA;fillColor=#E6F2F8;verticalAlign=top;align=left;spacingLeft=30;container=1;" vertex="1" parent="vpc"><mxGeometry x="280" y="50" width="500" height="380" as="geometry" /></mxCell>
+        <mxCell id="alb" value="ALB" style="sketch=0;outlineConnect=0;fillColor=#8C4FFF;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.application_load_balancer;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="vpc"><mxGeometry x="80" y="180" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="fn" value="Orders service" style="sketch=0;outlineConnect=0;fillColor=#ED7100;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fargate;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="subnet"><mxGeometry x="60" y="140" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="rds" value="Orders DB" style="sketch=0;outlineConnect=0;fillColor=#C925D1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="subnet"><mxGeometry x="300" y="60" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="cache" value="Sessions" style="sketch=0;outlineConnect=0;fillColor=#C925D1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticache;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="subnet"><mxGeometry x="300" y="240" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="s3" value="Receipts" style="sketch=0;outlineConnect=0;fillColor=#7AA116;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="cloud"><mxGeometry x="140" y="540" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="sqs" value="Order events" style="sketch=0;outlineConnect=0;fillColor=#E7157B;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sqs;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="cloud"><mxGeometry x="420" y="540" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="worker" value="Fulfilment worker" style="sketch=0;outlineConnect=0;fillColor=#ED7100;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="cloud"><mxGeometry x="640" y="540" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="secret" value="Payment key" style="sketch=0;outlineConnect=0;fillColor=#DD344C;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.secrets_manager;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="cloud"><mxGeometry x="780" y="540" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="ml" value="Fraud scoring" style="sketch=0;outlineConnect=0;fillColor=#01A88D;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sagemaker;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="1"><mxGeometry x="960" y="300" width="60" height="60" as="geometry" /></mxCell>
+        <mxCell id="note" value="Draft – for review" style="text;html=1;" vertex="1" parent="1"><mxGeometry x="0" y="660" width="200" height="20" as="geometry" /></mxCell>
+        <mxCell id="e1" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="users" target="alb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="alb" target="fn"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="SQL" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="fn" target="rds"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="fn" target="cache"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="publish" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="fn" target="sqs"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="sqs" target="worker"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="worker" target="s3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="fn" target="secret"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="fn" target="ml"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

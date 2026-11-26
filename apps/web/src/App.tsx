@@ -20,6 +20,8 @@ interface Doc {
   model: DiagramModel;
   role: Role;
   version: number | null;
+  /** Just imported from a file: open on the Flows tab. */
+  imported?: boolean;
 }
 
 type Status = { kind: "ok" | "error"; text: string } | null;
@@ -134,6 +136,15 @@ export function App() {
     });
   }
 
+  function importDiagram(title: string, model: DiagramModel, fileName: string) {
+    if (!project || !workspace) return;
+    currentRef.current = null;
+    setHistory(false);
+    setDoc({ key: nextKey++, id: null, projectId: project.id, kind: "cloud", title, loaded: null, model, role: workspace.role, version: null, imported: true });
+    const n = model.nodes.length;
+    setStatus({ kind: "ok", text: `Imported ${n} item${n === 1 ? "" : "s"} from ${fileName}. Check Flows, Terraform and Review, then Save.` });
+  }
+
   function goHome() {
     if (!confirmLeave()) return;
     setDoc(null);
@@ -225,7 +236,7 @@ export function App() {
       {doc && editorProps ? (
         <Suspense fallback={<div className="loading">Loading editor…</div>}>
           {doc.kind === "cloud" ? (
-            <CloudEditor key={doc.key} {...editorProps} initial={doc.model} config={config} />
+            <CloudEditor key={doc.key} {...editorProps} initial={doc.model} config={config} initialTab={doc.imported && doc.model.edges.length ? "flows" : undefined} />
           ) : (
             <WhiteboardEditor key={doc.key} {...editorProps} initial={doc.loaded} />
           )}
@@ -267,6 +278,7 @@ export function App() {
           reload={reload}
           onOpen={(id, o) => void open(id, o)}
           onNew={create}
+          onImport={importDiagram}
           setStatus={setStatus}
         />
       )}

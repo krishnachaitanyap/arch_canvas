@@ -69,6 +69,22 @@ Workflows and integration explanations come from the diagram (`packages/shared/s
 - **Presentation:** **Present** opens a full-screen walkthrough (title, overview, each workflow step by step with the canvas zooming to the connection, wrap-up). Use ← and → to move, F for fullscreen, Esc to exit.
 - **AI wording** (optional): Gemini rewrites titles and step text. It can't add, remove or reorder steps; anything that doesn't match the diagram is discarded.
 
+## Import from draw.io
+
+On the project page, drop a draw.io file onto the import area (or choose **New diagram… → Import draw.io file…**). Supported files are `.drawio`, `.xml` (plain or compressed, any number of pages) and `.drawio.svg`. Shapes are mapped to GCP resources:
+
+| Source | Confidence | Example |
+|---|---|---|
+| ArchCanvas's own draw.io export | exact | lossless round trip, positions kept |
+| Google Cloud icons | high | Cloud Run, Cloud SQL, Pub/Sub… |
+| AWS and Azure icons | medium | Lambda/Fargate → Cloud Run, RDS → Cloud SQL, SQS → Pub/Sub, ElastiCache → Memorystore |
+| Shapes | medium | cylinder → database, actor → users |
+| Label keywords | low | "Orders API" → Cloud Run, "Session cache" → Memorystore |
+
+Groups such as AWS Cloud, VPC and subnet become GCP groups, including plain rectangles drawn around other shapes. Nesting GCP doesn't allow (for example a load balancer inside a VPC) is moved up, with a note. A review step lists every shape with its mapping and the reason, lets you change or skip it, and shows a live preview.
+
+After import, everything works as for a hand-built diagram: Terraform, workflows, the architecture doc, Present, Review, history and export. Try it with [docs/examples/aws-orders.drawio](docs/examples/aws-orders.drawio).
+
 See [docs/PLAN-cloud-agent-iac.md](docs/PLAN-cloud-agent-iac.md) for the roadmap.
 
 ## AI providers

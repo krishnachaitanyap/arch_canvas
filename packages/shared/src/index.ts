@@ -8,4 +8,5 @@ export { renderBlocks } from "./hcl.js";
 export * from "./compare.js";
 export * from "./flows.js";
 export * from "./doc.js";
+export * from "./drawio-import.js";
 export { SAMPLE_MODEL } from "./sample.js";

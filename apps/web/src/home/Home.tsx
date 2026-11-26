@@ -1,5 +1,9 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { type FormEvent, lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { type DiagramModel, type DrawioPage, readDrawio } from "@archcanvas/shared";
 import { api, type DiagramKind, type DiagramSummary, type Member, type Project, type Role, type Workspace } from "../api";
+
+// The review dialog shows a live canvas preview, so it brings React Flow with it.
+const ImportDialog = lazy(() => import("./ImportDialog"));
 import { timeAgo } from "../util";
 
 type SetStatus = (s: { kind: "ok" | "error"; text: string } | null) => void;
@@ -16,6 +20,7 @@ export interface HomeProps {
   reload: (select?: { workspaceId?: string; projectId?: string }) => Promise<void>;
   onOpen: (diagramId: string, opts?: { history?: boolean }) => void;
   onNew: (kind: DiagramKind | "sample") => void;
+  onImport: (title: string, model: DiagramModel, fileName: string) => void;
   setStatus: SetStatus;
 }
 
@@ -158,9 +163,27 @@ function ProjectView({
   workspace,
   onOpen,
   onNew,
+  onImport,
+  setStatus,
   run,
 }: HomeProps & { project: Project; role: Role; run: (fn: () => Promise<unknown>, ok?: string) => Promise<boolean> }) {
   const [diagrams, setDiagrams] = useState<DiagramSummary[] | null>(null);
+  const [importing, setImporting] = useState<{ fileName: string; pages: DrawioPage[] } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  async function readFile(file: File) {
+    if (!/\.(drawio|xml|svg)$/i.test(file.name)) {
+      setStatus({ kind: "error", text: `${file.name} isn't a draw.io file. Use .drawio, .drawio.svg or .xml.` });
+      return;
+    }
+    try {
+      const pages = await readDrawio(await file.text());
+      setImporting({ fileName: file.name, pages });
+    } catch (e) {
+      setStatus({ kind: "error", text: `Couldn't read ${file.name}: ${(e as Error).message}` });
+    }
+  }
   const [renaming, setRenaming] = useState(false);
   const [moving, setMoving] = useState<DiagramSummary | null>(null);
   const [filter, setFilter] = useState("");
@@ -194,7 +217,8 @@ function ProjectView({
             value=""
             aria-label="New diagram"
             onChange={(e) => {
-              onNew(e.target.value as DiagramKind | "sample");
+              if (e.target.value === "import") fileInput.current?.click();
+              else onNew(e.target.value as DiagramKind | "sample");
               e.target.value = "";
             }}
           >
@@ -203,10 +227,42 @@ function ProjectView({
             </option>
             <option value="cloud">GCP architecture</option>
             <option value="sample">GCP architecture from sample</option>
+            <option value="import">Import draw.io file…</option>
             <option value="whiteboard">Whiteboard (Mermaid)</option>
           </select>
         )}
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".drawio,.xml,.svg"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void readFile(f);
+            e.target.value = "";
+          }}
+        />
       </div>
+      {editable && (
+        <div
+          className={`dropzone ${dragging ? "over" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            const f = e.dataTransfer.files[0];
+            if (f) void readFile(f);
+          }}
+          onClick={() => fileInput.current?.click()}
+        >
+          Drop a <b>draw.io</b> file here (or click) to turn it into a GCP architecture with Terraform, workflows and a presentation.
+          Google Cloud, AWS and Azure icons and plain shapes are recognised.
+        </div>
+      )}
 
       <input className="filter" placeholder="Filter diagrams" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter diagrams" />
 
@@ -257,6 +313,19 @@ function ProjectView({
         </div>
       )}
 
+      {importing && (
+        <Suspense fallback={null}>
+          <ImportDialog
+            fileName={importing.fileName}
+            pages={importing.pages}
+            onClose={() => setImporting(null)}
+            onImport={(title, model) => {
+              setImporting(null);
+              onImport(title, model, importing.fileName);
+            }}
+          />
+        </Suspense>
+      )}
       {renaming && (
         <ProjectSettings
           project={project}
