@@ -5,11 +5,6 @@ import { withTenant } from "../db.js";
 
 const uuid = z.string().uuid();
 const name = z.string().trim().min(1).max(120);
-/** A project's tabs, in order. Ids are stable so renaming a tab keeps its diagrams. */
-const tabs = z
-  .array(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/), name: z.string().trim().min(1).max(40) }))
-  .max(30)
-  .refine((t) => new Set(t.map((x) => x.id)).size === t.length, "tab ids must be unique");
 const role = z.enum(ROLES as [Role, ...Role[]]);
 const member = z.string().trim().min(1).max(200);
 
@@ -126,7 +121,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     return withTenant(req.principal.tenantId, async (c) => {
       await requireWorkspace(c, id, req.principal, "viewer");
       const { rows } = await c.query(
-        `SELECT pr.id, pr.name, pr.description, pr.tabs, pr.created_at,
+        `SELECT pr.id, pr.name, pr.description, pr.created_at,
                 count(d.id)::int AS diagram_count,
                 GREATEST(pr.updated_at, max(d.updated_at)) AS updated_at
          FROM projects pr LEFT JOIN diagrams d ON d.project_id = pr.id
@@ -144,7 +139,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       await requireWorkspace(c, id, req.principal, "editor");
       const { rows } = await c.query(
         `INSERT INTO projects (tenant_id, workspace_id, name, description, created_by) VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, workspace_id, name, description, tabs, created_at, updated_at, 0 AS diagram_count`,
+         RETURNING id, workspace_id, name, description, created_at, updated_at, 0 AS diagram_count`,
         [req.principal.tenantId, id, body.name, body.description, req.principal.userId],
       );
       await audit(c, req.principal, "project.create", rows[0].id, { workspaceId: id });
@@ -155,18 +150,15 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
   app.patch("/api/projects/:id", async (req) => {
     const { id } = parse(z.object({ id: uuid }), req.params);
-    const body = parse(z.object({ name: name.optional(), description: z.string().max(2000).optional(), tabs: tabs.optional() }), req.body);
+    const body = parse(z.object({ name: name.optional(), description: z.string().max(2000).optional() }), req.body);
     return withTenant(req.principal.tenantId, async (c) => {
       await requireProject(c, id, req.principal, "editor");
       const { rows } = await c.query(
-        `UPDATE projects SET name = COALESCE($2, name), description = COALESCE($3, description), tabs = COALESCE($4, tabs), updated_at = now()
-         WHERE id = $1 RETURNING id, workspace_id, name, description, tabs, updated_at`,
-        [id, body.name ?? null, body.description ?? null, body.tabs ? JSON.stringify(body.tabs) : null],
+        `UPDATE projects SET name = COALESCE($2, name), description = COALESCE($3, description), updated_at = now()
+         WHERE id = $1 RETURNING id, workspace_id, name, description, updated_at`,
+        [id, body.name ?? null, body.description ?? null],
       );
-      // Diagrams in a deleted tab go back to "no tab" (they show under All).
-      if (body.tabs)
-        await c.query("UPDATE diagrams SET tab = NULL WHERE project_id = $1 AND tab IS NOT NULL AND NOT (tab = ANY($2::text[]))", [id, body.tabs.map((t) => t.id)]);
-      await audit(c, req.principal, "project.update", id, body.tabs ? { tabs: body.tabs.length } : undefined);
+      await audit(c, req.principal, "project.update", id);
       return rows[0];
     });
   });

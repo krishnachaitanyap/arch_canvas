@@ -28,8 +28,6 @@ interface Doc {
   version: number | null;
   /** Just imported from a file: open on the Flows tab. */
   imported?: boolean;
-  /** For new diagrams: the project tab (section) they're filed under when first saved. */
-  newTab?: string;
 }
 
 type Status = { kind: "ok" | "error"; text: string } | null;
@@ -37,7 +35,6 @@ interface PendingImport {
   title: string;
   model: DiagramModel;
   fileName: string;
-  section?: string;
 }
 
 const LS_WS = "archcanvas.workspace";
@@ -201,7 +198,7 @@ export function App() {
           navigate(paths.project(route.ws, route.project), { replace: true, force: true });
           return;
         }
-        setDoc({ key: nextKey++, id: null, newRoute: routeKey, workspaceId: ws, projectId: proj, kind: "cloud", title: p.title, loaded: null, model: p.model, role, version: null, imported: true, newTab: p.section });
+        setDoc({ key: nextKey++, id: null, newRoute: routeKey, workspaceId: ws, projectId: proj, kind: "cloud", title: p.title, loaded: null, model: p.model, role, version: null, imported: true });
         const n = p.model.nodes.length;
         setStatus({ kind: "ok", text: `Imported ${n} item${n === 1 ? "" : "s"} from ${p.fileName}. Check Flows, Terraform and Review, then Save.` });
         return;
@@ -210,7 +207,6 @@ export function App() {
         key: nextKey++,
         id: null,
         newRoute: routeKey,
-        newTab: loc.search.get("section") ?? undefined,
         workspaceId: ws,
         projectId: proj,
         kind: route.kind === "whiteboard" ? "whiteboard" : "cloud",
@@ -302,14 +298,8 @@ export function App() {
   );
 
   const onSaved = (d: Diagram) => {
-    // A diagram started from a project tab is filed under that tab (not a content change, so no version).
-    if (!doc?.id && doc?.newTab) void api.updateDiagram(d.id, { tab: doc.newTab }).catch(() => undefined);
-    setDoc((cur) => (cur ? { ...cur, id: d.id, version: d.version, newRoute: undefined, newTab: undefined } : cur));
-    if (!doc?.id || d.title !== doc.loaded?.title) {
-      const q = new URLSearchParams(window.location.search);
-      q.delete("section");
-      navigate(paths.diagram(diagramRef(d.title, d.id), view, q.size ? `?${q}` : ""), { replace: true, force: true });
-    }
+    setDoc((cur) => (cur ? { ...cur, id: d.id, version: d.version, newRoute: undefined } : cur));
+    if (!doc?.id || d.title !== doc.loaded?.title) navigate(paths.diagram(diagramRef(d.title, d.id), view, window.location.search), { replace: true, force: true });
     if (wsId) void loadProjects(wsId);
   };
 
@@ -475,12 +465,10 @@ export function App() {
           diagramHref={(id, title, history) => paths.diagram(diagramRef(title, id), history ? "history" : "edit")}
           reload={reload}
           reloadIconPacks={reloadIconPacks}
-          onNew={(kind, section) =>
-            wsId && projectId && navigate(paths.newDiagram(wsSlug(wsId), projSlug(projectId), kind as NewKind) + (section ? `?section=${encodeURIComponent(section)}` : ""))
-          }
-          onImport={(title, model, fileName, section) => {
+          onNew={(kind) => wsId && projectId && navigate(paths.newDiagram(wsSlug(wsId), projSlug(projectId), kind as NewKind))}
+          onImport={(title, model, fileName) => {
             if (!wsId || !projectId) return;
-            pendingImport.current = { title, model, fileName, section };
+            pendingImport.current = { title, model, fileName };
             navigate(paths.newDiagram(wsSlug(wsId), projSlug(projectId), "import"));
           }}
           setStatus={setStatus}

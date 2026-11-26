@@ -13,17 +13,10 @@ export interface Workspace {
   member_count: number;
 }
 
-export interface ProjectTab {
-  id: string;
-  name: string;
-}
-
 export interface Project {
   id: string;
   name: string;
   description: string;
-  /** User-defined tabs that organise the project's diagrams (e.g. HA / DR, CI/CD). */
-  tabs: ProjectTab[];
   diagram_count: number;
   updated_at: string;
 }
@@ -40,8 +33,6 @@ export interface DiagramSummary {
   title: string;
   kind: DiagramKind;
   project_id: string;
-  /** The project tab it's filed under, if any. */
-  tab: string | null;
   created_by: string | null;
   updated_at: string;
   version: number | null;
@@ -76,7 +67,7 @@ export interface Version extends VersionSummary {
   model: DiagramModel | null;
 }
 
-export type DiagramWrite = Partial<Pick<Diagram, "title" | "kind" | "source" | "scene" | "model">> & { message?: string; projectId?: string; autosave?: boolean; tab?: string | null };
+export type DiagramWrite = Partial<Pick<Diagram, "title" | "kind" | "source" | "scene" | "model">> & { message?: string; projectId?: string; autosave?: boolean };
 
 export interface AppConfig {
   /** Browser-only demo build (no server). */
@@ -171,7 +162,7 @@ const serverApi = {
   projects: (workspaceId: string) => request<Project[]>(`/api/workspaces/${workspaceId}/projects`),
   createProject: (workspaceId: string, name: string, description = "") =>
     request<Project>(`/api/workspaces/${workspaceId}/projects`, { method: "POST", body: JSON.stringify({ name, description }) }),
-  updateProject: (id: string, d: { name?: string; description?: string; tabs?: ProjectTab[] }) =>
+  updateProject: (id: string, d: { name?: string; description?: string }) =>
     request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(d) }),
   deleteProject: (id: string) => request<void>(`/api/projects/${id}`, { method: "DELETE" }),
 

@@ -63,7 +63,6 @@ export async function requireProject(c: Db, projectId: string, p: Principal, min
 export interface DiagramRow {
   id: string;
   project_id: string;
-  tab: string | null;
   workspace_id: string;
   title: string;
   kind: "whiteboard" | "cloud";
