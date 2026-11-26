@@ -501,3 +501,29 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 .react-flow__node-shape .react-flow__handle.side-handle { width: 8px; height: 8px; border-width: 1.5px; opacity: 0; }
 .react-flow__node-shape:hover .react-flow__handle.side-handle,
 .react-flow__node-shape.selected .react-flow__handle.side-handle { opacity: 1; }
+
+/* ---------- styled group boxes (AWS / Azure / GCP / Kubernetes boundaries) ---------- */
+.gnode { border-radius: 4px; }
+.gnode.head-icon { border-radius: 10px; }
+.gnode .gnode-head { min-height: 32px; }
+.gnode.head-tab .gnode-head { padding: 0 10px 0 0; gap: 10px; align-items: center; }
+.gnode.head-tab { border-radius: 0; }
+.gnode-tab { width: 32px; height: 32px; flex: none; display: flex; align-items: center; justify-content: center; margin: -1px 0 0 -1px; }
+.gnode-tab .ricon-img, .gnode-tab .ricon { display: block; border-radius: 0; }
+.gnode-tab.mono .ricon-img { filter: brightness(0) invert(1); }
+.gnode-tab.mono .ricon { background: transparent !important; }
+.gnode-tab.plain { border: 1px solid; box-sizing: border-box; }
+.gnode.head-tab .gnode-label { font-weight: 500; font-size: 13px; }
+.gnode.head-label .gnode-head { padding: 6px 10px; }
+.gnode.head-center .gnode-head { justify-content: center; padding-top: 8px; }
+.gnode.head-center .gnode-label { font-weight: 500; font-size: 13px; }
+.gnode.selected { outline: none; }
+.gnode .react-flow__resize-control.line.sel-line { border-color: #1a73e8; border-style: dashed; border-width: 0; }
+.gnode .react-flow__resize-control.line.sel-line.top, .gnode .react-flow__resize-control.line.sel-line.bottom { border-top-width: 1px; }
+.gnode .react-flow__resize-control.line.sel-line.left, .gnode .react-flow__resize-control.line.sel-line.right { border-left-width: 1px; }
+.gnode .react-flow__resize-control.handle.sel-handle { width: 7px; height: 7px; border-radius: 1px; background: #1a73e8; border: 1px solid #fff; }
+.tile-box { width: 34px; height: 26px; border-width: 1.5px; border-radius: 2px; display: block; }
+.swatch.none { background: linear-gradient(to top right, #fff calc(50% - 1px), #dc2626 50%, #fff calc(50% + 1px)); }
+.ctx-seg .thick { display: inline-block; width: 22px; border-top: solid currentColor; vertical-align: middle; }
+/* React Flow's built-in look for type "group" nodes (border, padding, white background) doubles our boxes. */
+.react-flow__node-group { border: 0 !important; padding: 0 !important; background: transparent !important; border-radius: 0 !important; box-shadow: none !important; }

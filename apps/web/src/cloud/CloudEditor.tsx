@@ -878,11 +878,14 @@ function Editor({
               onClose={() => setMenu(null)}
               actions={{
                 addText: (at) => addItem({ key: "text", kind: "generic.shape", label: "Text", props: { shape: "text" } }, at),
-                styleShapes: (id, props) => {
+                styleNodes: (id, props) => {
                   const ids = selectedIds.has(id) ? nodeIds(selectedIds) : [id];
+                  // Only items that have these properties (shapes get fill/shape, groups get border…).
+                  const has = (kind: string) => Object.keys(props).every((k) => catalogEntry(kind)?.props.some((p) => p.key === k));
                   const ops = ids
-                    .filter((x) => modelRef.current.nodes.find((n) => n.id === x)?.kind === "generic.shape")
-                    .map((x) => ({ op: "update_node" as const, id: x, props }));
+                    .map((x) => modelRef.current.nodes.find((n) => n.id === x))
+                    .filter((n) => n && has(n.kind))
+                    .map((n) => ({ op: "update_node" as const, id: n!.id, props: { ...n!.props, ...props } }));
                   // Changing the shape keeps the size the user gave it.
                   if (ops.length) change(ops);
                 },

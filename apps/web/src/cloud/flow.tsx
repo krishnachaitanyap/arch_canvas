@@ -44,6 +44,7 @@ import {
   type ShapeName,
   type Side,
   SIDES,
+  TAB_ICONS,
 } from "@archcanvas/shared";
 import { NODE_H, NODE_W } from "./layout";
 
@@ -205,27 +206,56 @@ function ResourceNode({ id, data, selected }: NodeProps<CloudNode>) {
   );
 }
 
+/** The group's corner tab: AWS group icons already are one; other icons sit on the group colour. */
+function GroupTab({ kind, icon, color }: { kind: string; icon?: string; color: string }) {
+  if (icon && TAB_ICONS.has(icon))
+    return (
+      <span className="gnode-tab">
+        <ResourceIcon kind={kind} icon={icon} size={32} />
+      </span>
+    );
+  const mono = !icon || icon.startsWith("lucide:");
+  return (
+    <span className={`gnode-tab ${mono ? "mono" : "plain"}`} style={{ background: mono ? color : "#fff", borderColor: color }}>
+      <ResourceIcon kind={kind} icon={icon} size={mono ? 22 : 24} />
+    </span>
+  );
+}
+
 function GroupNode({ id, data, selected }: NodeProps<CloudNode>) {
   const entry = catalogEntry(data.node.kind);
   const ctx = useContext(EditorContext);
-  const color = data.node.kind === "generic.group" ? "#71717a" : (entry?.icon.color ?? "#80868b");
+  const p = resolvedProps(data.node.kind, data.node.props);
+  const color = String(p.color ?? entry?.icon.color ?? "#80868b");
+  const border = String(p.border ?? "dashed");
+  const header = String(p.header ?? "icon");
+  const fill = String(p.fill ?? "none");
   const region = data.node.kind === "gcp.region" ? (data.node.props.region as string | undefined) ?? "us-central1" : undefined;
+  const kindLabel = `${data.node.kind === "generic.group" ? "" : (entry?.label ?? "")}${region ? ` · ${region}` : ""}`;
   return (
-    <div className={`gnode ${data.status ?? ""} ${selected ? "selected" : ""} ${data.node.kind === "generic.group" ? "doc" : ""}`} style={{ borderColor: color }}>
+    <div
+      className={`gnode ${data.status ?? ""} ${selected ? "selected" : ""} head-${header}`}
+      title={kindLabel || undefined}
+      style={{
+        borderStyle: border === "none" ? "solid" : border,
+        borderColor: border === "none" ? "transparent" : color,
+        borderWidth: Number(p.borderWidth ?? 1.5),
+        background: fill === "none" ? "transparent" : fill,
+      }}
+    >
       <NodeResizer
         isVisible={selected && ctx.editable}
         minWidth={160}
         minHeight={80}
-        color="#4f46e5"
-        onResizeEnd={(_, p) => ctx.resized(id, { x: p.x, y: p.y, w: p.width, h: p.height })}
+        lineClassName="sel-line"
+        handleClassName="sel-handle"
+        onResizeEnd={(_, r) => ctx.resized(id, { x: r.x, y: r.y, w: r.width, h: r.height })}
       />
       <div className="gnode-head" style={{ color }} onDoubleClick={() => ctx.editable && ctx.setEditing(id)}>
-        <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={20} />
+        {header === "tab" && <GroupTab kind={data.node.kind} icon={data.node.icon} color={color} />}
+        {header === "icon" && <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={20} />}
         <InlineText id={id} value={data.node.label} className="gnode-label" onCommit={(v) => ctx.rename(id, v)} />
-        <span className="gnode-kind">
-          {data.node.kind === "generic.group" ? "" : entry?.label}
-          {region ? ` · ${region}` : ""}
-        </span>
+        {kindLabel && (header === "icon" || header === "label") && <span className="gnode-kind">{kindLabel}</span>}
       </div>
     </div>
   );

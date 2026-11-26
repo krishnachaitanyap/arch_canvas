@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { type Arrowhead, type DiagramModel, resolvedProps, SHAPE_LABELS, SHAPES } from "@archcanvas/shared";
+import { type Arrowhead, BORDER_WIDTHS, catalogEntry, type DiagramModel, resolvedProps, SHAPE_LABELS, SHAPES } from "@archcanvas/shared";
 import { ShapeOutline } from "./flow";
 
 export interface MenuState {
@@ -20,8 +20,8 @@ export interface MenuActions {
   addText: (at: { x: number; y: number }) => void;
   addNote: (at: { x: number; y: number }) => void;
   addGroup: (at: { x: number; y: number }) => void;
-  /** Set shape properties (fill, stroke, textColor, shape) on the clicked shape and any other selected shapes. */
-  styleShapes: (id: string, props: Record<string, string>) => void;
+  /** Set style properties on the clicked item and any other selected items that have them. */
+  styleNodes: (id: string, props: Record<string, string>) => void;
   arrange: (id: string, where: "front" | "back") => void;
   edge: (edgeId: string, patch: Record<string, string | null>) => void;
   reverse: (edgeId: string) => void;
@@ -32,6 +32,14 @@ export interface MenuActions {
 const FILLS = ["#ffffff", "#f4f4f5", "#dae8fc", "#d5e8d4", "#fff2cc", "#ffe6cc", "#f8cecc", "#e1d5e7"];
 const STROKES = ["#000000", "#64748b", "#6c8ebf", "#82b366", "#d6b656", "#d79b00", "#b85450", "#9673a6"];
 const TEXTS = ["#000000", "#475569", "#1d4ed8", "#15803d", "#b45309", "#b91c1c", "#7c3aed", "#ffffff"];
+const GROUP_COLORS = ["#147eba", "#248814", "#232f3e", "#e7157b", "#d86613", "#df3312", "#0078d4", "#326ce5", "#a142f4", "#5f6368"];
+const GROUP_FILLS = ["none", "#ffffff", "#e6f2f8", "#e9f3e6", "#f2f6e8", "#fdf2e9", "#fbeaea", "#f1f3f4"];
+const HEADER_LABELS: [string, string][] = [
+  ["tab", "Icon tab"],
+  ["icon", "Icon"],
+  ["label", "Title"],
+  ["center", "Centred"],
+];
 const LINES = ["#5f6368", "#18181b", "#1d4ed8", "#15803d", "#d97706", "#b91c1c", "#7c3aed", "#94a3b8"];
 const HEADS: [Arrowhead, string][] = [
   ["none", "—"],
@@ -92,15 +100,15 @@ export function ContextMenu({
         {colors.map((c) => (
           <button
             key={c}
-            className={`swatch ${current?.toLowerCase() === c ? "on" : ""}`}
-            style={{ background: c }}
-            title={c}
+            className={`swatch ${current?.toLowerCase() === c ? "on" : ""} ${c === "none" ? "none" : ""}`}
+            style={{ background: c === "none" ? undefined : c }}
+            title={c === "none" ? "No fill" : c}
             disabled={readOnly}
             onClick={() => pick(c)}
           />
         ))}
         <label className="swatch custom" title="Custom colour">
-          <input type="color" value={current ?? "#ffffff"} disabled={readOnly} onChange={(e) => pick(e.target.value)} />
+          <input type="color" value={current && current !== "none" ? current : "#ffffff"} disabled={readOnly} onChange={(e) => pick(e.target.value)} />
         </label>
       </div>
     </div>
@@ -110,6 +118,19 @@ export function ContextMenu({
   const node = t.type === "node" ? model.nodes.find((n) => n.id === t.id) : undefined;
   const edge = t.type === "edge" ? model.edges.find((e) => e.id === t.id) : undefined;
   const shape = node?.kind === "generic.shape" ? resolvedProps(node.kind, node.props) : undefined;
+  const group = node && catalogEntry(node.kind)?.container ? resolvedProps(node.kind, node.props) : undefined;
+  const seg = (title: string, key: string, options: [string, React.ReactNode][], current: string) => (
+    <div className="ctx-swatches">
+      <span className="ctx-label">{title}</span>
+      <div className="ctx-seg">
+        {options.map(([v, label]) => (
+          <button key={v} className={current === v ? "on" : ""} disabled={readOnly} onClick={() => actions.styleNodes(menu.target.type === "node" ? menu.target.id : "", { [key]: v })}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="ctx-menu" ref={ref} style={{ left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()} role="menu">
@@ -118,9 +139,9 @@ export function ContextMenu({
           {item(shape || node.kind === "generic.note" ? "Edit text" : "Rename", () => actions.rename(t.id), { disabled: readOnly, hint: "F2" })}
           {shape && (
             <>
-              {swatches("Fill", FILLS, String(shape.fill), (c) => actions.styleShapes(t.id, { fill: c }))}
-              {swatches("Border", STROKES, String(shape.stroke), (c) => actions.styleShapes(t.id, { stroke: c }))}
-              {swatches("Text", TEXTS, String(shape.textColor), (c) => actions.styleShapes(t.id, { textColor: c }))}
+              {swatches("Fill", FILLS, String(shape.fill), (c) => actions.styleNodes(t.id, { fill: c }))}
+              {swatches("Border", STROKES, String(shape.stroke), (c) => actions.styleNodes(t.id, { stroke: c }))}
+              {swatches("Text", TEXTS, String(shape.textColor), (c) => actions.styleNodes(t.id, { textColor: c }))}
               <div className="ctx-swatches">
                 <span className="ctx-label">Shape</span>
                 <div className="ctx-shapes">
@@ -130,13 +151,23 @@ export function ContextMenu({
                       className={`shape-pick ${shape.shape === s ? "on" : ""}`}
                       title={SHAPE_LABELS[s].title}
                       disabled={readOnly}
-                      onClick={() => actions.styleShapes(t.id, { shape: s })}
+                      onClick={() => actions.styleNodes(t.id, { shape: s })}
                     >
                       <ShapeOutline shape={s} w={26} h={18} fill="#fff" stroke="#000" sw={1.2} />
                     </button>
                   ))}
                 </div>
               </div>
+              <hr />
+            </>
+          )}
+          {group && (
+            <>
+              {seg("Border", "border", [["solid", "──"], ["dashed", "- - -"], ["dotted", "· · ·"], ["none", "None"]], String(group.border))}
+              {seg("Thickness", "borderWidth", BORDER_WIDTHS.map((w) => [w, <span key={w} className="thick" style={{ borderTopWidth: Number(w) }} title={`${w}px`} />]), String(group.borderWidth))}
+              {swatches("Colour", GROUP_COLORS, String(group.color), (c) => actions.styleNodes(t.id, { color: c }))}
+              {swatches("Fill", GROUP_FILLS, String(group.fill), (c) => actions.styleNodes(t.id, { fill: c }))}
+              {seg("Title", "header", HEADER_LABELS, String(group.header))}
               <hr />
             </>
           )}

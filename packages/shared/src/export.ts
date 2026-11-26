@@ -1,5 +1,25 @@
 import { catalogEntry, resolvedProps } from "./catalog.js";
+import { DRAWIO_AWS_GROUP, TAB_ICONS } from "./groups.js";
 import { childrenOf, type DiagramModel, type DiagramNode } from "./model.js";
+
+/** draw.io style for a group box: its border, fill and title, and AWS's group shape for AWS icons. */
+function groupStyle(n: DiagramNode): string {
+  const p = resolvedProps(n.kind, n.props);
+  const color = String(p.color);
+  const border = String(p.border);
+  const line =
+    border === "none"
+      ? "strokeColor=none;"
+      : `strokeColor=${color};strokeWidth=${p.borderWidth};${border === "dashed" ? "dashed=1;" : border === "dotted" ? "dashed=1;dashPattern=1 3;" : "dashed=0;"}`;
+  const fill = `fillColor=${p.fill === "none" ? "none" : p.fill};`;
+  const base = `html=1;whiteSpace=wrap;container=1;collapsible=0;recursiveResize=0;verticalAlign=top;fontColor=${color};${line}${fill}`;
+  if (p.header === "tab" && n.icon && TAB_ICONS.has(n.icon)) {
+    const name = n.icon.slice(4);
+    const gr = /subnet/i.test(name) ? "group_security_group" : Object.entries(DRAWIO_AWS_GROUP).find(([, v]) => v === name)?.[0];
+    if (gr) return `shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.${gr};points=[];outlineConnect=0;gradientColor=none;fontSize=12;fontStyle=0;align=left;spacingLeft=30;${base}`;
+  }
+  return p.header === "center" ? `rounded=0;align=center;spacingTop=4;${base}` : `rounded=0;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;${base}`;
+}
 
 /**
  * Exporters to other tools' formats. They read positions from model.layout (relative to the
@@ -73,13 +93,15 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
       : n.kind === "generic.note"
         ? "shape=note;whiteSpace=wrap;html=1;fillColor=#fef9c3;strokeColor=#facc15;align=left;verticalAlign=top;spacing=8;"
         : entry?.container
-          ? `rounded=1;arcSize=4;whiteSpace=wrap;html=1;container=1;collapsible=0;dashed=1;fillColor=none;strokeColor=${color};verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=${color};`
+          ? groupStyle(n)
           : `rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=${color};strokeWidth=2;fontColor=#202124;`;
     const value =
       shapeProps || n.kind === "generic.note"
         ? esc(n.label).replace(/&#xa;/g, "<br>")
         : entry?.container
-          ? `${entry.label}: ${n.label}`
+          ? n.kind === "generic.group"
+            ? esc(n.label)
+            : `${entry.label}: ${n.label}`
           : `<b>${esc(n.label)}</b><br><font color="${color}" style="font-size:10px">${esc(entry?.label ?? n.kind)}</font>`;
     // <object> carries ArchCanvas metadata as draw.io custom properties (Edit Data), so
     // re-importing is lossless and people can set types in draw.io itself.

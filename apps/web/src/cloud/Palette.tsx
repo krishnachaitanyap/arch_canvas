@@ -1,5 +1,5 @@
 import { type DragEvent, useEffect, useMemo, useState } from "react";
-import { CATALOG, type Category, iconDataUrl, iconScore, type IconEntry, SHAPE_LABELS, type ShapeName, SHAPES } from "@archcanvas/shared";
+import { AWS_GROUPS, awsGroupStyle, CATALOG, type Category, type GroupPreset, iconDataUrl, OTHER_GROUPS, iconScore, type IconEntry, SHAPE_LABELS, type ShapeName, SHAPES } from "@archcanvas/shared";
 import { allPacks, loadPack, useIconsVersion } from "../icons/registry";
 import { ResourceIcon, ShapeOutline } from "./flow";
 
@@ -56,17 +56,20 @@ const SYNONYMS: Record<string, string> = {
  * A curated starting set for mixed estates. Groups become real containers; the rest are
  * documentation components. Icons come from the bundled packs (Lucide, logos, AWS).
  */
-const g = (label: string, icon: string, hint: string): PaletteItem => ({ key: `mc:${label}`, kind: "generic.group", label, icon, hint: `${hint} (group)` });
+/** A styled boundary box (AWS region, Azure VNet, namespace…). */
+const preset = (prefix: string, p: GroupPreset): PaletteItem => ({
+  key: `${prefix}:${p.label}`,
+  kind: "generic.group",
+  label: p.label,
+  icon: p.icon,
+  props: { ...p.style },
+  hint: `${p.hint} (group)`,
+});
+const boundaryItems: PaletteItem[] = OTHER_GROUPS.map((p) => preset("grp", p));
+/** AWS group boxes without a pack icon (the rest come from the AWS pack). */
+const awsExtraGroups: PaletteItem[] = AWS_GROUPS.filter((p) => !p.icon).map((p) => preset("awsgrp", p));
 const c = (label: string, icon: string, hint: string): PaletteItem => ({ key: `mc:${label}`, kind: "generic.component", label, icon, hint });
 const multiCloudItems: PaletteItem[] = [
-  g("On-prem data center", "lucide:building", "on-prem data center datacenter colo site"),
-  g("Corporate network", "lucide:network", "corporate network lan intranet office"),
-  g("DMZ", "lucide:shield", "dmz perimeter zone"),
-  g("AWS account", "aws:AWSAccount", "aws account amazon"),
-  g("AWS region", "aws:Region", "aws region amazon"),
-  g("Azure subscription", "logos:microsoft-azure", "azure subscription microsoft resource group"),
-  g("Kubernetes cluster", "logos:kubernetes", "kubernetes k8s cluster eks aks gke openshift"),
-  g("VMware / private cloud", "logos:vmware", "vmware vsphere private cloud on-prem"),
   c("Server", "lucide:server", "server host bare metal on-prem"),
   c("Virtual machine", "lucide:cpu", "vm virtual machine compute instance"),
   c("Container", "lucide:container", "container docker pod"),
@@ -109,14 +112,18 @@ const basicItems: PaletteItem[] = [
 ];
 
 /** Icon-pack entries become documentation components; AWS group icons (VPC, subnet…) become groups. */
-const fromIcon = (packId: string, i: IconEntry): PaletteItem => ({
-  key: `${packId}:${i.n}`,
-  kind: i.c === "Groups" ? "generic.group" : "generic.component",
-  label: i.t,
-  icon: `${packId}:${i.n}`,
-  svg: i.s,
-  hint: `${i.t}${i.c ? ` · ${i.c}` : ""}${i.c === "Groups" ? " (group)" : ""}`,
-});
+const fromIcon = (packId: string, i: IconEntry): PaletteItem => {
+  const style = packId === "aws" && i.c === "Groups" ? awsGroupStyle(i.n) : undefined;
+  return {
+    key: `${packId}:${i.n}`,
+    kind: i.c === "Groups" ? "generic.group" : "generic.component",
+    label: style ? (AWS_GROUPS.find((g) => g.icon === `aws:${i.n}`)?.label ?? i.t) : i.t,
+    icon: `${packId}:${i.n}`,
+    svg: i.s,
+    ...(style ? { props: { ...style } } : {}),
+    hint: `${i.t}${i.c ? ` · ${i.c}` : ""}${i.c === "Groups" ? " (group)" : ""}`,
+  };
+};
 
 export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => void; disabled: boolean }) {
   useIconsVersion();
@@ -140,6 +147,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
       { id: "gcp", title: "Google Cloud", note: "Deploys with Terraform", items: gcpItems, defaultOpen: true },
       { id: "basics", title: "Diagram basics", items: basicItems, defaultOpen: true },
       { id: "shapes", title: "Flowchart & shapes", note: "Connect them with lines; set arrowheads and dashes in Properties", items: shapeItems, defaultOpen: true },
+      { id: "boundaries", title: "Boundaries · Azure, Kubernetes, on-prem", note: "Groups to nest things in; change border, thickness and colour by right-clicking", items: boundaryItems, defaultOpen: true },
       { id: "multicloud", title: "Multi-cloud & on-prem", note: "Documentation; mix freely with any cloud", items: multiCloudItems, defaultOpen: true },
     ];
     for (const p of packs) {
@@ -150,7 +158,13 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
           ["Services", "AWS · Services"],
           ["Resources", "AWS · Resources"],
         ] as const)
-          out.push({ id: `aws-${c}`, title, packId: p.id, items: icons ? icons.filter((i) => i.c === c).map((i) => fromIcon(p.id, i)) : null, defaultOpen: c === "Groups" });
+          out.push({
+            id: `aws-${c}`,
+            title,
+            packId: p.id,
+            items: icons ? [...icons.filter((i) => i.c === c).map((i) => fromIcon(p.id, i)), ...(c === "Groups" ? awsExtraGroups : [])] : null,
+            defaultOpen: c === "Groups",
+          });
       } else
         out.push({
           id: p.id,
@@ -231,6 +245,15 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
                           <span className="tile-text">T</span>
                         ) : it.kind === "generic.shape" ? (
                           <ShapeOutline shape={String(it.props?.shape)} w={36} h={it.props?.shape === "circle" ? 30 : 26} fill="#fff" stroke="#27272a" sw={1.3} />
+                        ) : it.kind === "generic.group" && !it.icon && it.props ? (
+                          <span
+                            className="tile-box"
+                            style={{
+                              borderStyle: String(it.props.border) === "none" ? "solid" : String(it.props.border),
+                              borderColor: String(it.props.color),
+                              background: it.props.fill && it.props.fill !== "none" ? String(it.props.fill) : "transparent",
+                            }}
+                          />
                         ) : it.svg ? (
                           <img src={iconDataUrl(it.svg)} alt="" width={32} height={32} loading="lazy" draggable={false} />
                         ) : (

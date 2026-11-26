@@ -1,4 +1,5 @@
-import { CATALOG, catalogEntry, SHAPE_LABELS, type ShapeName } from "./catalog.js";
+import { BORDER_WIDTHS, CATALOG, catalogEntry, SHAPE_LABELS, type ShapeName } from "./catalog.js";
+import { DRAWIO_AWS_GROUP } from "./groups.js";
 import { type Arrowhead, type DiagramEdge, type DiagramModel, emptyModel, NODE_ID, type Protocol } from "./model.js";
 import { applyOp, type Op } from "./ops.js";
 import { findAll, htmlToText, parseXml, type XmlElement } from "./xml.js";
@@ -331,6 +332,30 @@ function classifyGroup(c: DrawioCell): Classified {
   return { kind: null, reason: "Unnamed group; its contents are kept", confidence: "none" };
 }
 
+/** A group box's look (border, thickness, colours, title) and its AWS group icon, if any. */
+function groupLook(c: DrawioCell): { props: Record<string, unknown>; icon?: string } {
+  const m = styleMap(c.style);
+  const hex = (v: string | undefined) => (v && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : undefined);
+  const gr = /mxgraph\.aws4\.(group_[a-z0-9_]+)/.exec(m.gricon ?? "")?.[1];
+  let name = gr ? DRAWIO_AWS_GROUP[gr] : undefined;
+  if (gr === "group_security_group") {
+    // draw.io draws AWS subnets with this icon; the fill tells public (green) from private (blue).
+    const fill = hex(m.fillcolor) ?? "";
+    name = /public/i.test(c.label) || /^#e9f3e6|^#f2f6e8/.test(fill) ? "Publicsubnet" : "Privatesubnet";
+  }
+  const props: Record<string, unknown> = {};
+  const color = hex(m.strokecolor) ?? hex(m.fontcolor);
+  if (color) props.color = color;
+  if (m.strokecolor === "none") props.border = "none";
+  else props.border = m.dashed === "1" ? (/^\s*[01](\.\d+)?\s+[1-9]/.test(m.dashpattern ?? "") && Number((m.dashpattern ?? "").trim().split(/\s+/)[0]) <= 1 ? "dotted" : "dashed") : "solid";
+  const w = Number(m.strokewidth ?? 1);
+  props.borderWidth = [...BORDER_WIDTHS].reduce((best, x) => (Math.abs(Number(x) - w) < Math.abs(Number(best) - w) ? x : best), "1");
+  const fill = hex(m.fillcolor);
+  props.fill = fill && fill !== "#ffffff" ? fill : "none";
+  props.header = name ? "tab" : m.align === "center" ? "center" : "label";
+  return { props, icon: name ? `aws:${name}` : undefined };
+}
+
 // ------------------------------------------------------------------ page → model
 
 export function drawioToModel(page: DrawioPage, overrides: Record<string, string | null> = {}): ImportResult {
@@ -424,6 +449,10 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
       if (container) c = { kind: null, reason: `${catalogEntry(c.kind)?.label} is not a group; contents kept`, confidence: "none" };
     }
     kindOf.set(v.id, c.kind);
+    if (container && c.kind && !v.attrs.archcanvas_props && !v.attrs.archcanvas_kind) {
+      const look = groupLook(v);
+      c = { ...c, props: { ...c.props, ...look.props }, icon: c.icon ?? look.icon };
+    }
     iconOf.set(v.id, v.attrs.archcanvas_icon || c.icon);
     propsOf.set(v.id, c.props);
     // Our export labels groups "VPC network: main"; drop the type prefix again.

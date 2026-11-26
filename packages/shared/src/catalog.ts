@@ -55,6 +55,24 @@ const C = {
   devops: "#12b5cb",
 };
 
+/** How a group's box is drawn: border pattern, thickness, colours and its title. */
+export const BORDER_STYLES = ["solid", "dashed", "dotted", "none"] as const;
+export const BORDER_WIDTHS = ["1", "1.5", "2", "3", "4"] as const;
+/** tab: icon in a coloured corner tab (AWS style) · icon: icon and title · label: title only · center: centred title. */
+export const GROUP_HEADERS = ["tab", "icon", "label", "center"] as const;
+export type GroupStyle = { color: string; border: (typeof BORDER_STYLES)[number]; borderWidth: (typeof BORDER_WIDTHS)[number]; fill: string; header: (typeof GROUP_HEADERS)[number] };
+export const GROUP_STYLE_KEYS = ["color", "border", "borderWidth", "fill", "header"] as const;
+
+function groupStyleProps(d: Partial<GroupStyle> & { color: string }): PropSpec[] {
+  return [
+    { key: "color", label: "Colour", type: "color", default: d.color, description: "Border and title colour" },
+    { key: "border", label: "Border", type: "enum", default: d.border ?? "dashed", options: [...BORDER_STYLES] },
+    { key: "borderWidth", label: "Thickness", type: "enum", default: d.borderWidth ?? "1.5", options: [...BORDER_WIDTHS] },
+    { key: "fill", label: "Fill", type: "color", default: d.fill ?? "none", description: "Background colour, or none" },
+    { key: "header", label: "Title", type: "enum", default: d.header ?? "icon", options: [...GROUP_HEADERS] },
+  ];
+}
+
 /** Shapes for flowcharts and general diagrams (generic.shape's `shape` property). */
 export const SHAPES = [
   "rectangle",
@@ -114,7 +132,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: [],
     icon: { abbr: "PRJ", color: C.group },
-    props: [],
+    props: groupStyleProps({ color: C.group }),
   },
   {
     kind: "gcp.region",
@@ -124,7 +142,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: ["gcp.project"],
     icon: { abbr: "RGN", color: C.group },
-    props: [{ key: "region", label: "Region", type: "enum", default: "us-central1", options: REGIONS }],
+    props: [{ key: "region", label: "Region", type: "enum", default: "us-central1", options: REGIONS }, ...groupStyleProps({ color: C.group })],
   },
   {
     kind: "gcp.vpc",
@@ -134,7 +152,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: IN_PROJECT,
     icon: { abbr: "VPC", color: C.network },
-    props: [],
+    props: groupStyleProps({ color: C.network }),
   },
   {
     kind: "gcp.subnet",
@@ -144,7 +162,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: ["gcp.vpc"],
     icon: { abbr: "SUB", color: C.network },
-    props: [{ key: "cidr", label: "CIDR range", type: "string", default: "10.10.0.0/24" }],
+    props: [{ key: "cidr", label: "CIDR range", type: "string", default: "10.10.0.0/24" }, ...groupStyleProps({ color: C.network })],
   },
   {
     kind: "gcp.cloud_run",
@@ -271,7 +289,7 @@ export const CATALOG: CatalogEntry[] = [
     container: true,
     parents: ALL_GROUPS,
     icon: { abbr: "GRP", color: "#71717a" },
-    props: [],
+    props: groupStyleProps({ color: "#71717a" }),
   },
   {
     kind: "generic.shape",
@@ -344,7 +362,8 @@ export function coerce(spec: PropSpec, v: unknown): string | number | boolean | 
     case "enum":
       return spec.options?.includes(String(v)) ? String(v) : undefined;
     case "color":
-      return /^#[0-9a-fA-F]{6}$/.test(String(v)) ? String(v).toLowerCase() : undefined;
+      // "none" = transparent (no fill / no border).
+      return /^#[0-9a-fA-F]{6}$/.test(String(v)) || String(v).toLowerCase() === "none" ? String(v).toLowerCase() : undefined;
     default:
       return String(v);
   }
