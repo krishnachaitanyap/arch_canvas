@@ -55,7 +55,7 @@ const C = {
   devops: "#12b5cb",
 };
 
-const ALL_GROUPS = ["gcp.project", "gcp.region", "gcp.vpc", "gcp.subnet"];
+const ALL_GROUPS = ["gcp.project", "gcp.region", "gcp.vpc", "gcp.subnet", "generic.group"];
 
 export const CATALOG: CatalogEntry[] = [
   {
@@ -224,6 +224,26 @@ export const CATALOG: CatalogEntry[] = [
     props: [],
   },
   {
+    kind: "generic.group",
+    label: "Group",
+    category: "Other",
+    description:
+      "A documentation-only boundary: a team, an environment, an AWS VPC or account, an on-prem data center. Can hold anything; not deployed by Terraform.",
+    container: true,
+    parents: ALL_GROUPS,
+    icon: { abbr: "GRP", color: "#71717a" },
+    props: [],
+  },
+  {
+    kind: "generic.note",
+    label: "Note",
+    category: "Other",
+    description: "A text note on the canvas. Not part of workflows or Terraform.",
+    parents: ALL_GROUPS,
+    icon: { abbr: "TXT", color: "#ca8a04" },
+    props: [],
+  },
+  {
     kind: "generic.component",
     label: "Component",
     category: "Other",
@@ -236,7 +256,11 @@ export const CATALOG: CatalogEntry[] = [
 ];
 
 /** Kinds that exist only on the diagram and are never deployed. */
-export const DOC_ONLY_KINDS = new Set(["generic.client", "generic.component"]);
+export const DOC_ONLY_KINDS = new Set(["generic.client", "generic.component", "generic.group", "generic.note"]);
+
+// Documentation-only groups may wrap anything (an "Org" boundary around projects, a team
+// around services), so every kind accepts one as a parent.
+for (const e of CATALOG) if (!e.parents.includes("generic.group")) e.parents.push("generic.group");
 
 const BY_KIND = new Map(CATALOG.map((e) => [e.kind, e]));
 

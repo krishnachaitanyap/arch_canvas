@@ -1,4 +1,19 @@
-import { Handle, MarkerType, type Edge, type Node, type NodeProps, Position } from "@xyflow/react";
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  BaseEdge,
+  type Edge,
+  EdgeLabelRenderer,
+  type EdgeProps,
+  getBezierPath,
+  getSmoothStepPath,
+  getStraightPath,
+  Handle,
+  MarkerType,
+  type Node,
+  type NodeProps,
+  NodeResizer,
+  Position,
+} from "@xyflow/react";
 import {
   Archive,
   Box,
@@ -17,7 +32,7 @@ import {
   Zap,
 } from "lucide-react";
 import { kindIconRef, useIcon } from "../icons/registry";
-import { catalogEntry, childrenOf, type DiagramModel, type DiagramNode, type ModelDiff } from "@archcanvas/shared";
+import { catalogEntry, childrenOf, type DiagramModel, type DiagramNode, type ModelDiff, type Routing } from "@archcanvas/shared";
 import { NODE_H, NODE_W } from "./layout";
 
 export type Status = "added" | "changed" | "removed";
@@ -73,14 +88,63 @@ export function ResourceIcon({ kind, icon, size = 32 }: { kind: string; icon?: s
   );
 }
 
-function ResourceNode({ data, selected }: NodeProps<CloudNode>) {
+/** Lets custom nodes and edges edit in place without putting callbacks in node data. */
+export interface EditorActions {
+  editable: boolean;
+  editing: string | null;
+  setEditing: (id: string | null) => void;
+  rename: (id: string, label: string) => void;
+  renameEdge: (edgeId: string, label: string) => void;
+  resized: (id: string, box: { x: number; y: number; w: number; h: number }) => void;
+}
+export const EditorContext = createContext<EditorActions>({
+  editable: false,
+  editing: null,
+  setEditing: () => undefined,
+  rename: () => undefined,
+  renameEdge: () => undefined,
+  resized: () => undefined,
+});
+
+function InlineText({ id, value, className, multiline, onCommit }: { id: string; value: string; className?: string; multiline?: boolean; onCommit: (v: string) => void }) {
+  const ctx = useContext(EditorContext);
+  const [draft, setDraft] = useState(value);
+  const editing = ctx.editing === id;
+  useEffect(() => setDraft(value), [value, editing]);
+  if (!editing) return <div className={className}>{value}</div>;
+  const done = (commit: boolean) => {
+    ctx.setEditing(null);
+    if (commit && draft.trim() && draft !== value) onCommit(draft.trim());
+  };
+  const props = {
+    autoFocus: true,
+    value: draft,
+    className: `inline-edit nodrag nopan ${className ?? ""}`,
+    onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
+    onBlur: () => done(true),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      e.stopPropagation();
+      if (e.key === "Escape") done(false);
+      if (e.key === "Enter" && (!multiline || e.metaKey || e.ctrlKey)) done(true);
+    },
+    onFocus: (e: { target: HTMLInputElement | HTMLTextAreaElement }) => e.target.select(),
+  };
+  return multiline ? <textarea {...props} rows={3} /> : <input {...props} />;
+}
+
+function ResourceNode({ id, data, selected }: NodeProps<CloudNode>) {
   const entry = catalogEntry(data.node.kind);
+  const ctx = useContext(EditorContext);
   return (
-    <div className={`rnode ${data.status ?? ""} ${selected ? "selected" : ""}`} title={entry?.description}>
+    <div
+      className={`rnode ${data.status ?? ""} ${selected ? "selected" : ""}`}
+      title={entry?.description}
+      onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
+    >
       <Handle type="target" position={Position.Left} />
       <ResourceIcon kind={data.node.kind} icon={data.node.icon} />
       <div className="rnode-text">
-        <div className="rnode-label">{data.node.label}</div>
+        <InlineText id={id} value={data.node.label} className="rnode-label" onCommit={(v) => ctx.rename(id, v)} />
         <div className="rnode-kind">{entry?.label ?? data.node.kind}</div>
       </div>
       {data.issues ? <span className="rnode-badge" title={`${data.issues} warning(s)`}>{data.issues}</span> : null}
@@ -89,17 +153,25 @@ function ResourceNode({ data, selected }: NodeProps<CloudNode>) {
   );
 }
 
-function GroupNode({ data, selected }: NodeProps<CloudNode>) {
+function GroupNode({ id, data, selected }: NodeProps<CloudNode>) {
   const entry = catalogEntry(data.node.kind);
-  const color = entry?.icon.color ?? "#80868b";
+  const ctx = useContext(EditorContext);
+  const color = data.node.kind === "generic.group" ? "#71717a" : (entry?.icon.color ?? "#80868b");
   const region = data.node.kind === "gcp.region" ? (data.node.props.region as string | undefined) ?? "us-central1" : undefined;
   return (
-    <div className={`gnode ${data.status ?? ""} ${selected ? "selected" : ""}`} style={{ borderColor: color }}>
-      <div className="gnode-head" style={{ color }}>
+    <div className={`gnode ${data.status ?? ""} ${selected ? "selected" : ""} ${data.node.kind === "generic.group" ? "doc" : ""}`} style={{ borderColor: color }}>
+      <NodeResizer
+        isVisible={selected && ctx.editable}
+        minWidth={160}
+        minHeight={80}
+        color="#4f46e5"
+        onResizeEnd={(_, p) => ctx.resized(id, { x: p.x, y: p.y, w: p.width, h: p.height })}
+      />
+      <div className="gnode-head" style={{ color }} onDoubleClick={() => ctx.editable && ctx.setEditing(id)}>
         <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={20} />
-        <span className="gnode-label">{data.node.label}</span>
+        <InlineText id={id} value={data.node.label} className="gnode-label" onCommit={(v) => ctx.rename(id, v)} />
         <span className="gnode-kind">
-          {entry?.label}
+          {data.node.kind === "generic.group" ? "" : entry?.label}
           {region ? ` · ${region}` : ""}
         </span>
       </div>
@@ -107,12 +179,53 @@ function GroupNode({ data, selected }: NodeProps<CloudNode>) {
   );
 }
 
-export const nodeTypes = { resource: ResourceNode, group: GroupNode };
+function NoteNode({ id, data, selected }: NodeProps<CloudNode>) {
+  const ctx = useContext(EditorContext);
+  return (
+    <div className={`note ${selected ? "selected" : ""}`} onDoubleClick={() => ctx.editable && ctx.setEditing(id)}>
+      <NodeResizer isVisible={selected && ctx.editable} minWidth={100} minHeight={40} color="#ca8a04" onResizeEnd={(_, p) => ctx.resized(id, { x: p.x, y: p.y, w: p.width, h: p.height })} />
+      <Handle type="target" position={Position.Left} />
+      <InlineText id={id} value={data.node.label} className="note-text" multiline onCommit={(v) => ctx.rename(id, v)} />
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+
+export const nodeTypes = { resource: ResourceNode, group: GroupNode, note: NoteNode };
+
+/** Connection drawn orthogonal, straight or curved, with a label you can double-click to edit. */
+function SmartEdge(props: EdgeProps<Edge<{ routing?: Routing; label?: string; editable?: boolean }>>) {
+  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, data, label } = props;
+  const ctx = useContext(EditorContext);
+  const params = { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition };
+  const [path, lx, ly] =
+    data?.routing === "straight" ? getStraightPath(params) : data?.routing === "curved" ? getBezierPath(params) : getSmoothStepPath({ ...params, borderRadius: 8 });
+  const text = typeof label === "string" ? label : "";
+  const editing = ctx.editing === `edge:${id}`;
+  return (
+    <>
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={18} />
+      {(text || editing) && (
+        <EdgeLabelRenderer>
+          <div
+            className="edge-label nodrag nopan"
+            style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}
+            onDoubleClick={() => ctx.editable && ctx.setEditing(`edge:${id}`)}
+          >
+            <InlineText id={`edge:${id}`} value={data?.label ?? text} onCommit={(v) => ctx.renameEdge(id, v)} />
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
+export const edgeTypes = { smart: SmartEdge };
 
 /** Model → React Flow nodes/edges. Parents are emitted before children, as React Flow requires. */
 export function toFlow(
   m: DiagramModel,
-  opts: { diff?: ModelDiff; issues?: Map<string, number>; selected?: string | null; highlight?: Highlight | null } = {},
+  opts: { diff?: ModelDiff; issues?: Map<string, number>; selected?: string | null; selectedIds?: Set<string>; highlight?: Highlight | null; editable?: boolean } = {},
 ): { nodes: CloudNode[]; edges: Edge[] } {
   const statusOf = (id: string): Status | undefined =>
     opts.diff?.addedNodes.includes(id)
@@ -126,20 +239,21 @@ export function toFlow(
   const visit = (parentId: string | undefined) => {
     for (const n of childrenOf(m, parentId)) {
       const container = catalogEntry(n.kind)?.container;
+      const note = n.kind === "generic.note";
       const box = m.layout[n.id] ?? { x: 0, y: 0 };
-      const w = box.w ?? NODE_W;
-      const h = box.h ?? NODE_H;
+      const w = box.w ?? (note ? 200 : NODE_W);
+      const h = box.h ?? (note ? 90 : NODE_H);
       nodes.push({
         id: n.id,
-        type: container ? "group" : "resource",
+        type: container ? "group" : note ? "note" : "resource",
         position: { x: box.x, y: box.y },
         ...(n.parentId ? { parentId: n.parentId } : {}),
         data: { node: n, status: statusOf(n.id), issues: opts.issues?.get(n.id) },
-        style: container ? { width: w, height: h } : { width: w },
+        style: container || note ? { width: w, height: h } : { width: w },
         width: w,
         height: h,
-        selected: opts.selected === n.id,
-        zIndex: container ? 0 : 10,
+        selected: opts.selectedIds ? opts.selectedIds.has(n.id) : opts.selected === n.id,
+        zIndex: container ? 0 : note ? 5 : 10,
         className: emphasis(opts.highlight, n.id, "node", Boolean(container)),
       });
       visit(n.id);
@@ -158,14 +272,15 @@ export function toFlow(
       source: e.from,
       target: e.to,
       label: e.label ?? e.protocol,
-      type: "smoothstep",
+      type: "smart",
+      data: { routing: e.routing, label: e.label ?? e.protocol ?? "", editable: opts.editable },
+      reconnectable: Boolean(opts.editable),
+      selected: opts.selectedIds?.has(`edge:${e.id}`),
       animated: status === "added" || Boolean(current),
       zIndex: current ? 30 : 20,
       className: [status ?? "", hl ? (current ? "hl" : visited ? "visited" : "dim") : ""].join(" ").trim(),
       style: { stroke: color, strokeWidth: current ? 3 : visited ? 2 : 1.6, ...(status === "removed" ? { strokeDasharray: "6 4" } : {}) },
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
-      labelStyle: { fontSize: 11, fill: "#3c4043" },
-      labelBgStyle: { fill: "#fff" },
     };
   });
   return { nodes, edges };

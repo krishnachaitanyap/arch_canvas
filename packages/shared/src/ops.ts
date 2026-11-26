@@ -8,6 +8,7 @@ import {
   nodeById,
   type Protocol,
   PROTOCOLS,
+  type Routing,
 } from "./model.js";
 
 /** Every change to a model, by a person or the agent, is one of these operations. */
@@ -15,7 +16,8 @@ export type Op =
   | { op: "add_node"; id: string; kind: string; label: string; parentId?: string; props?: Record<string, unknown>; icon?: string }
   | { op: "update_node"; id: string; label?: string; parentId?: string | null; props?: Record<string, unknown>; icon?: string | null }
   | { op: "remove_node"; id: string }
-  | { op: "connect"; from: string; to: string; label?: string; protocol?: Protocol }
+  | { op: "connect"; from: string; to: string; label?: string; protocol?: Protocol; routing?: Routing }
+  | { op: "update_edge"; from: string; to: string; label?: string | null; protocol?: Protocol | null; routing?: Routing | null }
   | { op: "disconnect"; from: string; to: string };
 
 export type OpResult = { ok: true; model: DiagramModel } | { ok: false; error: string };
@@ -85,7 +87,21 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       const edge: DiagramEdge = { id, from: op.from, to: op.to };
       if (op.label) edge.label = op.label;
       if (op.protocol) edge.protocol = op.protocol;
+      if (op.routing) edge.routing = op.routing;
       return ok({ ...m, edges: [...m.edges, edge] });
+    }
+    case "update_edge": {
+      const id = edgeId(op.from, op.to);
+      const e = m.edges.find((x) => x.id === id);
+      if (!e) return fail(`"${op.from}" is not connected to "${op.to}"`);
+      if (op.protocol && !PROTOCOLS.includes(op.protocol)) return fail(`protocol must be one of ${PROTOCOLS.join(", ")}`);
+      const next: DiagramEdge = { ...e };
+      for (const k of ["label", "protocol", "routing"] as const) {
+        const v = op[k];
+        if (v === null || v === "") delete next[k];
+        else if (v !== undefined) (next as Record<string, unknown>)[k] = k === "label" ? String(v).slice(0, 60) : v;
+      }
+      return ok({ ...m, edges: m.edges.map((x) => (x.id === id ? next : x)) });
     }
     case "disconnect": {
       const id = edgeId(op.from, op.to);

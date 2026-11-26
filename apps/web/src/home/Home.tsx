@@ -1,5 +1,6 @@
 import { type FormEvent, lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { type DiagramModel, type DrawioPage, readDrawio } from "@archcanvas/shared";
+import { Link } from "../router";
 import { api, type DiagramKind, type DiagramSummary, type Member, type Project, type Role, type Workspace } from "../api";
 
 // The review dialog shows a live canvas preview, so it brings React Flow with it.
@@ -16,11 +17,11 @@ export interface HomeProps {
   project: Project | null;
   me: string;
   onWorkspace: (id: string) => void;
-  onProject: (id: string) => void;
+  projectHref: (id: string) => string;
+  diagramHref: (id: string, history?: boolean) => string;
   /** Reload workspaces and projects (after create / rename / delete). */
   reload: (select?: { workspaceId?: string; projectId?: string }) => Promise<void>;
   reloadIconPacks: () => Promise<void>;
-  onOpen: (diagramId: string, opts?: { history?: boolean }) => void;
   onNew: (kind: DiagramKind | "sample") => void;
   onImport: (title: string, model: DiagramModel, fileName: string) => void;
   setStatus: SetStatus;
@@ -29,7 +30,7 @@ export interface HomeProps {
 const canEdit = (r: Role | undefined) => r === "owner" || r === "editor";
 
 export function Home(props: HomeProps) {
-  const { workspaces, workspace, projects, project, onWorkspace, onProject, reload, setStatus } = props;
+  const { workspaces, workspace, projects, project, onWorkspace, projectHref, reload, setStatus } = props;
   const [dialog, setDialog] = useState<null | "workspace" | "project" | "members" | "rename-ws" | "icons">(null);
   const role = workspace?.role;
 
@@ -88,10 +89,10 @@ export function Home(props: HomeProps) {
         <ul className="project-list">
           {projects.map((p) => (
             <li key={p.id}>
-              <button className={p.id === project?.id ? "active" : ""} onClick={() => onProject(p.id)}>
+              <Link to={projectHref(p.id)} className={p.id === project?.id ? "active" : ""}>
                 <span>{p.name}</span>
                 <span className="count">{p.diagram_count}</span>
-              </button>
+              </Link>
             </li>
           ))}
         </ul>
@@ -171,7 +172,7 @@ function ProjectView({
   role,
   reload,
   workspace,
-  onOpen,
+  diagramHref,
   onNew,
   onImport,
   setStatus,
@@ -295,15 +296,17 @@ function ProjectView({
         <div className="cards">
           {shown.map((d) => (
             <div key={d.id} className="card">
-              <button className="card-main" onClick={() => onOpen(d.id)}>
+              <Link to={diagramHref(d.id)} className="card-main">
                 <span className="card-kind">{d.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
                 <span className="card-title">{d.title}</span>
                 <span className="hint">
                   v{d.version ?? 1} · {d.kind === "cloud" ? `${d.node_count ?? 0} resources · ` : ""}updated {timeAgo(d.updated_at)}
                 </span>
-              </button>
+              </Link>
               <div className="card-actions">
-                <button onClick={() => onOpen(d.id, { history: true })}>History</button>
+                <Link to={diagramHref(d.id, true)} className="card-link">
+                  History
+                </Link>
                 {editable && <button onClick={() => void run(() => api.duplicateDiagram(d.id), "Duplicated").then(after)}>Duplicate</button>}
                 {editable && projects.length > 1 && <button onClick={() => setMoving(d)}>Move</button>}
                 {editable && (

@@ -139,20 +139,24 @@ try {
   await sleep(1500);
   await shot("compare");
 
-  // 7. Icon library (AWS icons) in the palette
+  // 7. Unified palette: search across Google Cloud, AWS, Lucide and logos
   await click(".history-head button", "Close");
-  await click(".palette .tabs button", "Icons");
-  await waitFor(".icon-tile");
+  await waitFor(".palette-search");
   await js(`
-    const i = document.querySelector('input[aria-label="Search icons"]');
+    const i = document.querySelector(".palette-search");
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(i, "database");
     i.dispatchEvent(new Event("input", { bubbles: true }));
   `);
-  await sleep(1200);
+  await sleep(2500);
   await shot("icons");
+  await js(`
+    const i = document.querySelector(".palette-search");
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(i, "");
+    i.dispatchEvent(new Event("input", { bubbles: true }));
+  `);
 
   // 8. draw.io import review (drop the AWS example on the project page)
-  await click("button.logo");
+  await click(".logo");
   await waitFor(".dropzone");
   const drawio = readFileSync(path.join(import.meta.dirname, "..", "docs", "examples", "aws-orders.drawio"), "utf8");
   await js(`

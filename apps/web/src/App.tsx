@@ -5,6 +5,7 @@ import { api, type AppConfig, type Diagram, type DiagramKind, devUser, type Proj
 import { Home } from "./home/Home";
 import { setWorkspacePacks } from "./icons/registry";
 import type { CurrentState } from "./history/VersionHistory";
+import { Link, navigate, type NewKind, parseRoute, paths, setNavigationBlocker, useLocation } from "./router";
 
 // Each editor is its own chunk: the whiteboard pulls in Excalidraw + Mermaid, the cloud editor React Flow + ELK.
 const CloudEditor = lazy(() => import("./cloud/CloudEditor").then((m) => ({ default: m.CloudEditor })));
@@ -15,7 +16,10 @@ interface Doc {
   /** Bumped to remount the editor when another diagram (or a restored version) is loaded. */
   key: number;
   id: string | null;
-  projectId: string | null;
+  /** For unsaved new diagrams: the route that created it. */
+  newRoute?: string;
+  workspaceId: string;
+  projectId: string;
   kind: DiagramKind;
   title: string;
   loaded: Diagram | null;
@@ -27,62 +31,164 @@ interface Doc {
 }
 
 type Status = { kind: "ok" | "error"; text: string } | null;
+interface PendingImport {
+  title: string;
+  model: DiagramModel;
+  fileName: string;
+}
 
 const LS_WS = "archcanvas.workspace";
 const LS_PROJECT = "archcanvas.project";
 let nextKey = 1;
 
 export function App() {
+  const loc = useLocation();
+  const route = parseRoute(loc.path);
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [wsId, setWsId] = useState<string | null>(() => localStorage.getItem(LS_WS));
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem(LS_PROJECT));
+  const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
+  const [projects, setProjects] = useState<{ ws: string; list: Project[] } | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
-  const [history, setHistory] = useState(false);
   const [status, setStatus] = useState<Status>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
   const currentRef = useRef<(() => CurrentState) | null>(null);
-
-  const workspace = workspaces.find((w) => w.id === wsId) ?? null;
-  const project = projects.find((p) => p.id === projectId) ?? null;
+  const pendingImport = useRef<PendingImport | null>(null);
 
   const registerCurrent = useCallback((fn: () => CurrentState) => {
     currentRef.current = fn;
   }, []);
   const getCurrent = useCallback(() => currentRef.current?.() ?? null, []);
 
-  /** Loads workspaces and the selected workspace's projects, keeping (or applying) the selection. */
-  const reload = useCallback(
-    async (select: { workspaceId?: string; projectId?: string } = {}) => {
-      try {
-        const ws = await api.workspaces();
-        setWorkspaces(ws);
-        const w = ws.find((x) => x.id === (select.workspaceId ?? wsId)) ?? ws[0];
-        if (!w) return;
-        setWsId(w.id);
-        localStorage.setItem(LS_WS, w.id);
-        const ps = await api.projects(w.id);
-        setProjects(ps);
-        const p = ps.find((x) => x.id === (select.projectId ?? projectId)) ?? ps[0] ?? null;
-        setProjectId(p?.id ?? null);
-        if (p) localStorage.setItem(LS_PROJECT, p.id);
-      } catch (e) {
-        setStatus({ kind: "error", text: (e as Error).message });
-      }
-    },
-    [wsId, projectId],
-  );
+  // Which workspace / project is in view comes from the URL (or from the open diagram).
+  const wsId =
+    route.name === "workspace" || route.name === "project" || route.name === "new" ? route.ws : route.name === "diagram" ? (doc?.workspaceId ?? null) : null;
+  const projectId = route.name === "project" || route.name === "new" ? route.project : route.name === "diagram" ? (doc?.projectId ?? null) : null;
+  const workspace = workspaces?.find((w) => w.id === wsId) ?? null;
+  const projectList = projects && projects.ws === wsId ? projects.list : [];
+  const project = projectList.find((p) => p.id === projectId) ?? null;
 
-  useEffect(() => {
-    api.config().then(setConfig, () => setConfig(null));
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const loadWorkspaces = useCallback(async () => {
+    try {
+      setWorkspaces(await api.workspaces());
+    } catch (e) {
+      setStatus({ kind: "error", text: (e as Error).message });
+      setWorkspaces([]);
+    }
+  }, []);
+
+  const loadProjects = useCallback(async (ws: string) => {
+    try {
+      setProjects({ ws, list: await api.projects(ws) });
+    } catch (e) {
+      setStatus({ kind: "error", text: (e as Error).message });
+      setProjects({ ws, list: [] });
+    }
   }, []);
 
   useEffect(() => {
+    api.config().then(setConfig, () => setConfig(null));
+    void loadWorkspaces();
+  }, [loadWorkspaces]);
+
+  useEffect(() => {
+    if (wsId && projects?.ws !== wsId) void loadProjects(wsId);
+    if (wsId) localStorage.setItem(LS_WS, wsId);
+  }, [wsId, projects?.ws, loadProjects]);
+  useEffect(() => {
+    if (projectId) localStorage.setItem(LS_PROJECT, projectId);
+  }, [projectId]);
+
+  // Resolve "/" and "/w/:ws" to a concrete page.
+  useEffect(() => {
+    if (!workspaces) return;
+    if (route.name === "root" || route.name === "notfound") {
+      if (route.name === "notfound") setStatus({ kind: "error", text: `Nothing at ${loc.path}` });
+      const ws = workspaces.find((w) => w.id === localStorage.getItem(LS_WS)) ?? workspaces[0];
+      if (ws) navigate(paths.workspace(ws.id), { replace: true, force: true });
+    } else if (route.name === "workspace") {
+      if (!workspaces.some((w) => w.id === route.ws)) {
+        setStatus({ kind: "error", text: "That workspace doesn't exist or you don't have access." });
+        navigate("/", { replace: true, force: true });
+      } else if (projects?.ws === route.ws) {
+        const p = projects.list.find((x) => x.id === localStorage.getItem(LS_PROJECT)) ?? projects.list[0];
+        if (p) navigate(paths.project(route.ws, p.id), { replace: true, force: true });
+      }
+    }
+  }, [route.name, workspaces, projects, loc.path, route]);
+
+  // Load or create the document the URL points at.
+  const routeKey = loc.path;
+  useEffect(() => {
+    if (route.name === "diagram") {
+      if (doc?.id === route.id) return;
+      let cancelled = false;
+      void api.getDiagram(route.id).then(
+        (d) => {
+          if (cancelled) return;
+          currentRef.current = null;
+          setDoc(docFrom(d));
+        },
+        (e) => {
+          if (cancelled) return;
+          setStatus({ kind: "error", text: (e as Error).message });
+          navigate("/", { replace: true, force: true });
+        },
+      );
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (route.name === "new") {
+      if (doc && !doc.id && doc.newRoute === routeKey) return;
+      if (!workspaces) return; // wait for workspaces
+      const role = workspaces.find((w) => w.id === route.ws)?.role;
+      if (!role) {
+        setStatus({ kind: "error", text: "That workspace doesn't exist or you don't have access." });
+        navigate("/", { replace: true, force: true });
+        return;
+      }
+      if (role === "viewer") {
+        setStatus({ kind: "error", text: "Viewers can't create diagrams in this workspace." });
+        navigate(paths.project(route.ws, route.project), { replace: true, force: true });
+        return;
+      }
+      currentRef.current = null;
+      if (route.kind === "import") {
+        const p = pendingImport.current;
+        if (!p) {
+          // Imports live in memory until saved; after a refresh there is nothing to show.
+          navigate(paths.project(route.ws, route.project), { replace: true, force: true });
+          return;
+        }
+        setDoc({ key: nextKey++, id: null, newRoute: routeKey, workspaceId: route.ws, projectId: route.project, kind: "cloud", title: p.title, loaded: null, model: p.model, role, version: null, imported: true });
+        const n = p.model.nodes.length;
+        setStatus({ kind: "ok", text: `Imported ${n} item${n === 1 ? "" : "s"} from ${p.fileName}. Check Flows, Terraform and Review, then Save.` });
+        return;
+      }
+      setDoc({
+        key: nextKey++,
+        id: null,
+        newRoute: routeKey,
+        workspaceId: route.ws,
+        projectId: route.project,
+        kind: route.kind === "whiteboard" ? "whiteboard" : "cloud",
+        title: route.kind === "whiteboard" ? "Untitled whiteboard" : route.kind === "sample" ? "GCP web app (sample)" : "Untitled architecture",
+        loaded: null,
+        model: route.kind === "sample" ? structuredClone(SAMPLE_MODEL) : emptyModel(),
+        role,
+        version: null,
+      });
+      return;
+    }
+    if (doc) {
+      setDoc(null);
+      currentRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeKey, workspaces]);
+
+  useEffect(() => {
     if (status?.kind !== "ok") return;
-    const t = setTimeout(() => setStatus(null), 3000);
+    const t = setTimeout(() => setStatus(null), 3500);
     return () => clearTimeout(t);
   }, [status]);
 
@@ -97,101 +203,63 @@ export function App() {
     return () => ro.disconnect();
   }, [config]);
 
-  // Warn before closing the tab with unsaved changes.
+  // Unsaved changes: warn on tab close, and on in-app navigation away from the diagram.
   useEffect(() => {
     const onUnload = (e: BeforeUnloadEvent) => {
       if (doc && getCurrent()?.dirty) e.preventDefault();
     };
     window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
+    const here = doc ? (doc.id ? `/d/${doc.id}` : doc.newRoute) : undefined;
+    setNavigationBlocker(
+      doc
+        ? (to) => {
+            const staying = doc.id ? to.startsWith(`/d/${doc.id}`) : to === here;
+            return staying || !getCurrent()?.dirty || confirm("You have unsaved changes. Leave without saving?");
+          }
+        : null,
+    );
+    return () => {
+      window.removeEventListener("beforeunload", onUnload);
+      setNavigationBlocker(null);
+    };
   }, [doc, getCurrent]);
 
-  // Icon packs uploaded to the workspace in view (the open diagram's, or the selected one).
-  const iconWorkspace = doc?.loaded?.workspace_id ?? wsId;
+  // Icon packs uploaded to the workspace in view.
   const reloadIconPacks = useCallback(async () => {
-    if (!iconWorkspace) return setWorkspacePacks([]);
-    await api.iconPacks(iconWorkspace).then(setWorkspacePacks, () => setWorkspacePacks([]));
-  }, [iconWorkspace]);
+    if (!wsId) return setWorkspacePacks([]);
+    await api.iconPacks(wsId).then(setWorkspacePacks, () => setWorkspacePacks([]));
+  }, [wsId]);
   useEffect(() => {
     void reloadIconPacks();
   }, [reloadIconPacks]);
 
-  const confirmLeave = () => !doc || !getCurrent()?.dirty || confirm("You have unsaved changes. Leave without saving?");
-
-  async function open(id: string, opts: { history?: boolean } = {}) {
-    if (doc?.id !== id && !confirmLeave()) return;
-    try {
-      const d = await api.getDiagram(id);
-      setStatus(null);
-      currentRef.current = null;
-      setDoc({
-        key: nextKey++,
-        id: d.id,
-        projectId: d.project_id,
-        kind: d.kind,
-        title: d.title,
-        loaded: d,
-        model: d.model ?? emptyModel(),
-        role: d.role ?? "viewer",
-        version: d.version,
-      });
-      setHistory(Boolean(opts.history));
-    } catch (e) {
-      setStatus({ kind: "error", text: (e as Error).message });
-    }
-  }
-
-  function create(kind: DiagramKind | "sample") {
-    if (!project || !workspace) return;
-    currentRef.current = null;
-    setStatus(null);
-    setHistory(false);
-    setDoc({
-      key: nextKey++,
-      id: null,
-      projectId: project.id,
-      kind: kind === "whiteboard" ? "whiteboard" : "cloud",
-      title: kind === "whiteboard" ? "Untitled whiteboard" : kind === "sample" ? "GCP web app (sample)" : "Untitled architecture",
-      loaded: null,
-      model: kind === "sample" ? structuredClone(SAMPLE_MODEL) : emptyModel(),
-      role: workspace.role,
-      version: null,
-    });
-  }
-
-  function importDiagram(title: string, model: DiagramModel, fileName: string) {
-    if (!project || !workspace) return;
-    currentRef.current = null;
-    setHistory(false);
-    setDoc({ key: nextKey++, id: null, projectId: project.id, kind: "cloud", title, loaded: null, model, role: workspace.role, version: null, imported: true });
-    const n = model.nodes.length;
-    setStatus({ kind: "ok", text: `Imported ${n} item${n === 1 ? "" : "s"} from ${fileName}. Check Flows, Terraform and Review, then Save.` });
-  }
-
-  function goHome() {
-    if (!confirmLeave()) return;
-    setDoc(null);
-    setHistory(false);
-    currentRef.current = null;
-    void reload();
-  }
+  /** Refresh lists after changes; optionally go to a workspace / project. */
+  const reload = useCallback(
+    async (select: { workspaceId?: string; projectId?: string } = {}) => {
+      const ws = await api.workspaces().catch(() => null);
+      if (ws) setWorkspaces(ws);
+      const target = select.workspaceId ?? wsId ?? ws?.[0]?.id;
+      if (!target || (ws && !ws.some((w) => w.id === target))) return void navigate("/", { replace: true, force: true });
+      const list = await api.projects(target).catch(() => [] as Project[]);
+      setProjects({ ws: target, list });
+      if (select.workspaceId || select.projectId) {
+        const p = list.find((x) => x.id === select.projectId) ?? list.find((x) => x.id === projectId) ?? list[0];
+        navigate(p ? paths.project(target, p.id) : paths.workspace(target));
+      } else if (projectId && !list.some((x) => x.id === projectId)) navigate(list[0] ? paths.project(target, list[0].id) : paths.workspace(target), { replace: true });
+    },
+    [wsId, projectId],
+  );
 
   const onSaved = (d: Diagram) => {
-    setDoc((cur) => (cur ? { ...cur, id: d.id, version: d.version } : cur));
+    setDoc((cur) => (cur ? { ...cur, id: d.id, version: d.version, newRoute: undefined } : cur));
+    if (!doc?.id) navigate(paths.diagram(d.id), { replace: true, force: true });
+    if (wsId) void loadProjects(wsId);
   };
 
   const canEdit = doc?.role === "owner" || doc?.role === "editor";
-  const editorProps = doc && {
-    diagramId: doc.id,
-    projectId: doc.projectId,
-    canEdit,
-    registerCurrent,
-    title: doc.title,
-    toolbar,
-    setStatus,
-    onSaved,
-  };
-  const docProject = doc ? projects.find((p) => p.id === doc.projectId) : undefined;
+  const view = route.name === "diagram" ? route.view : "edit";
+  const tab = loc.search.get("tab") ?? undefined;
+  const homePath = wsId && projectId ? paths.project(wsId, projectId) : wsId ? paths.workspace(wsId) : "/";
 
   return (
     <div className="app">
@@ -209,7 +277,7 @@ export function App() {
             onClick={() => {
               if (confirm("Reset the demo? Your changes in this browser are deleted and the examples come back.")) {
                 resetDemo();
-                location.reload();
+                window.location.href = `${import.meta.env.BASE_URL}`;
               }
             }}
           >
@@ -218,19 +286,15 @@ export function App() {
         </div>
       )}
       <header className="topbar">
-        <button className="logo" onClick={goHome} title="All projects">
+        <Link to={homePath} className="logo" title="Project page">
           ArchCanvas
-        </button>
+        </Link>
         {doc ? (
           <>
             <nav className="crumbs">
-              <button className="link" onClick={goHome}>
-                {doc.loaded?.workspace_name ?? workspace?.name}
-              </button>
+              <Link to={paths.workspace(doc.workspaceId)}>{doc.loaded?.workspace_name ?? workspace?.name ?? "Workspace"}</Link>
               <span>/</span>
-              <button className="link" onClick={goHome}>
-                {doc.loaded?.project_name ?? docProject?.name}
-              </button>
+              <Link to={paths.project(doc.workspaceId, doc.projectId)}>{doc.loaded?.project_name ?? project?.name ?? "Project"}</Link>
               <span>/</span>
             </nav>
             <input
@@ -241,9 +305,13 @@ export function App() {
               aria-label="Diagram title"
             />
             <span className="kind-pill">{doc.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
-            <button className="version-badge" disabled={!doc.id} onClick={() => setHistory(true)} title="Version history and compare">
-              {doc.version ? `v${doc.version}` : "unsaved"} · History
-            </button>
+            {doc.id ? (
+              <Link to={paths.diagram(doc.id, "history")} className="version-badge" title="Version history and compare">
+                {doc.version ? `v${doc.version}` : "v?"} · History
+              </Link>
+            ) : (
+              <span className="version-badge disabled">unsaved</span>
+            )}
           </>
         ) : (
           <span className="hint">{workspace ? `${workspace.name}${project ? ` / ${project.name}` : ""}` : ""}</span>
@@ -267,9 +335,8 @@ export function App() {
                 const v = e.target.value.trim();
                 if (v === (devUser() ?? config.devUser)) return;
                 setDevUser(v && v !== config.devUser ? v : null);
-                setDoc(null);
-                setHistory(false);
-                void reload();
+                setProjects(null);
+                void loadWorkspaces().then(() => navigate("/", { force: true }));
               }}
               onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
               aria-label="Acting user (dev mode)"
@@ -278,56 +345,103 @@ export function App() {
         )}
       </header>
 
-      {doc && editorProps ? (
+      {doc ? (
         <Suspense fallback={<div className="loading">Loading editor…</div>}>
           {doc.kind === "cloud" ? (
-            <CloudEditor key={doc.key} {...editorProps} initial={doc.model} config={config} initialTab={doc.imported && doc.model.edges.length ? "flows" : undefined} />
+            <CloudEditor
+              key={doc.key}
+              diagramId={doc.id}
+              projectId={doc.projectId}
+              canEdit={canEdit}
+              registerCurrent={registerCurrent}
+              title={doc.title}
+              toolbar={toolbar}
+              setStatus={setStatus}
+              onSaved={onSaved}
+              initial={doc.model}
+              config={config}
+              initialTab={(tab as never) ?? (doc.imported && doc.model.edges.length ? "flows" : undefined)}
+              onTabChange={(t) => {
+                const base = doc.id ? paths.diagram(doc.id) : (doc.newRoute ?? loc.path);
+                navigate(t === "assistant" ? base : `${base}?tab=${t}`, { replace: true, force: true });
+              }}
+              presenting={view === "present" ? { start: loc.search.get("wf") ? Number(loc.search.get("wf")) : undefined } : null}
+              onPresent={(start) =>
+                doc.id ? navigate(paths.diagram(doc.id, "present", start !== undefined ? `?wf=${start}` : "")) : setStatus({ kind: "error", text: "Save the diagram to present it." })
+              }
+              onExitPresent={() => doc.id && navigate(paths.diagram(doc.id))}
+            />
           ) : (
-            <WhiteboardEditor key={doc.key} {...editorProps} initial={doc.loaded} />
+            <WhiteboardEditor
+              key={doc.key}
+              diagramId={doc.id}
+              projectId={doc.projectId}
+              canEdit={canEdit}
+              registerCurrent={registerCurrent}
+              title={doc.title}
+              toolbar={toolbar}
+              setStatus={setStatus}
+              onSaved={onSaved}
+              initial={doc.loaded}
+            />
           )}
-          {history && doc.id && (
+          {view === "history" && doc.id && (
             <VersionHistory
               diagramId={doc.id}
               title={doc.title}
               canEdit={canEdit}
               getCurrent={getCurrent}
-              onClose={() => setHistory(false)}
+              onClose={() => navigate(paths.diagram(doc.id!))}
               onRestored={() => {
                 currentRef.current = null;
-                setHistory(false);
-                setDoc((d) => d && { ...d, version: null });
-                void api.getDiagram(doc.id!).then((d) =>
-                  setDoc((cur) => cur && { ...cur, key: nextKey++, loaded: d, model: d.model ?? emptyModel(), version: d.version, kind: d.kind }),
-                );
+                void api.getDiagram(doc.id!).then((d) => {
+                  setDoc({ ...docFrom(d), key: nextKey++ });
+                  navigate(paths.diagram(d.id), { force: true });
+                });
               }}
-              onDuplicated={(id) => {
-                currentRef.current = null;
-                void open(id);
-              }}
+              onDuplicated={(id) => navigate(paths.diagram(id))}
               setStatus={setStatus}
             />
           )}
         </Suspense>
+      ) : route.name === "diagram" || route.name === "new" ? (
+        <div className="loading">Loading…</div>
       ) : (
         <Home
-          workspaces={workspaces}
+          workspaces={workspaces ?? []}
           workspace={workspace}
-          projects={projects}
+          projects={projectList}
           project={project}
           me={devUser() ?? config?.devUser ?? ""}
-          onWorkspace={(id) => void reload({ workspaceId: id })}
-          onProject={(id) => {
-            setProjectId(id);
-            localStorage.setItem(LS_PROJECT, id);
-          }}
+          onWorkspace={(id) => navigate(paths.workspace(id))}
+          projectHref={(id) => (wsId ? paths.project(wsId, id) : "/")}
+          diagramHref={(id, history) => paths.diagram(id, history ? "history" : "edit")}
           reload={reload}
           reloadIconPacks={reloadIconPacks}
-          onOpen={(id, o) => void open(id, o)}
-          onNew={create}
-          onImport={importDiagram}
+          onNew={(kind) => wsId && projectId && navigate(paths.newDiagram(wsId, projectId, kind as NewKind))}
+          onImport={(title, model, fileName) => {
+            if (!wsId || !projectId) return;
+            pendingImport.current = { title, model, fileName };
+            navigate(paths.newDiagram(wsId, projectId, "import"));
+          }}
           setStatus={setStatus}
         />
       )}
     </div>
   );
+}
+
+function docFrom(d: Diagram): Doc {
+  return {
+    key: nextKey++,
+    id: d.id,
+    workspaceId: d.workspace_id!,
+    projectId: d.project_id,
+    kind: d.kind,
+    title: d.title,
+    loaded: d,
+    model: d.model ?? emptyModel(),
+    role: d.role ?? "viewer",
+    version: d.version,
+  };
 }

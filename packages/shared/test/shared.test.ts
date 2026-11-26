@@ -27,6 +27,20 @@ describe("ops", () => {
     expect(!bad.ok && bad.error).toMatch(/cannot be placed inside GCP project/);
   });
 
+  it("lets documentation groups wrap anything and edits connections in place", () => {
+    const r = applyOps(emptyModel(), [
+      { op: "add_node", id: "org", kind: "generic.group", label: "Acme org" },
+      { op: "add_node", id: "p", kind: "gcp.project", label: "Prod", parentId: "org" },
+      { op: "add_node", id: "api", kind: "gcp.cloud_run", label: "API", parentId: "p" },
+      { op: "add_node", id: "db", kind: "gcp.cloud_sql", label: "DB", parentId: "p" },
+      { op: "connect", from: "api", to: "db", protocol: "sql" },
+      { op: "update_edge", from: "api", to: "db", label: "reads", routing: "curved", protocol: null },
+    ]);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.model.edges[0]).toEqual({ id: "api__db", from: "api", to: "db", label: "reads", routing: "curved" });
+    expect(compileTerraform(r.model).resources).toContain("google_cloud_run_v2_service.api");
+  });
+
   it("rejects bad ids, unknown kinds, bad props and duplicate edges", () => {
     const m = emptyModel();
     expect(applyOp(m, { op: "add_node", id: "Bad-Id", kind: "gcp.cloud_run", label: "x" }).ok).toBe(false);

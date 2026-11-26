@@ -250,7 +250,9 @@ function classifyGroup(c: DrawioCell): Classified {
     return { kind: "gcp.region", reason: "Group named after a GCP region", confidence: "high" };
   for (const [re, kind] of GROUP_SPACED)
     if (re.test(text)) return { kind, reason: `Group "${c.label.split("\n")[0] || "unnamed"}" → ${catalogEntry(kind)!.label}`, confidence: "medium" };
-  return { kind: null, reason: c.label ? `Group "${c.label.split("\n")[0]}" has no GCP equivalent; its contents are kept` : "Unnamed group; its contents are kept", confidence: "none" };
+  // A named box with no GCP meaning (a team, an environment) stays as a documentation-only group.
+  if (c.label.trim()) return { kind: "generic.group", reason: `Group "${c.label.split("\n")[0]}" → documentation-only group`, confidence: "low" };
+  return { kind: null, reason: "Unnamed group; its contents are kept", confidence: "none" };
 }
 
 // ------------------------------------------------------------------ page → model

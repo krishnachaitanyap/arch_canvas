@@ -22,54 +22,6 @@ import { IconLibrary } from "../icons/IconLibrary";
 import type { SearchHit } from "../icons/registry";
 import { Modal } from "../home/Home";
 
-// ------------------------------------------------------------------ palette
-
-const CATEGORY_ORDER: Category[] = ["Groups", "Compute", "Data", "Messaging", "Networking", "Security", "DevOps", "External", "Other"];
-
-export function Palette({ onAdd, onAddIcon, disabled }: { onAdd: (kind: string) => void; onAddIcon: (hit: SearchHit) => void; disabled: boolean }) {
-  const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"gcp" | "icons">("gcp");
-  const items = CATALOG.filter((c) => `${c.label} ${c.kind} ${c.category}`.toLowerCase().includes(q.toLowerCase()));
-  return (
-    <aside className="palette">
-      <div className="tabs small seg">
-        <button className={tab === "gcp" ? "active" : ""} onClick={() => setTab("gcp")} title="Google Cloud resources that compile to Terraform">
-          GCP
-        </button>
-        <button className={tab === "icons" ? "active" : ""} onClick={() => setTab("icons")} title="AWS, open-source and uploaded icons (documentation only)">
-          Icons
-        </button>
-      </div>
-      {tab === "icons" ? (
-        <>
-          {disabled ? <p className="hint">Read-only.</p> : <IconLibrary compact onPick={onAddIcon} />}
-          <p className="hint">Icons are added as documentation-only components: they connect, group and present, but aren't deployed by Terraform.</p>
-        </>
-      ) : (
-        <>
-      <input placeholder="Search GCP resources" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search resources" />
-      {CATEGORY_ORDER.map((cat) => {
-        const list = items.filter((c) => c.category === cat);
-        if (!list.length) return null;
-        return (
-          <section key={cat}>
-            <h3>{cat}</h3>
-            {list.map((c) => (
-              <button key={c.kind} className="palette-item" disabled={disabled} onClick={() => onAdd(c.kind)} title={c.description}>
-                <ResourceIcon kind={c.kind} size={24} />
-                <span>{c.label}</span>
-              </button>
-            ))}
-          </section>
-        );
-      })}
-      <p className="hint">Click to add. New resources go inside the selected group when allowed.</p>
-        </>
-      )}
-    </aside>
-  );
-}
-
 // ------------------------------------------------------------------ properties
 
 export type Selection = { type: "node" | "edge"; id: string } | null;
@@ -96,15 +48,13 @@ export function Properties({
         <h3>
           {from?.label} → {to?.label}
         </h3>
+        <EdgeLabelField key={e.id} value={e.label ?? ""} disabled={readOnly} onCommit={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, label: v || null })} />
         <label>
           Protocol
           <select
             value={e.protocol ?? ""}
             disabled={readOnly}
-            onChange={(ev) => {
-              onOp({ op: "disconnect", from: e.from, to: e.to });
-              onOp({ op: "connect", from: e.from, to: e.to, label: e.label, protocol: (ev.target.value || undefined) as never });
-            }}
+            onChange={(ev) => onOp({ op: "update_edge", from: e.from, to: e.to, protocol: (ev.target.value || null) as never })}
           >
             <option value="">—</option>
             {PROTOCOLS.map((p) => (
@@ -112,6 +62,19 @@ export function Properties({
             ))}
           </select>
         </label>
+        <label>
+          Line style
+          <select
+            value={e.routing ?? "orthogonal"}
+            disabled={readOnly}
+            onChange={(ev) => onOp({ op: "update_edge", from: e.from, to: e.to, routing: ev.target.value === "orthogonal" ? null : (ev.target.value as never) })}
+          >
+            <option value="orthogonal">Orthogonal</option>
+            <option value="straight">Straight</option>
+            <option value="curved">Curved</option>
+          </select>
+        </label>
+        <p className="hint">Drag either end of the line on the canvas to reconnect it. Double-click the label to edit it in place.</p>
         <button disabled={readOnly} onClick={() => onOp({ op: "disconnect", from: e.from, to: e.to })}>
           Delete connection
         </button>
@@ -130,6 +93,24 @@ export function Properties({
   const node = model.nodes.find((n) => n.id === selection.id);
   if (!node) return null;
   return <NodeProperties key={node.id} model={model} nodeId={node.id} onOp={onOp} readOnly={readOnly} />;
+}
+
+function EdgeLabelField({ value, disabled, onCommit }: { value: string; disabled: boolean; onCommit: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <label>
+      Label
+      <input
+        value={draft}
+        disabled={disabled}
+        placeholder="e.g. reads orders"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => draft !== value && onCommit(draft.trim())}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+      />
+    </label>
+  );
 }
 
 function NodeProperties({ model, nodeId, onOp, readOnly }: { model: DiagramModel; nodeId: string; onOp: (op: Op) => void; readOnly: boolean }) {

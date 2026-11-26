@@ -12,14 +12,15 @@ ArchCanvas is an AI-native architecture diagramming tool for Google Cloud. Each 
 
 | | |
 |---|---|
-| **Typed GCP diagrams** | Projects, regions, VPCs and subnets as real nested groups; Cloud Run, Cloud SQL, Memorystore, Cloud Storage, Pub/Sub, load balancers, Secret Manager and Artifact Registry as resources with settings. Automatic layout, undo/redo, and a review panel that flags security and reliability issues. |
+| **Typed GCP diagrams** | Projects, regions, VPCs and subnets as real nested groups; Cloud Run, Cloud SQL, Memorystore, Cloud Storage, Pub/Sub, load balancers, Secret Manager and Artifact Registry as resources with settings. A review panel flags security and reliability issues. |
+| **Edit like draw.io** | Drag from the palette to the canvas or into a group; drag shapes between groups; resize groups and notes; double-click to rename shapes and line labels; box-select, align and distribute; copy, paste and duplicate; reconnect line ends; orthogonal, straight or curved lines; right-click menus; snap to grid; undo/redo. Auto layout only when you ask for it. |
 | **Terraform from the diagram** | A deterministic compiler, not an LLM guess. Connections become least-privilege IAM, passwordless Cloud SQL login, private networking (VPC egress, private service access), authenticated Pub/Sub push subscriptions, and load balancers with Cloud Armor. Download as a zip, or run `terraform validate` on the server. |
 | **Workflows and integrations** | Request and async workflows are generated from the connections. For every integration you get how it works, its security, configuration and caveats, always consistent with the Terraform. |
 | **Presentation mode** | A full-screen walkthrough of each workflow, step by step, with the canvas zooming to the connection being explained. |
 | **AI assistant (Gemini)** | "Add a Redis cache in front of the DB" becomes validated edits shown as a highlighted proposal that you accept or reject. It can also review the design, explain integrations and generate Terraform. |
 | **Import from draw.io** | Google Cloud, AWS and Azure icons, plain shapes and labels are mapped to GCP resources (AWS RDS → Cloud SQL, SQS → Pub/Sub…). A review step lets you check and override each mapping. |
-| **Icons** | The official AWS Architecture Icons, Lucide and about 2,300 open-source technology logos are built in, and you can upload Google Cloud's official icon pack. Any icon can be placed as a documentation-only component. |
-| **Workspaces, projects, versions** | Owner, editor and viewer roles. Every save is a version you can name, restore or copy. Compare any two versions, or two different diagrams, visually, field by field, and as a Terraform diff. |
+| **One icon palette** | A single searchable sidebar, in collapsible segments: Google Cloud (deployable), diagram basics (users, groups, notes), AWS groups (VPC, subnets, regions, accounts), AWS services and resources, Lucide and about 2,300 technology logos, plus packs you upload (such as Google Cloud's official icons). The sidebar is resizable and the tiles reflow. AWS group icons become real groups you can drop things into. |
+| **Workspaces, projects, versions** | Owner, editor and viewer roles. Every save is a version you can name, restore or copy. Compare any two versions, or two different diagrams, visually, field by field, and as a Terraform diff. Every page has its own URL (`/w/…/p/…`, `/d/<id>`, `/d/<id>/history`, `/d/<id>/present`), so links, refresh and back/forward work. |
 | **Export** | draw.io (lossless round trip), SVG, PNG, Mermaid, PlantUML, JSON, and a Markdown architecture document. |
 | **Cloud or self-hosted** | One codebase: GKE with Terraform and Helm, or any Kubernetes cluster including air-gapped installs. OIDC SSO, Postgres row-level security and an audit log. |
 
@@ -29,7 +30,7 @@ ArchCanvas is an AI-native architecture diagramming tool for Google Cloud. Each 
 |---|---|
 | ![Workflows: each step highlighted on the canvas](docs/screenshots/flows.png) **Workflows**: click a step to see it on the canvas. | ![Presentation mode](docs/screenshots/presentation.png) **Present**: a step-by-step walkthrough with how, security and caveats. |
 | ![Compare two versions](docs/screenshots/compare.png) **Compare** any two versions: added, changed and removed, field by field. | ![Generated Terraform](docs/screenshots/terraform.png) **Terraform** generated from the diagram. |
-| ![Import a draw.io diagram](docs/screenshots/import.png) **Import draw.io**: an AWS diagram mapped to GCP, with a reason for each mapping. | ![Icon library](docs/screenshots/icons.png) **Icon library**: AWS, Lucide, technology logos and uploaded packs. |
+| ![Import a draw.io diagram](docs/screenshots/import.png) **Import draw.io**: an AWS diagram mapped to GCP, with a reason for each mapping. | ![Unified icon palette](docs/screenshots/icons.png) **One palette**: search across Google Cloud, AWS, Lucide, logos and uploaded packs. |
 | ![Projects in a workspace](docs/screenshots/home.png) **Workspaces and projects**, with a draw.io drop zone. | |
 
 Screenshots are generated from the demo build with `node scripts/screenshots.mjs` (see the script for details).

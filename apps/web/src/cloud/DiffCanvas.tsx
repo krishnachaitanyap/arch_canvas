@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { type DiagramModel, diffModels, type ModelDiff } from "@archcanvas/shared";
-import { type Highlight, nodeTypes, toFlow, withGhosts } from "./flow";
+import { edgeTypes, type Highlight, nodeTypes, toFlow, withGhosts } from "./flow";
 import { autoLayout, hasLayout, structureKey } from "./layout";
 
 interface StaticProps {
@@ -60,6 +60,7 @@ function Inner({ model, diff, highlight, focus, overlay, minimap = true, classNa
           nodes={flow.nodes}
           edges={flow.edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}

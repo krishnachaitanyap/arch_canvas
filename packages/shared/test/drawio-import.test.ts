@@ -164,6 +164,7 @@ describe("hand-drawn diagram with plain shapes", () => {
     const kinds = Object.fromEntries(r.model.nodes.map((n) => [n.label, n.kind]));
     expect(kinds).toEqual({
       "???": "generic.component",
+      Backend: "generic.group",
       Production: "gcp.project",
       "Orders API": "gcp.cloud_run",
       "Orders DB": "gcp.cloud_sql",
@@ -171,9 +172,11 @@ describe("hand-drawn diagram with plain shapes", () => {
       "Kafka events": "gcp.pubsub_topic",
       Customer: "generic.client",
     });
-    // Shapes drawn inside the dashed "Production" box belong to it; "Backend" has no GCP meaning and is flattened.
-    for (const l of ["Orders API", "Orders DB", "Session cache", "Kafka events"]) expect(byLabel(r, l)!.parentId).toBe("production");
-    expect(r.items.find((i) => i.label === "Backend")).toMatchObject({ kind: null, container: true });
+    // Shapes drawn inside the dashed "Production" box belong to it; "Backend" has no GCP meaning
+    // and stays as a documentation-only group around the API.
+    for (const l of ["Orders DB", "Session cache", "Kafka events", "Backend"]) expect(byLabel(r, l)!.parentId).toBe("production");
+    expect(byLabel(r, "Orders API")!.parentId).toBe("backend");
+    expect(r.items.find((i) => i.label === "Backend")).toMatchObject({ kind: "generic.group", container: true });
     expect(r.items.find((i) => i.label === "???")).toMatchObject({ kind: "generic.component", confidence: "low" });
     expect(r.items.some((i) => i.label.startsWith("Note"))).toBe(false);
     expect(r.model.edges.map((x) => `${x.from}>${x.to}`)).toEqual(["customer>orders_api", "orders_api>orders_db", "orders_api>session_cache", "orders_api>kafka_events"]);

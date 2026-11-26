@@ -11,7 +11,8 @@ export const NODE_ID = /^[a-z][a-z0-9_]{0,40}$/;
 export const NodeSchema = z.object({
   id: z.string().regex(NODE_ID, "id must be snake_case: lowercase letters, digits, underscores"),
   kind: z.string().min(1),
-  label: z.string().min(1).max(80),
+  // Names are short in the UI; notes (generic.note) use this for their text.
+  label: z.string().min(1).max(500),
   parentId: z.string().optional(),
   props: z.record(z.unknown()).default({}),
   /**
@@ -29,7 +30,11 @@ export const EdgeSchema = z.object({
   to: z.string(),
   label: z.string().max(60).optional(),
   protocol: z.enum(PROTOCOLS).optional(),
+  /** How the line is drawn; orthogonal when unset. */
+  routing: z.enum(["orthogonal", "straight", "curved"]).optional(),
 });
+
+export type Routing = "orthogonal" | "straight" | "curved";
 
 export const LayoutSchema = z.object({
   x: z.number(),
