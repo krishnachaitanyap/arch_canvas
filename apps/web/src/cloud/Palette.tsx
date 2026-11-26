@@ -49,6 +49,46 @@ const SYNONYMS: Record<string, string> = {
   "generic.note": "note text comment annotation sticky",
 };
 
+/**
+ * A curated starting set for mixed estates. Groups become real containers; the rest are
+ * documentation components. Icons come from the bundled packs (Lucide, logos, AWS).
+ */
+const g = (label: string, icon: string, hint: string): PaletteItem => ({ key: `mc:${label}`, kind: "generic.group", label, icon, hint: `${hint} (group)` });
+const c = (label: string, icon: string, hint: string): PaletteItem => ({ key: `mc:${label}`, kind: "generic.component", label, icon, hint });
+const multiCloudItems: PaletteItem[] = [
+  g("On-prem data center", "lucide:building", "on-prem data center datacenter colo site"),
+  g("Corporate network", "lucide:network", "corporate network lan intranet office"),
+  g("DMZ", "lucide:shield", "dmz perimeter zone"),
+  g("AWS account", "aws:AWSAccount", "aws account amazon"),
+  g("AWS region", "aws:Region", "aws region amazon"),
+  g("Azure subscription", "logos:microsoft-azure", "azure subscription microsoft resource group"),
+  g("Kubernetes cluster", "logos:kubernetes", "kubernetes k8s cluster eks aks gke openshift"),
+  g("VMware / private cloud", "logos:vmware", "vmware vsphere private cloud on-prem"),
+  c("Server", "lucide:server", "server host bare metal on-prem"),
+  c("Virtual machine", "lucide:cpu", "vm virtual machine compute instance"),
+  c("Container", "lucide:container", "container docker pod"),
+  c("Database server", "lucide:database", "database db sql on-prem oracle"),
+  c("Storage / SAN", "lucide:hard-drive", "storage san nas disk file share"),
+  c("Firewall", "lucide:brick-wall", "firewall security network"),
+  c("Router", "lucide:router", "router network gateway"),
+  c("Switch / cabling", "lucide:cable", "switch network cable lan"),
+  c("Load balancer", "lucide:split", "load balancer f5 haproxy on-prem"),
+  c("VPN", "lucide:lock", "vpn tunnel interconnect secure link"),
+  c("Internet", "lucide:globe", "internet public web"),
+  c("Workstation", "lucide:laptop", "laptop desktop employee workstation"),
+  c("Mobile app", "lucide:smartphone", "mobile app ios android phone"),
+  c("Web browser", "lucide:app-window", "browser web app spa"),
+  c("Mainframe / legacy", "lucide:landmark", "mainframe legacy system"),
+  c("Identity provider", "logos:okta-icon", "identity idp sso okta auth"),
+  c("Kafka", "logos:kafka-icon", "kafka stream events queue"),
+  c("RabbitMQ", "logos:rabbitmq-icon", "rabbitmq queue amqp messaging"),
+  c("PostgreSQL", "logos:postgresql", "postgres postgresql database"),
+  c("Redis", "logos:redis", "redis cache"),
+  c("Monitoring", "logos:grafana", "monitoring grafana observability dashboards"),
+  c("CI/CD", "lucide:git-branch", "ci cd pipeline build deploy"),
+  c("External API / SaaS", "lucide:cloud", "external api saas third party vendor"),
+];
+
 const gcpItems: PaletteItem[] = CATALOG.filter((c) => c.kind.startsWith("gcp."))
   .sort((a, b) => GCP_ORDER.indexOf(a.category) - GCP_ORDER.indexOf(b.category))
   .map((c) => ({ key: c.kind, kind: c.kind, label: c.label, hint: c.description }));
@@ -85,6 +125,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
     const out: Segment[] = [
       { id: "gcp", title: "Google Cloud", note: "Deploys with Terraform", items: gcpItems, defaultOpen: true },
       { id: "basics", title: "Diagram basics", items: basicItems, defaultOpen: true },
+      { id: "multicloud", title: "Multi-cloud & on-prem", note: "Documentation; mix freely with any cloud", items: multiCloudItems, defaultOpen: true },
     ];
     for (const p of packs) {
       const icons = loaded[p.id] ?? null;
@@ -171,7 +212,11 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
                         onDragStart={(e) => onDragStart(e, it)}
                         onClick={() => onAdd(it)}
                       >
-                        {it.svg ? <img src={iconDataUrl(it.svg)} alt="" width={32} height={32} loading="lazy" draggable={false} /> : <ResourceIcon kind={it.kind} size={32} />}
+                        {it.svg ? (
+                          <img src={iconDataUrl(it.svg)} alt="" width={32} height={32} loading="lazy" draggable={false} />
+                        ) : (
+                          <ResourceIcon kind={it.kind} icon={it.icon} size={32} />
+                        )}
                         <span>{it.label}</span>
                       </button>
                     ))}
@@ -188,7 +233,10 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
         );
       })}
       {q && shown === 0 && <p className="hint">Nothing matches “{q}”.</p>}
-      <p className="hint palette-foot">Click to add, or drag onto the canvas (into a group to nest it). Only Google Cloud items deploy with Terraform; everything else is documentation.</p>
+      <p className="hint palette-foot">
+        Click to add, or drag onto the canvas (into a group to nest it). Google Cloud items also generate Terraform; everything else is documentation. For
+        official Azure or Google Cloud icons, upload their icon packs from the project page.
+      </p>
     </div>
   );
 }

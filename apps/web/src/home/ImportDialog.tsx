@@ -24,11 +24,14 @@ export default function ImportDialog({
   pages,
   onImport,
   onClose,
+  merge = false,
 }: {
   fileName: string;
   pages: DrawioPage[];
   onImport: (title: string, model: DiagramModel) => void;
   onClose: () => void;
+  /** Adding to the open diagram rather than creating a new one. */
+  merge?: boolean;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
@@ -48,10 +51,10 @@ export default function ImportDialog({
   const set = (item: ImportItem, kind: string | null) => setOverrides((o) => ({ ...o, [item.cellId]: kind }));
 
   return (
-    <Modal title={`Import ${fileName}`} onClose={onClose} wide>
+    <Modal title={merge ? `Add ${fileName} to this diagram` : `Import ${fileName}`} onClose={onClose} wide>
       <div className="import">
         <div className="import-top">
-          <label>
+          <label hidden={merge}>
             Diagram name
             <input value={title} onChange={(e) => setTitle(e.target.value)} />
           </label>
@@ -146,11 +149,15 @@ export default function ImportDialog({
         </div>
 
         <div className="row end">
-          <span className="hint">After import you get Terraform, workflows, the architecture doc and a presentation. Nothing is saved until you click Save.</span>
+          <span className="hint">
+            {merge
+              ? "The shapes are added to the right of what's already on the canvas. Nothing is saved until you click Save."
+              : "After import you get workflows, the architecture doc, a presentation, and Terraform for the Google Cloud parts. Nothing is saved until you click Save."}
+          </span>
           <div className="spacer" />
           <button onClick={onClose}>Cancel</button>
           <button className="primary" disabled={!result.model.nodes.length || !title.trim()} onClick={() => onImport(title.trim(), result.model)}>
-            Import {resources} resources
+            {merge ? `Add ${result.model.nodes.length} shapes to this diagram` : `Import ${resources} resources`}
           </button>
         </div>
       </div>

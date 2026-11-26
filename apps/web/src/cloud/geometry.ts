@@ -182,14 +182,25 @@ export function copySelection(m: DiagramModel, ids: string[]): Clip | null {
   };
 }
 
-/** Pastes a clip with fresh ids, offset a little; top-level pasted nodes land in `parentId` when allowed. */
-export function pasteOps(m: DiagramModel, clip: Clip, offset = 32, parentId?: string): { model: DiagramModel; ids: string[] } | { error: string } {
+/**
+ * Pastes a clip with fresh ids, moved by `offset`; top-level pasted nodes land in `parentId`
+ * when allowed. With `keepIds`, ids are only changed when they're already taken (imports).
+ */
+export function pasteOps(
+  m: DiagramModel,
+  clip: Clip,
+  offset: number | { x: number; y: number } = 32,
+  parentId?: string,
+  keepIds = false,
+): { model: DiagramModel; ids: string[] } | { error: string } {
+  const dx = typeof offset === "number" ? offset : offset.x;
+  const dy = typeof offset === "number" ? offset : offset.y;
   const used = new Set(m.nodes.map((n) => n.id));
   const rename = new Map<string, string>();
   for (const n of clip.nodes) {
     const base = n.id.replace(/(_copy)?(_\d+)?$/, "").slice(0, 34) || "node";
-    let id = `${base}_copy`;
-    for (let i = 2; used.has(id) || !NODE_ID.test(id); i++) id = `${base}_copy_${i}`;
+    let id = keepIds ? (used.has(n.id) ? `${base}_2` : n.id) : `${base}_copy`;
+    for (let i = 2; used.has(id) || !NODE_ID.test(id); i++) id = keepIds ? `${base}_${i}` : `${base}_copy_${i}`;
     used.add(id);
     rename.set(n.id, id);
   }
@@ -219,7 +230,7 @@ export function pasteOps(m: DiagramModel, clip: Clip, offset = 32, parentId?: st
   for (const n of clip.nodes) {
     const l = clip.layout[n.id] ?? { x: 0, y: 0 };
     const isTop = topLevel.includes(n.id);
-    layout[rename.get(n.id)!] = { ...l, x: l.x + (isTop ? offset : 0), y: l.y + (isTop ? offset : 0) };
+    layout[rename.get(n.id)!] = { ...l, x: l.x + (isTop ? dx : 0), y: l.y + (isTop ? dy : 0) };
   }
   return { model: { ...r.model, layout: growGroups({ ...r.model, layout }) }, ids: topLevel.map((id) => rename.get(id)!) };
 }

@@ -81,4 +81,18 @@ describe("canvas geometry", () => {
     expect(r.model.layout.vpc_copy).toMatchObject({ x: 440, y: 100 });
     expect(r.ids).toEqual(["vpc_copy"]);
   });
+
+  it("imports keep their ids unless taken, and move by an x/y offset", () => {
+    const m = build();
+    const clip = copySelection(m, ["vpc", "ext"])!;
+    const r = pasteOps(m, clip, { x: 1200, y: 0 }, undefined, true);
+    if ("error" in r) throw new Error(r.error);
+    // vpc, db and ext already exist, so they get suffixes; positions move right by 1200.
+    expect(r.ids.sort()).toEqual(["ext_2", "vpc_2"]);
+    expect(r.model.nodes.find((n) => n.id === "db_2")?.parentId).toBe("vpc_2");
+    expect(r.model.layout.ext_2).toMatchObject({ x: 2200, y: 100 });
+    const fresh = pasteOps({ ...m, nodes: [], edges: [], layout: {} }, clip, { x: 0, y: 0 }, undefined, true);
+    if ("error" in fresh) throw new Error(fresh.error);
+    expect(fresh.ids.sort()).toEqual(["ext", "vpc"]);
+  });
 });

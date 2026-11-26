@@ -12,6 +12,7 @@ ArchCanvas is an AI-native architecture diagramming tool for Google Cloud. Each 
 
 | | |
 |---|---|
+| **Any cloud, on-prem, or a mix** | Start a **Blank architecture** and combine Google Cloud, AWS, Azure and on-prem: data centers, DMZs, accounts and subscriptions, Kubernetes clusters, servers, firewalls, mainframes and SaaS. Google Cloud resources also generate Terraform; everything else is documentation that still shows up in workflows, docs and presentations. |
 | **Typed GCP diagrams** | Projects, regions, VPCs and subnets as real nested groups; Cloud Run, Cloud SQL, Memorystore, Cloud Storage, Pub/Sub, load balancers, Secret Manager and Artifact Registry as resources with settings. A review panel flags security and reliability issues. |
 | **Edit like draw.io** | Drag from the palette to the canvas or into a group; drag shapes between groups; resize groups and notes; double-click to rename shapes and line labels; box-select, align and distribute; copy, paste and duplicate; reconnect line ends; orthogonal, straight or curved lines; right-click menus; snap to grid; undo/redo. Auto layout only when you ask for it. |
 | **Terraform from the diagram** | A deterministic compiler, not an LLM guess. Connections become least-privilege IAM, passwordless Cloud SQL login, private networking (VPC egress, private service access), authenticated Pub/Sub push subscriptions, and load balancers with Cloud Armor. Download as a zip, or run `terraform validate` on the server. |
@@ -93,7 +94,12 @@ Set `LLM_PROVIDER`:
 
 ## Import from draw.io
 
-Drop a `.drawio`, `.xml` (plain or compressed, any number of pages) or `.drawio.svg` file on a project page. Shapes are mapped to GCP resources:
+Two ways in, both with a review step that shows how each shape was interpreted and lets you change it:
+
+- **As a new diagram:** on a project page, drop a `.drawio`, `.xml` (plain or compressed, any number of pages) or `.drawio.svg` file on the dashed import box, or choose **New diagram… → Import draw.io file…**.
+- **Into the open diagram:** click **Import** in the editor toolbar. The shapes are added to the right of what's already there.
+
+Shapes are mapped like this:
 
 | Source | Confidence | Example |
 |---|---|---|

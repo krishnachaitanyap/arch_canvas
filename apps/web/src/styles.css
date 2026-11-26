@@ -408,7 +408,8 @@ a.card-link:hover { background: #f4f4f5; }
 .seg-head .chev { width: 12px; color: #a1a1aa; }
 .seg-head .seg-title { flex: 1; text-transform: uppercase; letter-spacing: .03em; font-size: 11px; }
 .seg-head .count { font-weight: 400; color: #a1a1aa; font-size: 11px; }
-.seg-note { margin: 0 0 4px 18px; font-size: 11px; color: #16a34a; }
+.seg-note { margin: 0 0 4px 18px; font-size: 11px; color: #71717a; }
+.seg:first-of-type .seg-note { color: #16a34a; }
 .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 4px; }
 .tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 6px; border: 1px solid transparent; border-radius: 8px; background: none; font-size: 11px; line-height: 1.2; cursor: grab; }
 .tile:hover:not(:disabled) { border-color: #c7d2fe; background: #f8faff; }

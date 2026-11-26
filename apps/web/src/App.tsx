@@ -351,7 +351,7 @@ export function App() {
               onChange={(e) => setDoc((d) => d && { ...d, title: e.target.value })}
               aria-label="Diagram title"
             />
-            <span className="kind-pill">{doc.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
+            <span className="kind-pill">{doc.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
             {doc.id ? (
               <Link to={paths.diagram(docRef!, "history")} className="version-badge" title="Version history and compare">
                 {doc.version ? `v${doc.version}` : "v?"} · History

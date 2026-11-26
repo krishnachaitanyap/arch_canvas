@@ -236,8 +236,8 @@ function ProjectView({
             <option value="" disabled>
               New diagram…
             </option>
-            <option value="cloud">GCP architecture</option>
-            <option value="sample">GCP architecture from sample</option>
+            <option value="cloud">Blank architecture (any cloud, on-prem)</option>
+            <option value="sample">Example: GCP web app</option>
             <option value="import">Import draw.io file…</option>
             <option value="whiteboard">Whiteboard (Mermaid)</option>
           </select>
@@ -270,8 +270,8 @@ function ProjectView({
           }}
           onClick={() => fileInput.current?.click()}
         >
-          Drop a <b>draw.io</b> file here (or click) to turn it into a GCP architecture with Terraform, workflows and a presentation.
-          Google Cloud, AWS and Azure icons and plain shapes are recognised.
+          <b>Import from draw.io:</b> drop a <code>.drawio</code>, <code>.xml</code> or <code>.drawio.svg</code> file here, or click to choose one. Google Cloud,
+          AWS, Azure and on-prem shapes are recognised; you get workflows, documentation, a presentation, and Terraform for the Google Cloud parts.
         </div>
       )}
 
@@ -285,7 +285,7 @@ function ProjectView({
           {editable && !diagrams.length && (
             <div className="row">
               <button className="primary" onClick={() => onNew("cloud")}>
-                New GCP architecture
+                Blank architecture
               </button>
               <button onClick={() => onNew("sample")}>Start from sample</button>
               <button onClick={() => onNew("whiteboard")}>New whiteboard</button>
@@ -297,7 +297,7 @@ function ProjectView({
           {shown.map((d) => (
             <div key={d.id} className="card">
               <Link to={diagramHref(d.id, d.title)} className="card-main">
-                <span className="card-kind">{d.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
+                <span className="card-kind">{d.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
                 <span className="card-title">{d.title}</span>
                 <span className="hint">
                   v{d.version ?? 1} · {d.kind === "cloud" ? `${d.node_count ?? 0} resources · ` : ""}updated {timeAgo(d.updated_at)}

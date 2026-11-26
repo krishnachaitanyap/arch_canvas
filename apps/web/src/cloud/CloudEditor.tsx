@@ -1,4 +1,4 @@
-import { type DragEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, lazy, type PointerEvent as ReactPointerEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Background,
@@ -25,7 +25,9 @@ import {
   generateWorkflows,
   type ModelDiff,
   NODE_ID,
+  type DrawioPage,
   type Op,
+  readDrawio,
   toArchitectureDoc,
   toDrawio,
   toMermaid,
@@ -45,6 +47,8 @@ import { autoLayout, hasLayout, structureKey } from "./layout";
 import { DRAG_TYPE, Palette, type PaletteItem } from "./Palette";
 import { Presentation } from "./Presentation";
 import { Properties, Review, type Selection, TerraformPanel } from "./panels";
+
+const ImportDialog = lazy(() => import("../home/ImportDialog"));
 
 export type Tab = "assistant" | "properties" | "flows" | "review" | "terraform";
 
@@ -142,6 +146,8 @@ function Editor({
   const [paletteW, setPaletteW] = usePanelWidth("archcanvas.paletteW", 260);
   const [inspectorW, setInspectorW] = usePanelWidth("archcanvas.inspectorW", 380);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const importInput = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState<{ fileName: string; pages: DrawioPage[] } | null>(null);
 
   // AI-rewritten workflow wording, valid only for the content it was written for.
   const [narrated, setNarrated] = useState<{ key: string; workflows: Workflow[] } | null>(null);
@@ -518,6 +524,37 @@ function Editor({
     },
   };
 
+  // ---------------------------------------------------------------- import into this diagram
+
+  async function pickImport(file: File) {
+    if (!/\.(drawio|xml|svg)$/i.test(file.name)) return setStatus({ kind: "error", text: `${file.name} isn't a draw.io file. Use .drawio, .drawio.svg or .xml.` });
+    try {
+      setImporting({ fileName: file.name, pages: await readDrawio(await file.text()) });
+    } catch (e) {
+      setStatus({ kind: "error", text: `Couldn't read ${file.name}: ${(e as Error).message}` });
+    }
+  }
+
+  /** Adds an imported diagram to the right of the current content, keeping ids where free. */
+  async function mergeImport(imported: DiagramModel, fileName: string) {
+    const laid = imported.nodes.every((n) => imported.layout[n.id]) ? imported : { ...imported, layout: await autoLayout(imported) };
+    const m = modelRef.current;
+    const tops = laid.nodes.filter((n) => !n.parentId).map((n) => n.id);
+    const clip = copySelection(laid, tops);
+    if (!clip) return;
+    const existing = m.nodes.filter((n) => !n.parentId).map((n) => absBox(m, n.id));
+    const right = existing.length ? Math.max(...existing.map((b) => b.x + b.w)) + 120 : 0;
+    const top = existing.length ? Math.min(...existing.map((b) => b.y)) : 0;
+    const minX = Math.min(...tops.map((id) => laid.layout[id]?.x ?? 0));
+    const minY = Math.min(...tops.map((id) => laid.layout[id]?.y ?? 0));
+    const r = pasteOps(m, clip, { x: right - minX, y: top - minY }, undefined, true);
+    if ("error" in r) return setStatus({ kind: "error", text: r.error });
+    commit(r.model);
+    setSelectedIds(new Set(r.ids));
+    setStatus({ kind: "ok", text: `Added ${clip.nodes.length} shapes from ${fileName}` });
+    fit();
+  }
+
   // ---------------------------------------------------------------- save / export
 
   async function save() {
@@ -603,6 +640,20 @@ function Editor({
       >
         Auto layout
       </button>
+      <button onClick={() => importInput.current?.click()} disabled={readOnly} title="Add a draw.io diagram to this canvas">
+        Import
+      </button>
+      <input
+        ref={importInput}
+        type="file"
+        accept=".drawio,.xml,.svg"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void pickImport(f);
+          e.target.value = "";
+        }}
+      />
       <button onClick={() => onPresent?.()} disabled={!model.edges.length || Boolean(proposal)} title="Walk through the workflows">
         Present
       </button>
@@ -646,6 +697,21 @@ function Editor({
     <EditorContext.Provider value={actions}>
       <div className="cloud">
         {toolbar && createPortal(tools, toolbar)}
+        {importing && (
+          <Suspense fallback={null}>
+            <ImportDialog
+              merge
+              fileName={importing.fileName}
+              pages={importing.pages}
+              onClose={() => setImporting(null)}
+              onImport={(_, imported) => {
+                const name = importing.fileName;
+                setImporting(null);
+                void mergeImport(imported, name);
+              }}
+            />
+          </Suspense>
+        )}
         {presenting && <Presentation model={model} title={title} workflows={workflows} startWorkflow={presenting.start} onClose={() => onExitPresent?.()} />}
 
         <aside className="palette" style={{ width: paletteW }}>
@@ -779,8 +845,11 @@ function Editor({
 
           {!model.nodes.length && !proposal && (
             <div className="canvas-empty">
-              <h2>Start a GCP architecture</h2>
-              <p>Drag resources and icons from the left, describe it to the assistant on the right, or right-click to add a note.</p>
+              <h2>Start your architecture</h2>
+              <p>
+                Mix Google Cloud, AWS, Azure and on-prem: drag anything from the left (Google Cloud items also generate Terraform), describe it to the assistant
+                on the right, or import a draw.io file from the toolbar.
+              </p>
             </div>
           )}
           {proposal && (

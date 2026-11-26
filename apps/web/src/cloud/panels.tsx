@@ -315,8 +315,25 @@ export function TerraformPanel({ model, title }: { model: DiagramModel; title: s
     }
   }
 
+  const gcpCount = model.nodes.filter((n) => n.kind.startsWith("gcp.")).length;
+  const otherCount = model.nodes.filter((n) => n.kind === "generic.component" || n.kind === "generic.group").length;
+  if (!gcpCount)
+    return (
+      <div className="tf">
+        <p className="banner warn">
+          Terraform is generated for the <b>Google Cloud</b> resources in a diagram, and this one has none yet. AWS, Azure, on-prem and other components
+          are documentation: they appear in workflows, the architecture doc and presentations.
+        </p>
+        <p className="hint">Add Google Cloud resources from the palette (the first segment) to get deployable Terraform for them.</p>
+      </div>
+    );
   return (
     <div className="tf">
+      {otherCount > 0 && (
+        <p className="hint">
+          Covers the {gcpCount} Google Cloud resource{gcpCount === 1 ? "" : "s"}; the {otherCount} other component{otherCount === 1 ? "" : "s"} (AWS, Azure, on-prem…) are documentation only.
+        </p>
+      )}
       <div className="row wrap">
         <button className="primary" onClick={() => void zip()} disabled={!model.nodes.length}>
           Download .zip
