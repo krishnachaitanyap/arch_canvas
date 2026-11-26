@@ -8,6 +8,7 @@ import {
   type DiagramModel,
   type Issue,
   type Op,
+  type Arrowhead,
   describeEdge,
   PROTOCOLS,
   type PropSpec,
@@ -62,23 +63,63 @@ export function Properties({
             ))}
           </select>
         </label>
-        <label>
-          Line style
-          <select
-            value={e.routing ?? "orthogonal"}
-            disabled={readOnly}
-            onChange={(ev) => onOp({ op: "update_edge", from: e.from, to: e.to, routing: ev.target.value === "orthogonal" ? null : (ev.target.value as never) })}
-          >
-            <option value="orthogonal">Orthogonal</option>
-            <option value="straight">Straight</option>
-            <option value="curved">Curved</option>
-          </select>
-        </label>
+        <div className="prop-row">
+          <label>
+            Path
+            <select
+              value={e.routing ?? "orthogonal"}
+              disabled={readOnly}
+              onChange={(ev) => onOp({ op: "update_edge", from: e.from, to: e.to, routing: ev.target.value === "orthogonal" ? null : (ev.target.value as never) })}
+            >
+              <option value="orthogonal">Orthogonal</option>
+              <option value="straight">Straight</option>
+              <option value="curved">Curved</option>
+            </select>
+          </label>
+          <label>
+            Line
+            <select
+              value={e.dash ?? "solid"}
+              disabled={readOnly}
+              onChange={(ev) => onOp({ op: "update_edge", from: e.from, to: e.to, dash: ev.target.value === "solid" ? null : (ev.target.value as never) })}
+            >
+              <option value="solid">Solid</option>
+              <option value="dashed">Dashed</option>
+              <option value="dotted">Dotted</option>
+            </select>
+          </label>
+        </div>
+        <div className="prop-row">
+          <label>
+            Start
+            <ArrowSelect value={e.arrowStart ?? "none"} disabled={readOnly} onChange={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, arrowStart: v === "none" ? null : v })} />
+          </label>
+          <label>
+            End
+            <ArrowSelect value={e.arrowEnd ?? "arrow"} disabled={readOnly} onChange={(v) => onOp({ op: "update_edge", from: e.from, to: e.to, arrowEnd: v === "arrow" ? null : v })} />
+          </label>
+          <label className="color-label">
+            Colour
+            <input
+              type="color"
+              value={e.color ?? "#5f6368"}
+              disabled={readOnly}
+              onChange={(ev) => onOp({ op: "update_edge", from: e.from, to: e.to, color: ev.target.value })}
+            />
+          </label>
+        </div>
+        {(e.fromHandle || e.toHandle) && (
+          <button disabled={readOnly} onClick={() => onOp({ op: "update_edge", from: e.from, to: e.to, fromHandle: null, toHandle: null })}>
+            Attach sides automatically
+          </button>
+        )}
         <p className="hint">Drag either end of the line on the canvas to reconnect it. Double-click the label to edit it in place.</p>
         <button disabled={readOnly} onClick={() => onOp({ op: "disconnect", from: e.from, to: e.to })}>
           Delete connection
         </button>
         {(() => {
+          // Flowchart lines don't need the cloud integration explanation.
+          if ([e.from, e.to].some((id) => ["generic.shape", "generic.note"].includes(model.nodes.find((n) => n.id === id)?.kind ?? ""))) return null;
           const info = describeEdge(model, e);
           return info ? (
             <>
@@ -93,6 +134,28 @@ export function Properties({
   const node = model.nodes.find((n) => n.id === selection.id);
   if (!node) return null;
   return <NodeProperties key={node.id} model={model} nodeId={node.id} onOp={onOp} readOnly={readOnly} />;
+}
+
+const ARROW_LABELS: [Arrowhead, string][] = [
+  ["none", "None"],
+  ["arrow", "Arrow ▶"],
+  ["open", "Open arrow >"],
+  ["triangle", "Hollow triangle ▷ (inherits)"],
+  ["diamond", "Diamond ◆ (composition)"],
+  ["odiamond", "Hollow diamond ◇ (aggregation)"],
+  ["circle", "Circle ●"],
+];
+
+function ArrowSelect({ value, disabled, onChange }: { value: Arrowhead; disabled: boolean; onChange: (v: Arrowhead) => void }) {
+  return (
+    <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as Arrowhead)}>
+      {ARROW_LABELS.map(([v, l]) => (
+        <option key={v} value={v}>
+          {l}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 function EdgeLabelField({ value, disabled, onCommit }: { value: string; disabled: boolean; onCommit: (v: string) => void }) {
@@ -127,19 +190,32 @@ function NodeProperties({ model, nodeId, onOp, readOnly }: { model: DiagramModel
         <ResourceIcon kind={node.kind} icon={node.icon} size={22} /> {entry?.label ?? node.kind}
       </h3>
       <p className="hint">{entry?.description}</p>
+      {node.kind === "generic.shape" || node.kind === "generic.note" ? (
+        <label>
+          Text
+          <textarea
+            rows={3}
+            value={label}
+            disabled={readOnly}
+            onChange={(e) => setLabel(e.target.value)}
+            onBlur={() => label.trim() && label !== node.label && onOp({ op: "update_node", id: node.id, label: label.trim().slice(0, 500) })}
+          />
+        </label>
+      ) : (
+        <label>
+          Name
+          <input
+            value={label}
+            disabled={readOnly}
+            onChange={(e) => setLabel(e.target.value)}
+            onBlur={() => label.trim() && label !== node.label && onOp({ op: "update_node", id: node.id, label: label.trim() })}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          />
+        </label>
+      )}
+      {node.kind !== "generic.shape" && node.kind !== "generic.note" && <IconField node={node} onOp={onOp} readOnly={readOnly} />}
       <label>
-        Name
-        <input
-          value={label}
-          disabled={readOnly}
-          onChange={(e) => setLabel(e.target.value)}
-          onBlur={() => label.trim() && label !== node.label && onOp({ op: "update_node", id: node.id, label: label.trim() })}
-          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-        />
-      </label>
-      <IconField node={node} onOp={onOp} readOnly={readOnly} />
-      <label>
-        Id <span className="hint">(Terraform name)</span>
+        Id <span className="hint">{node.kind.startsWith("gcp.") ? "(Terraform name)" : ""}</span>
         <input value={node.id} disabled />
       </label>
       <label>
@@ -221,6 +297,13 @@ function PropField({
       <label className="check" title={spec.description}>
         <input type="checkbox" checked={Boolean(value)} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
         {spec.label}
+      </label>
+    );
+  if (spec.type === "color")
+    return (
+      <label className="color-label" title={spec.description}>
+        {spec.label}
+        <input type="color" value={String(value)} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
       </label>
     );
   if (spec.type === "enum")

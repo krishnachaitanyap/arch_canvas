@@ -1,5 +1,5 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Background, BackgroundVariant, Controls, MiniMap, type Node, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { type DiagramModel, diffModels, type ModelDiff } from "@archcanvas/shared";
 import { edgeTypes, type Highlight, nodeTypes, toFlow, withGhosts } from "./flow";
@@ -41,6 +41,9 @@ function Inner({ model, diff, highlight, focus, overlay, minimap = true, classNa
   }, [key]);
 
   const flow = useMemo(() => toFlow({ ...model, layout: layout ?? {} }, { diff, highlight }), [model, layout, diff, highlight]);
+  // Keep measured sizes across re-renders (each step of a presentation re-renders the nodes).
+  const measured = useRef(new Map<string, Node["measured"]>());
+  const nodes = flow.nodes.map((n) => (measured.current.get(n.id) ? { ...n, measured: measured.current.get(n.id) } : n));
   const focusKey = (focus ?? []).join(",");
 
   useEffect(() => {
@@ -57,7 +60,10 @@ function Inner({ model, diff, highlight, focus, overlay, minimap = true, classNa
     <div className={`cloud-canvas static-canvas ${className}`}>
       {layout && (
         <ReactFlow
-          nodes={flow.nodes}
+          nodes={nodes}
+          onNodesChange={(changes) => {
+            for (const c of changes) if (c.type === "dimensions" && c.dimensions) measured.current.set(c.id, c.dimensions);
+          }}
           edges={flow.edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}

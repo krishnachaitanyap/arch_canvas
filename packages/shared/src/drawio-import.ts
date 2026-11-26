@@ -1,5 +1,5 @@
-import { CATALOG, catalogEntry } from "./catalog.js";
-import { type DiagramModel, emptyModel, NODE_ID, type Protocol } from "./model.js";
+import { CATALOG, catalogEntry, SHAPE_LABELS, type ShapeName } from "./catalog.js";
+import { type Arrowhead, type DiagramEdge, type DiagramModel, emptyModel, NODE_ID, type Protocol } from "./model.js";
 import { applyOp, type Op } from "./ops.js";
 import { findAll, htmlToText, parseXml, type XmlElement } from "./xml.js";
 
@@ -183,6 +183,8 @@ interface Classified {
   kind: string | null;
   reason: string;
   confidence: Confidence;
+  /** Properties to set (shape, colours) for general shapes. */
+  props?: Record<string, unknown>;
   /** Icon reference to show, e.g. "aws~sagemaker" (best match in the AWS pack). */
   icon?: string;
 }
@@ -208,11 +210,85 @@ function spaced(rules: Rule[]): Rule[] {
   return rules.map(([re, kind]) => [new RegExp(re.source.replace(/_\?/g, " ?").replace(/_/g, " ")), kind]);
 }
 
-function classifyResource(c: DrawioCell): Classified {
+/** Parses "a=1;b=2;rhombus;" into { a: "1", b: "2", rhombus: "" }. */
+function styleMap(style: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of style.split(";")) {
+    if (!part) continue;
+    const i = part.indexOf("=");
+    if (i < 0) out[part.trim().toLowerCase()] = "";
+    else out[part.slice(0, i).trim().toLowerCase()] = part.slice(i + 1).trim();
+  }
+  return out;
+}
+
+/** Which ArchCanvas shape a draw.io style draws, if it's a flowchart/basic shape. */
+function shapeOf(c: DrawioCell, plainToo: boolean): ShapeName | undefined {
+  const s = c.style.toLowerCase();
+  const m = styleMap(c.style);
+  if (/rhombus|flowchart\.decision/.test(s)) return "diamond";
+  if (/flowchart\.terminator|flowchart\.start/.test(s) || (m.rounded === "1" && Number(m.arcsize) >= 40)) return "terminator";
+  if (/parallelogram|flowchart\.data\b/.test(s)) return "parallelogram";
+  if (/hexagon|flowchart\.preparation/.test(s)) return "hexagon";
+  if (/shape=document|flowchart\.document/.test(s)) return "document";
+  if (/shape=process|flowchart\.predefined/.test(s)) return "predefined";
+  if (/manualinput|flowchart\.manual_input/.test(s)) return "manual-input";
+  if (/shape=cloud/.test(s)) return "cloud";
+  if (/(^|;)triangle(;|$)/.test(s)) return "triangle";
+  if (/(^|;)ellipse(;|$)/.test(s) || /flowchart\.on-page_reference|flowchart\.or/.test(s))
+    return m.aspect === "fixed" || (c.geo && Math.abs(c.geo.w - c.geo.h) < 4) ? "circle" : "ellipse";
+  if (!plainToo) return undefined;
+  if (/cylinder|flowchart\.database|datastore/.test(s)) return "cylinder";
+  if (/^text;|(^|;)text(;|$)/.test(s)) return "text";
+  if (m.rounded === "1") return "rounded";
+  return "rectangle";
+}
+
+function shapeProps(c: DrawioCell, shape: ShapeName): Record<string, unknown> {
+  const m = styleMap(c.style);
+  const hex = (v: string | undefined) => (v && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : undefined);
+  return {
+    shape,
+    ...(hex(m.fillcolor) ? { fill: hex(m.fillcolor) } : {}),
+    ...(hex(m.strokecolor) ? { stroke: hex(m.strokecolor) } : {}),
+    ...(hex(m.fontcolor) ? { textColor: hex(m.fontcolor) } : {}),
+  };
+}
+
+const ARROWS: Record<string, Arrowhead> = { none: "none", block: "arrow", classic: "arrow", open: "open", diamond: "diamond", oval: "circle" };
+
+/** Line pattern, arrowheads, routing and colour from a draw.io edge style. */
+function edgeStyleOf(style: string): Partial<Pick<DiagramEdge, "dash" | "arrowStart" | "arrowEnd" | "color" | "routing">> {
+  const m = styleMap(style);
+  const head = (name: string | undefined, fill: string | undefined, fallback: Arrowhead): Arrowhead => {
+    if (name === undefined) return fallback;
+    const a = ARROWS[name.toLowerCase()] ?? fallback;
+    if (fill === "0" && a === "arrow") return "triangle";
+    if (fill === "0" && a === "diamond") return "odiamond";
+    return a;
+  };
+  const out: ReturnType<typeof edgeStyleOf> = {};
+  if (m.dashed === "1") out.dash = m.dashpattern && /^1\s/.test(m.dashpattern) ? "dotted" : "dashed";
+  const end = head(m.endarrow, m.endfill, "arrow");
+  const start = head(m.startarrow, m.startfill, "none");
+  if (end !== "arrow") out.arrowEnd = end;
+  if (start !== "none") out.arrowStart = start;
+  if (m.strokecolor && /^#[0-9a-fA-F]{6}$/.test(m.strokecolor) && m.strokecolor.toLowerCase() !== "#5f6368" && m.strokecolor.toLowerCase() !== "#000000")
+    out.color = m.strokecolor.toLowerCase();
+  if (m.curved === "1") out.routing = "curved";
+  else if (m.edgestyle === "none" || (!m.edgestyle && !("orthogonal" in m))) out.routing = "straight";
+  return out;
+}
+
+function classifyResource(c: DrawioCell, flowchart = false): Classified {
   const style = c.style.toLowerCase();
   const label = c.label.toLowerCase();
   const prov = provider(style);
   const icon = iconTokens(c.style);
+  // Flowchart and basic shapes (a diamond is never a cloud resource). On a flowchart page
+  // every plain shape is a shape, so "Process order" doesn't turn into Cloud Run.
+  const shape = prov ? undefined : shapeOf(c, flowchart);
+  if (shape) return { kind: "generic.shape", reason: `${SHAPE_LABELS[shape].title} shape`, confidence: "high", props: shapeProps(c, shape) };
   if (prov && icon) {
     for (const [re, kind] of ICON_SPACED)
       if (re.test(icon)) {
@@ -321,8 +397,13 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
   }
 
   // Classify
+  // A page of flowchart shapes with no cloud icons is read as a flowchart.
+  const flowchart =
+    !vertices.some((v) => provider(v.style.toLowerCase())) &&
+    vertices.some((v) => /rhombus|mxgraph\.flowchart|parallelogram|shape=process|shape=document|shape=manualinput/.test(v.style.toLowerCase()));
   const items: ImportItem[] = [];
   const kindOf = new Map<string, string | null>();
+  const propsOf = new Map<string, Record<string, unknown> | undefined>();
   const iconOf = new Map<string, string | undefined>();
   for (const v of vertices) {
     const container = containers.has(v.id);
@@ -333,7 +414,7 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
     let c: Classified;
     if (v.attrs.archcanvas_kind && catalogEntry(v.attrs.archcanvas_kind))
       c = { kind: v.attrs.archcanvas_kind, reason: "ArchCanvas export", confidence: "exact" };
-    else c = container ? classifyGroup(v) : classifyResource(v);
+    else c = container ? classifyGroup(v) : classifyResource(v, flowchart);
     if (v.id in overrides) {
       const o = overrides[v.id];
       c = { kind: o && catalogEntry(o) ? o : null, reason: o ? "Chosen by you" : container ? "Flattened by you" : "Skipped by you", confidence: o ? "exact" : "none" };
@@ -344,6 +425,7 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
     }
     kindOf.set(v.id, c.kind);
     iconOf.set(v.id, v.attrs.archcanvas_icon || c.icon);
+    propsOf.set(v.id, c.props);
     // Our export labels groups "VPC network: main"; drop the type prefix again.
     let label = v.label.split("\n")[0];
     const prefix = c.kind ? `${catalogEntry(c.kind)?.label}: ` : "";
@@ -377,7 +459,8 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
     const cell = byId.get(item.cellId)!;
     const entry = catalogEntry(item.kind!)!;
     const id = uniqueId(cell.attrs.archcanvas_id || item.label, item.kind!, used);
-    const props = propsFor(cell, item.kind!);
+    const props = { ...propsOf.get(item.cellId), ...propsFor(cell, item.kind!) };
+    if (item.kind === "generic.shape" && !cell.attrs.archcanvas_props) Object.assign(props, propsOf.get(item.cellId));
     let parentId: string | undefined;
     const ancestors = mappedAncestors(item.cellId);
     for (const [i, a] of ancestors.entries()) {
@@ -399,7 +482,8 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
       warnings.push(`"${item.label}" can't go inside "${byId.get(ancestors[0])!.label.split("\n")[0]}" (${catalogEntry(kindOf.get(ancestors[0])!)?.label}), so it was moved up.`);
     }
     const icon = iconOf.get(item.cellId);
-    const r = applyOp(model, { op: "add_node", id, kind: item.kind!, label: item.label.slice(0, 80) || entry.label, parentId, props, ...(icon ? { icon } : {}) });
+    const text = item.kind === "generic.shape" || item.kind === "generic.note" ? cell.label.slice(0, 500) : item.label.slice(0, 80);
+    const r = applyOp(model, { op: "add_node", id, kind: item.kind!, label: text || entry.label, parentId, props, ...(icon ? { icon } : {}) });
     if (!r.ok) {
       warnings.push(`Skipped "${item.label}": ${r.error}`);
       item.kind = null;
@@ -443,7 +527,7 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
     }
     if (a.id === b.id) continue;
     const protocol = (e.attrs.archcanvas_protocol as Protocol | undefined) || inferProtocol(label);
-    const op: Op = { op: "connect", from: a.id, to: b.id, ...(label && label !== protocol ? { label } : {}), ...(protocol ? { protocol } : {}) };
+    const op: Op = { op: "connect", from: a.id, to: b.id, ...(label && label !== protocol ? { label } : {}), ...(protocol ? { protocol } : {}), ...edgeStyleOf(e.style) };
     const r = applyOp(model, op);
     if (r.ok) model = r.model;
   }

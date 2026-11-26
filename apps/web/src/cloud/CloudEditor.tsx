@@ -27,6 +27,8 @@ import {
   NODE_ID,
   type DrawioPage,
   type Op,
+  SHAPE_LABELS,
+  type ShapeName,
   readDrawio,
   toArchitectureDoc,
   toDrawio,
@@ -45,6 +47,7 @@ import { FlowsPanel } from "./FlowsPanel";
 import { absBox, type AlignMode, align, type Clip, containerAt, copySelection, growGroups, pasteOps, placeMissing, relativeAt, reparentOps } from "./geometry";
 import { autoLayout, hasLayout, structureKey } from "./layout";
 import { DRAG_TYPE, Palette, type PaletteItem } from "./Palette";
+import { ContextMenu, type MenuState } from "./ContextMenu";
 import { Presentation } from "./Presentation";
 import { Properties, Review, type Selection, TerraformPanel } from "./panels";
 
@@ -59,13 +62,7 @@ interface Proposal {
   changed: boolean;
 }
 
-interface Menu {
-  x: number;
-  y: number;
-  /** Where on the canvas (flow coordinates) the menu was opened. */
-  at: { x: number; y: number };
-  target: { type: "node" | "edge"; id: string } | { type: "pane" };
-}
+type Menu = MenuState;
 
 export interface EditorProps {
   diagramId: string | null;
@@ -146,6 +143,8 @@ function Editor({
   const [paletteW, setPaletteW] = usePanelWidth("archcanvas.paletteW", 260);
   const [inspectorW, setInspectorW] = usePanelWidth("archcanvas.inspectorW", 380);
   const canvasRef = useRef<HTMLDivElement>(null);
+  /** Where the right button went down: a right-drag pans, a right-click opens the menu. */
+  const rightDown = useRef<{ x: number; y: number } | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState<{ fileName: string; pages: DrawioPage[] } | null>(null);
 
@@ -315,7 +314,20 @@ function Editor({
     [display, diff, issueCounts, proposal, selectedIds, highlight, readOnly],
   );
   const [nodes, setNodes] = useState<Node<CloudNodeData>[]>(flow.nodes);
-  useEffect(() => setNodes(flow.nodes), [flow.nodes]);
+  // React Flow keeps each node's measured size on the node object. Carry it over when the model
+  // changes, or every edit hides nodes until they're re-measured (blinking) and lines to nodes
+  // whose size didn't change never come back.
+  useEffect(
+    () =>
+      setNodes((prev) => {
+        const old = new Map(prev.map((n) => [n.id, n]));
+        return flow.nodes.map((n) => {
+          const o = old.get(n.id);
+          return o?.measured ? { ...n, measured: o.measured } : n;
+        });
+      }),
+    [flow.nodes],
+  );
 
   const onNodesChange: OnNodesChange<Node<CloudNodeData>> = useCallback((changes) => {
     // Removal goes through the model (onNodesDelete); moves and resizes are committed at the end.
@@ -363,22 +375,35 @@ function Editor({
       parentId = candidates.find((c) => c && entry.parents.includes(c.kind))?.id;
     }
     const label = item.kind === "generic.note" ? "Double-click to edit this note" : item.label;
+    const shapeSize = item.kind === "generic.shape" ? SHAPE_LABELS[String(item.props?.shape ?? "rectangle") as ShapeName]?.size : undefined;
     const base =
       item.kind === "generic.note"
         ? "note"
-        : item.icon || item.kind === "generic.group"
+        : item.kind === "generic.shape"
+          ? String(item.props?.shape ?? "shape").replace(/-/g, "_")
+          : item.icon || item.kind === "generic.group"
           ? item.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^(\d)/, "n_$1").slice(0, 30) || "component"
           : item.kind.split(".").pop()!.replace(/^(cloud_|gcs_|memorystore_)/, "");
     let id = NODE_ID.test(base) ? base : "node";
     for (let i = 2; m.nodes.some((n) => n.id === id); i++) id = `${base}_${i}`;
-    const ok = change([{ op: "add_node", id, kind: item.kind, label: label.slice(0, item.kind === "generic.note" ? 500 : 80), parentId, ...(item.icon ? { icon: item.icon } : {}) }], (after) => {
-      if (!at) return placeMissing(after);
-      return { ...after.layout, [id]: relativeAt(after, parentId, at, item.kind) };
-    });
+    const long = item.kind === "generic.note" || item.kind === "generic.shape";
+    const ok = change(
+      [{ op: "add_node", id, kind: item.kind, label: (label || " ").slice(0, long ? 500 : 80), parentId, ...(item.icon ? { icon: item.icon } : {}), ...(item.props ? { props: item.props } : {}) }],
+      (after) => {
+        if (!shapeSize) return at ? { ...after.layout, [id]: relativeAt(after, parentId, at, item.kind) } : placeMissing(after);
+        const [w, h] = shapeSize;
+        if (!at) {
+          const placed = placeMissing(after);
+          return { ...placed, [id]: { ...placed[id], w, h } };
+        }
+        const base = parentId ? absBox(after, parentId) : { x: 0, y: 0 };
+        return { ...after.layout, [id]: { x: Math.round(at.x - base.x - w / 2), y: Math.round(at.y - base.y - h / 2), w, h } };
+      },
+    );
     if (!ok) return;
     setSelection({ type: "node", id });
     setSelectedIds(new Set([id]));
-    if (item.kind === "generic.note") setEditing(id);
+    if (item.kind === "generic.note" || item.kind === "generic.shape") setEditing(id);
     else setTab("properties");
   }
 
@@ -719,8 +744,26 @@ function Editor({
         </aside>
         <Resizer onDrag={(dx) => setPaletteW((w) => w + dx)} />
 
-        <div className="cloud-canvas" ref={canvasRef} onDragOver={(e) => e.dataTransfer.types.includes(DRAG_TYPE) && (e.preventDefault(), (e.dataTransfer.dropEffect = "copy"))} onDrop={onDrop}>
+        <div
+          className="cloud-canvas"
+          ref={canvasRef}
+          onPointerDownCapture={(e) => (rightDown.current = e.button === 2 ? { x: e.clientX, y: e.clientY } : null)}
+          onContextMenu={(e) => {
+            // React Flow drops the pane's context menu while right-drag panning is on, so open it here.
+            if (!(e.target as HTMLElement).classList.contains("react-flow__pane")) return;
+            e.preventDefault();
+            const d = rightDown.current;
+            if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) return;
+            openMenu(e, { type: "pane" });
+          }}
+          onDragOver={(e) => e.dataTransfer.types.includes(DRAG_TYPE) && (e.preventDefault(), (e.dataTransfer.dropEffect = "copy"))} onDrop={onDrop}>
           <ReactFlow
+            onDoubleClick={(e) => {
+              // Double-click on empty canvas adds text, as in draw.io.
+              if (readOnly || !(e.target as HTMLElement).classList.contains("react-flow__pane")) return;
+              addItem({ key: "text", kind: "generic.shape", label: "Text", props: { shape: "text" } }, rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+            }}
+            zoomOnDoubleClick={false}
             nodes={nodes}
             edges={flow.edges as Edge[]}
             nodeTypes={nodeTypes}
@@ -733,13 +776,19 @@ function Editor({
               removeSelected();
               return false;
             }}
-            onConnect={(c) => c.source && c.target && op({ op: "connect", from: c.source, to: c.target })}
+            onConnect={(c) => {
+              if (!c.source || !c.target) return;
+              const side = (h: string | null | undefined) => (h && ["t", "r", "b", "l"].includes(h) ? (h as "t") : undefined);
+              op({ op: "connect", from: c.source, to: c.target, ...(side(c.sourceHandle) ? { fromHandle: side(c.sourceHandle) } : {}), ...(side(c.targetHandle) ? { toHandle: side(c.targetHandle) } : {}) });
+            }}
             onReconnect={(old, c) => {
               const e = modelRef.current.edges.find((x) => x.id === old.id);
               if (!e || !c.source || !c.target || (c.source === e.from && c.target === e.to)) return;
+              const side = (h: string | null | undefined) => (h && ["t", "r", "b", "l"].includes(h) ? (h as "t") : undefined);
+              const { id: _id, from: _f, to: _t, fromHandle: _fh, toHandle: _th, ...style } = e;
               change([
                 { op: "disconnect", from: e.from, to: e.to },
-                { op: "connect", from: c.source, to: c.target, label: e.label, protocol: e.protocol, routing: e.routing },
+                { op: "connect", from: c.source, to: c.target, ...style, fromHandle: side(c.sourceHandle), toHandle: side(c.targetHandle) },
               ]);
             }}
             edgesReconnectable={!readOnly}
@@ -768,7 +817,6 @@ function Editor({
               setSelection({ type: "edge", id: ed.id });
               openMenu(e, { type: "edge", id: ed.id });
             }}
-            onPaneContextMenu={(e) => openMenu(e as React.MouseEvent, { type: "pane" })}
             nodesDraggable={!readOnly}
             nodesConnectable={!readOnly}
             connectionMode={ConnectionMode.Loose}
@@ -822,9 +870,39 @@ function Editor({
           {menu && (
             <ContextMenu
               menu={menu}
+              model={model}
               readOnly={readOnly}
               onClose={() => setMenu(null)}
               actions={{
+                addText: (at) => addItem({ key: "text", kind: "generic.shape", label: "Text", props: { shape: "text" } }, at),
+                styleShapes: (id, props) => {
+                  const ids = selectedIds.has(id) ? nodeIds(selectedIds) : [id];
+                  const ops = ids
+                    .filter((x) => modelRef.current.nodes.find((n) => n.id === x)?.kind === "generic.shape")
+                    .map((x) => ({ op: "update_node" as const, id: x, props }));
+                  // Changing the shape keeps the size the user gave it.
+                  if (ops.length) change(ops);
+                },
+                arrange: (id, where) => {
+                  const m = modelRef.current;
+                  const ids = new Set(selectedIds.has(id) ? nodeIds(selectedIds) : [id]);
+                  const moved = m.nodes.filter((n) => ids.has(n.id));
+                  const rest = m.nodes.filter((n) => !ids.has(n.id));
+                  commit({ ...m, nodes: where === "front" ? [...rest, ...moved] : [...moved, ...rest] });
+                },
+                edge: (edgeId, patch) => {
+                  const e = modelRef.current.edges.find((x) => x.id === edgeId);
+                  if (e) op({ op: "update_edge", from: e.from, to: e.to, ...(patch as Record<string, never>) });
+                },
+                reverse: (edgeId) => {
+                  const e = modelRef.current.edges.find((x) => x.id === edgeId);
+                  if (!e) return;
+                  const { id: _id, from, to, fromHandle, toHandle, ...style } = e;
+                  change([
+                    { op: "disconnect", from, to },
+                    { op: "connect", from: to, to: from, ...style, fromHandle: toHandle, toHandle: fromHandle },
+                  ]);
+                },
                 rename: (id) => setEditing(id),
                 properties: () => setTab("properties"),
                 duplicate: (id) => duplicate(selectedIds.has(id) ? nodeIds(selectedIds) : [id]),
@@ -833,10 +911,6 @@ function Editor({
                 paste: (at) => paste(at),
                 addNote: (at) => addItem({ key: "note", kind: "generic.note", label: "Note" }, at),
                 addGroup: (at) => addItem({ key: "group", kind: "generic.group", label: "Group" }, at),
-                routing: (edgeId, routing) => {
-                  const e = model.edges.find((x) => x.id === edgeId);
-                  if (e) op({ op: "update_edge", from: e.from, to: e.to, routing: routing === "orthogonal" ? null : (routing as never) });
-                },
                 editEdgeLabel: (edgeId) => setEditing(`edge:${edgeId}`),
                 fit: () => fit(),
               }}
@@ -937,78 +1011,6 @@ function Editor({
 }
 
 // ---------------------------------------------------------------- pieces
-
-function ContextMenu({
-  menu,
-  readOnly,
-  onClose,
-  actions,
-}: {
-  menu: Menu;
-  readOnly: boolean;
-  onClose: () => void;
-  actions: {
-    rename: (id: string) => void;
-    properties: () => void;
-    duplicate: (id: string) => void;
-    copy: (id: string) => void;
-    remove: (t: { type: "node" | "edge"; id: string }) => void;
-    paste: (at: { x: number; y: number }) => void;
-    addNote: (at: { x: number; y: number }) => void;
-    addGroup: (at: { x: number; y: number }) => void;
-    routing: (edgeId: string, routing: string) => void;
-    editEdgeLabel: (edgeId: string) => void;
-    fit: () => void;
-  };
-}) {
-  const item = (label: string, fn: () => void, opts: { disabled?: boolean; danger?: boolean; hint?: string } = {}) => (
-    <button
-      className={opts.danger ? "danger" : ""}
-      disabled={opts.disabled}
-      onClick={() => {
-        fn();
-        onClose();
-      }}
-    >
-      <span>{label}</span>
-      {opts.hint && <kbd>{opts.hint}</kbd>}
-    </button>
-  );
-  const t = menu.target;
-  return (
-    <div className="ctx-menu" style={{ left: menu.x, top: menu.y }} onContextMenu={(e) => e.preventDefault()} role="menu">
-      {t.type === "node" && (
-        <>
-          {item("Rename", () => actions.rename(t.id), { disabled: readOnly, hint: "F2" })}
-          {item("Properties…", () => actions.properties())}
-          {item("Copy", () => actions.copy(t.id), { hint: "⌘C" })}
-          {item("Duplicate", () => actions.duplicate(t.id), { disabled: readOnly, hint: "⌘D" })}
-          <hr />
-          {item("Delete", () => actions.remove(t), { disabled: readOnly, danger: true, hint: "⌫" })}
-        </>
-      )}
-      {t.type === "edge" && (
-        <>
-          {item("Edit label", () => actions.editEdgeLabel(t.id), { disabled: readOnly })}
-          {item("Orthogonal line", () => actions.routing(t.id, "orthogonal"), { disabled: readOnly })}
-          {item("Straight line", () => actions.routing(t.id, "straight"), { disabled: readOnly })}
-          {item("Curved line", () => actions.routing(t.id, "curved"), { disabled: readOnly })}
-          <hr />
-          {item("Delete connection", () => actions.remove(t), { disabled: readOnly, danger: true })}
-        </>
-      )}
-      {t.type === "pane" && (
-        <>
-          {item("Paste here", () => actions.paste(menu.at), { disabled: readOnly, hint: "⌘V" })}
-          {item("Add note here", () => actions.addNote(menu.at), { disabled: readOnly })}
-          {item("Add group here", () => actions.addGroup(menu.at), { disabled: readOnly })}
-          <hr />
-          {item("Fit to screen", () => actions.fit())}
-        </>
-      )}
-    </div>
-  );
-}
 
 /** A thin vertical handle between panels; drag to resize. */
 function Resizer({ onDrag }: { onDrag: (dx: number) => void }) {

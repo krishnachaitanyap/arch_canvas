@@ -8,7 +8,6 @@ import {
   getSmoothStepPath,
   getStraightPath,
   Handle,
-  MarkerType,
   type Node,
   type NodeProps,
   NodeResizer,
@@ -32,7 +31,20 @@ import {
   Zap,
 } from "lucide-react";
 import { kindIconRef, useIcon } from "../icons/registry";
-import { catalogEntry, childrenOf, type DiagramModel, type DiagramNode, type ModelDiff, type Routing } from "@archcanvas/shared";
+import {
+  type Arrowhead,
+  catalogEntry,
+  childrenOf,
+  type DiagramModel,
+  type DiagramNode,
+  type ModelDiff,
+  resolvedProps,
+  type Routing,
+  SHAPE_LABELS,
+  type ShapeName,
+  type Side,
+  SIDES,
+} from "@archcanvas/shared";
 import { NODE_H, NODE_W } from "./layout";
 
 export type Status = "added" | "changed" | "removed";
@@ -191,20 +203,173 @@ function NoteNode({ id, data, selected }: NodeProps<CloudNode>) {
   );
 }
 
-export const nodeTypes = { resource: ResourceNode, group: GroupNode, note: NoteNode };
+/** SVG outline for a general shape at its real pixel size (so it stays crisp when resized). */
+export function ShapeOutline({ shape, w, h, fill, stroke, sw = 1.6 }: { shape: string; w: number; h: number; fill: string; stroke: string; sw?: number }) {
+  const p = sw / 2 + 0.5;
+  const W = w - p;
+  const H = h - p;
+  const common = { fill, stroke, strokeWidth: sw, vectorEffect: "non-scaling-stroke" as const };
+  const slant = Math.min(24, w * 0.18);
+  let el: React.ReactNode;
+  switch (shape) {
+    case "rounded":
+      el = <rect x={p} y={p} width={W - p} height={H - p} rx={12} {...common} />;
+      break;
+    case "terminator":
+      el = <rect x={p} y={p} width={W - p} height={H - p} rx={(H - p) / 2} {...common} />;
+      break;
+    case "ellipse":
+    case "circle":
+      el = <ellipse cx={w / 2} cy={h / 2} rx={w / 2 - p} ry={h / 2 - p} {...common} />;
+      break;
+    case "diamond":
+      el = <polygon points={`${w / 2},${p} ${W},${h / 2} ${w / 2},${H} ${p},${h / 2}`} {...common} />;
+      break;
+    case "parallelogram":
+      el = <polygon points={`${p + slant},${p} ${W},${p} ${W - slant},${H} ${p},${H}`} {...common} />;
+      break;
+    case "hexagon":
+      el = <polygon points={`${p + slant},${p} ${W - slant},${p} ${W},${h / 2} ${W - slant},${H} ${p + slant},${H} ${p},${h / 2}`} {...common} />;
+      break;
+    case "manual-input":
+      el = <polygon points={`${p},${p + h * 0.25} ${W},${p} ${W},${H} ${p},${H}`} {...common} />;
+      break;
+    case "triangle":
+      el = <polygon points={`${w / 2},${p} ${W},${H} ${p},${H}`} {...common} />;
+      break;
+    case "document": {
+      const wave = Math.min(14, h * 0.18);
+      el = <path d={`M${p},${p} H${W} V${H - wave} C${w * 0.75},${H - 2 * wave} ${w * 0.25},${H + wave} ${p},${H - wave} Z`} {...common} />;
+      break;
+    }
+    case "cylinder": {
+      const ry = Math.min(14, h * 0.15);
+      el = (
+        <>
+          <path d={`M${p},${p + ry} V${H - ry} A${w / 2 - p},${ry} 0 0 0 ${W},${H - ry} V${p + ry} A${w / 2 - p},${ry} 0 0 0 ${p},${p + ry} Z`} {...common} />
+          <path d={`M${p},${p + ry} A${w / 2 - p},${ry} 0 0 0 ${W},${p + ry}`} {...common} fill="none" />
+        </>
+      );
+      break;
+    }
+    case "predefined": {
+      const inset = Math.min(14, w * 0.08);
+      el = (
+        <>
+          <rect x={p} y={p} width={W - p} height={H - p} {...common} />
+          <line x1={p + inset} y1={p} x2={p + inset} y2={H} {...common} />
+          <line x1={W - inset} y1={p} x2={W - inset} y2={H} {...common} />
+        </>
+      );
+      break;
+    }
+    case "cloud":
+      el = (
+        <path
+          d={`M${w * 0.25},${h * 0.85} C${w * 0.02},${h * 0.85} ${w * 0.02},${h * 0.45} ${w * 0.22},${h * 0.45} C${w * 0.2},${h * 0.12} ${w * 0.55},${h * 0.05} ${w * 0.62},${h * 0.3} C${w * 0.75},${h * 0.12} ${w * 0.98},${h * 0.25} ${w * 0.88},${h * 0.5} C${w * 1.02},${h * 0.6} ${w * 0.95},${h * 0.88} ${w * 0.75},${h * 0.85} Z`}
+          {...common}
+        />
+      );
+      break;
+    case "text":
+      el = null;
+      break;
+    default:
+      el = <rect x={p} y={p} width={W - p} height={H - p} {...common} />;
+  }
+  return (
+    <svg className="shape-svg" width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+      {el}
+    </svg>
+  );
+}
+
+function ShapeNode({ id, data, selected, width, height }: NodeProps<CloudNode>) {
+  const ctx = useContext(EditorContext);
+  const p = resolvedProps("generic.shape", data.node.props);
+  const shape = String(p.shape);
+  const [dw, dh] = SHAPE_LABELS[shape as ShapeName]?.size ?? [160, 70];
+  const w = width ?? dw;
+  const h = height ?? dh;
+  return (
+    <div
+      className={`shape-node ${data.status ?? ""} ${selected ? "selected" : ""} ${shape === "text" ? "text-only" : ""}`}
+      style={{ color: String(p.textColor) }}
+      onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
+    >
+      <NodeResizer isVisible={selected && ctx.editable} minWidth={40} minHeight={24} color="#4f46e5" onResizeEnd={(_, r) => ctx.resized(id, { x: r.x, y: r.y, w: r.width, h: r.height })} />
+      <ShapeOutline shape={shape} w={w} h={h} fill={String(p.fill)} stroke={selected ? "#4f46e5" : String(p.stroke)} />
+      <div className={`shape-label ${shape === "cylinder" ? "low" : ""}`}>
+        <InlineText id={id} value={data.node.label} multiline onCommit={(v) => ctx.rename(id, v)} />
+      </div>
+      {/* A source and a target handle on every side (same id), so lines can start and end anywhere. */}
+      {SIDES.map((side) => (
+        <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
+      ))}
+      {SIDES.map((side) => (
+        <Handle key={`t-${side}`} id={side} type="target" position={SIDE_POS[side]} className="side-handle" />
+      ))}
+    </div>
+  );
+}
+
+const SIDE_POS: Record<Side, Position> = { t: Position.Top, r: Position.Right, b: Position.Bottom, l: Position.Left };
+
+export const nodeTypes = { resource: ResourceNode, group: GroupNode, note: NoteNode, shape: ShapeNode };
 
 /** Connection drawn orthogonal, straight or curved, with a label you can double-click to edit. */
-function SmartEdge(props: EdgeProps<Edge<{ routing?: Routing; label?: string; editable?: boolean }>>) {
-  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, data, label } = props;
+type EdgeData = { routing?: Routing; label?: string; editable?: boolean; color: string; width: number; dash?: string; arrowStart?: Arrowhead; arrowEnd?: Arrowhead; status?: string };
+
+/** Arrowhead drawn in the line's colour; `auto-start-reverse` lets one marker serve both ends. */
+function Marker({ id, kind, color }: { id: string; kind: Arrowhead; color: string }) {
+  if (kind === "none") return null;
+  const shape =
+    kind === "arrow" ? (
+      <path d="M1,1 L12,6 L1,11 z" fill={color} />
+    ) : kind === "open" ? (
+      <path d="M1,1 L12,6 L1,11" fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" />
+    ) : kind === "triangle" ? (
+      <path d="M1,1 L12,6 L1,11 z" fill="#fff" stroke={color} strokeWidth={1.4} />
+    ) : kind === "diamond" || kind === "odiamond" ? (
+      <path d="M0.8,6 L6.5,1 L12.2,6 L6.5,11 z" fill={kind === "diamond" ? color : "#fff"} stroke={color} strokeWidth={1.4} />
+    ) : (
+      <circle cx={7} cy={6} r={4.2} fill={color} />
+    );
+  return (
+    <marker id={id} viewBox="0 0 13 12" refX={12} refY={6} markerWidth={13} markerHeight={12} markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      {shape}
+    </marker>
+  );
+}
+
+function SmartEdge(props: EdgeProps<Edge<EdgeData>>) {
+  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, label } = props;
   const ctx = useContext(EditorContext);
   const params = { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition };
   const [path, lx, ly] =
     data?.routing === "straight" ? getStraightPath(params) : data?.routing === "curved" ? getBezierPath(params) : getSmoothStepPath({ ...params, borderRadius: 8 });
   const text = typeof label === "string" ? label : "";
   const editing = ctx.editing === `edge:${id}`;
+  const color = data?.color ?? "#5f6368";
+  const startId = `m-${id}-s`;
+  const endId = `m-${id}-e`;
+  const end = data?.arrowEnd ?? "arrow";
+  const start = data?.arrowStart ?? "none";
+  const dash = data?.dash === "dashed" ? "7 5" : data?.dash === "dotted" ? "1.5 4.5" : data?.status === "removed" ? "6 4" : undefined;
   return (
     <>
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={18} />
+      <defs>
+        <Marker id={endId} kind={end} color={color} />
+        <Marker id={startId} kind={start} color={color} />
+      </defs>
+      <BaseEdge
+        id={id}
+        path={path}
+        markerEnd={end === "none" ? undefined : `url(#${endId})`}
+        markerStart={start === "none" ? undefined : `url(#${startId})`}
+        style={{ stroke: color, strokeWidth: data?.width ?? 1.6, strokeDasharray: dash, strokeLinecap: data?.dash === "dotted" ? "round" : undefined }}
+        interactionWidth={18}
+      />
       {(text || editing) && (
         <EdgeLabelRenderer>
           <div
@@ -236,24 +401,28 @@ export function toFlow(
           ? "changed"
           : undefined;
   const nodes: CloudNode[] = [];
+  const order = new Map(m.nodes.map((n, i) => [n.id, i]));
   const visit = (parentId: string | undefined) => {
     for (const n of childrenOf(m, parentId)) {
       const container = catalogEntry(n.kind)?.container;
       const note = n.kind === "generic.note";
+      const shape = n.kind === "generic.shape";
       const box = m.layout[n.id] ?? { x: 0, y: 0 };
-      const w = box.w ?? (note ? 200 : NODE_W);
-      const h = box.h ?? (note ? 90 : NODE_H);
+      const ds = shape ? (SHAPE_LABELS[String(resolvedProps(n.kind, n.props).shape) as ShapeName]?.size ?? [160, 70]) : undefined;
+      const w = box.w ?? (note ? 200 : ds ? ds[0] : NODE_W);
+      const h = box.h ?? (note ? 90 : ds ? ds[1] : NODE_H);
       nodes.push({
         id: n.id,
-        type: container ? "group" : note ? "note" : "resource",
+        type: container ? "group" : note ? "note" : shape ? "shape" : "resource",
         position: { x: box.x, y: box.y },
         ...(n.parentId ? { parentId: n.parentId } : {}),
         data: { node: n, status: statusOf(n.id), issues: opts.issues?.get(n.id) },
-        style: container || note ? { width: w, height: h } : { width: w },
+        style: container || note || shape ? { width: w, height: h } : { width: w },
         width: w,
         height: h,
         selected: opts.selectedIds ? opts.selectedIds.has(n.id) : opts.selected === n.id,
-        zIndex: container ? 0 : note ? 5 : 10,
+        // Layer by type, then by order in the model (Bring to front / Send to back reorder it).
+        zIndex: (container ? 0 : note || shape ? 5 : 10) * 1000 + order.get(n.id)!,
         className: emphasis(opts.highlight, n.id, "node", Boolean(container)),
       });
       visit(n.id);
@@ -261,26 +430,57 @@ export function toFlow(
   };
   visit(undefined);
 
+  // Lines touching general shapes attach to the side facing the other end (or the side the
+  // user dragged from); resources keep their left/right handles.
+  const abs = (id: string): { x: number; y: number; w: number; h: number } => {
+    const n = m.nodes.find((x) => x.id === id);
+    const l = m.layout[id] ?? { x: 0, y: 0 };
+    const base = n?.parentId ? abs(n.parentId) : { x: 0, y: 0, w: 0, h: 0 };
+    return { x: base.x + l.x, y: base.y + l.y, w: l.w ?? NODE_W, h: l.h ?? NODE_H };
+  };
+  const isShape = (id: string) => m.nodes.find((x) => x.id === id)?.kind === "generic.shape";
+  const sides = (from: string, to: string): [Side, Side] => {
+    const a = abs(from);
+    const b = abs(to);
+    const dx = b.x + b.w / 2 - (a.x + a.w / 2);
+    const dy = b.y + b.h / 2 - (a.y + a.h / 2);
+    if (Math.abs(dy) > Math.abs(dx)) return dy > 0 ? ["b", "t"] : ["t", "b"];
+    return dx > 0 ? ["r", "l"] : ["l", "r"];
+  };
+
   const edges: Edge[] = m.edges.map((e) => {
     const status = opts.diff?.addedEdges.includes(e.id) ? "added" : opts.diff?.removedEdges.includes(e.id) ? "removed" : undefined;
     const hl = opts.highlight;
     const current = hl?.edges.includes(e.id);
     const visited = hl?.visitedEdges?.includes(e.id);
-    const color = current ? "#4f46e5" : status === "added" ? "#1e8e3e" : status === "removed" ? "#d93025" : visited ? "#6366f1" : "#5f6368";
+    const color = current ? "#4f46e5" : status === "added" ? "#1e8e3e" : status === "removed" ? "#d93025" : visited ? "#6366f1" : (e.color ?? "#5f6368");
+    const auto = isShape(e.from) || isShape(e.to) ? sides(e.from, e.to) : undefined;
+    const sourceHandle = isShape(e.from) ? (e.fromHandle ?? auto![0]) : undefined;
+    const targetHandle = isShape(e.to) ? (e.toHandle ?? auto![1]) : undefined;
     return {
       id: e.id,
       source: e.from,
       target: e.to,
       label: e.label ?? e.protocol,
       type: "smart",
-      data: { routing: e.routing, label: e.label ?? e.protocol ?? "", editable: opts.editable },
+      ...(sourceHandle ? { sourceHandle } : {}),
+      ...(targetHandle ? { targetHandle } : {}),
+      data: {
+        routing: e.routing,
+        label: e.label ?? e.protocol ?? "",
+        editable: opts.editable,
+        color,
+        width: current ? 3 : visited ? 2 : 1.6,
+        dash: e.dash,
+        arrowStart: e.arrowStart,
+        arrowEnd: e.arrowEnd,
+        status,
+      },
       reconnectable: Boolean(opts.editable),
       selected: opts.selectedIds?.has(`edge:${e.id}`),
       animated: status === "added" || Boolean(current),
-      zIndex: current ? 30 : 20,
+      zIndex: current ? 30500 : 20000,
       className: [status ?? "", hl ? (current ? "hl" : visited ? "visited" : "dim") : ""].join(" ").trim(),
-      style: { stroke: color, strokeWidth: current ? 3 : visited ? 2 : 1.6, ...(status === "removed" ? { strokeDasharray: "6 4" } : {}) },
-      markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
     };
   });
   return { nodes, edges };

@@ -22,6 +22,12 @@ export const NodeSchema = z.object({
   icon: z.string().max(240).optional(),
 });
 
+/** Arrowheads: filled arrow, open arrow, hollow triangle (UML inheritance), filled / hollow diamond (composition / aggregation), circle, none. */
+export const ARROWHEADS = ["none", "arrow", "open", "triangle", "diamond", "odiamond", "circle"] as const;
+export type Arrowhead = (typeof ARROWHEADS)[number];
+export const SIDES = ["t", "r", "b", "l"] as const;
+export type Side = (typeof SIDES)[number];
+
 export const PROTOCOLS = ["https", "http", "grpc", "tcp", "sql", "redis", "pubsub", "storage", "secret"] as const;
 
 export const EdgeSchema = z.object({
@@ -32,6 +38,15 @@ export const EdgeSchema = z.object({
   protocol: z.enum(PROTOCOLS).optional(),
   /** How the line is drawn; orthogonal when unset. */
   routing: z.enum(["orthogonal", "straight", "curved"]).optional(),
+  /** Line pattern; solid when unset. */
+  dash: z.enum(["solid", "dashed", "dotted"]).optional(),
+  /** Arrowheads; the end gets a filled arrow and the start none when unset. */
+  arrowStart: z.enum(ARROWHEADS).optional(),
+  arrowEnd: z.enum(ARROWHEADS).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  /** Which side of each shape the line attaches to (t/r/b/l); automatic when unset. */
+  fromHandle: z.enum(SIDES).optional(),
+  toHandle: z.enum(SIDES).optional(),
 });
 
 export type Routing = "orthogonal" | "straight" | "curved";

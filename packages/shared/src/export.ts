@@ -1,4 +1,4 @@
-import { catalogEntry } from "./catalog.js";
+import { catalogEntry, resolvedProps } from "./catalog.js";
 import { childrenOf, type DiagramModel, type DiagramNode } from "./model.js";
 
 /**
@@ -67,10 +67,20 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
     const entry = catalogEntry(n.kind);
     const b = boxes.get(n.id)!;
     const color = entry?.icon.color ?? "#5f6368";
-    const style = entry?.container
-      ? `rounded=1;arcSize=4;whiteSpace=wrap;html=1;container=1;collapsible=0;dashed=1;fillColor=none;strokeColor=${color};verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=${color};`
-      : `rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=${color};strokeWidth=2;fontColor=#202124;`;
-    const value = entry?.container ? `${entry.label}: ${n.label}` : `<b>${esc(n.label)}</b><br><font color="${color}" style="font-size:10px">${esc(entry?.label ?? n.kind)}</font>`;
+    const shapeProps = n.kind === "generic.shape" ? resolvedProps(n.kind, n.props) : undefined;
+    const style = shapeProps
+      ? `${DRAWIO_SHAPE[String(shapeProps.shape)] ?? "rounded=0;"}whiteSpace=wrap;html=1;fillColor=${shapeProps.fill};strokeColor=${shapeProps.stroke};fontColor=${shapeProps.textColor};`
+      : n.kind === "generic.note"
+        ? "shape=note;whiteSpace=wrap;html=1;fillColor=#fef9c3;strokeColor=#facc15;align=left;verticalAlign=top;spacing=8;"
+        : entry?.container
+          ? `rounded=1;arcSize=4;whiteSpace=wrap;html=1;container=1;collapsible=0;dashed=1;fillColor=none;strokeColor=${color};verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=${color};`
+          : `rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=${color};strokeWidth=2;fontColor=#202124;`;
+    const value =
+      shapeProps || n.kind === "generic.note"
+        ? esc(n.label).replace(/&#xa;/g, "<br>")
+        : entry?.container
+          ? `${entry.label}: ${n.label}`
+          : `<b>${esc(n.label)}</b><br><font color="${color}" style="font-size:10px">${esc(entry?.label ?? n.kind)}</font>`;
     // <object> carries ArchCanvas metadata as draw.io custom properties (Edit Data), so
     // re-importing is lossless and people can set types in draw.io itself.
     const props =
@@ -87,7 +97,7 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
     const label = e.label ?? e.protocol ?? "";
     cells.push(
       `<object id="e_${esc(e.id)}" label="${esc(label)}"${e.protocol ? ` archcanvas_protocol="${e.protocol}"` : ""}>` +
-        `<mxCell style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#5f6368;" edge="1" parent="1" source="${cellId(e.from)}" target="${cellId(e.to)}">` +
+        `<mxCell style="${edgeStyle(e)}" edge="1" parent="1" source="${cellId(e.from)}" target="${cellId(e.to)}">` +
         `<mxGeometry relative="1" as="geometry" /></mxCell></object>`,
     );
   }
@@ -104,6 +114,63 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
 `;
 }
 
+/** draw.io style for each ArchCanvas shape. */
+const DRAWIO_SHAPE: Record<string, string> = {
+  rectangle: "rounded=0;",
+  rounded: "rounded=1;",
+  terminator: "rounded=1;arcSize=50;",
+  ellipse: "ellipse;",
+  circle: "ellipse;aspect=fixed;",
+  diamond: "rhombus;",
+  parallelogram: "shape=parallelogram;perimeter=parallelogramPerimeter;fixedSize=1;",
+  hexagon: "shape=hexagon;perimeter=hexagonPerimeter2;fixedSize=1;",
+  document: "shape=document;boundedLbl=1;",
+  cylinder: "shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=12;",
+  predefined: "shape=process;backgroundOutline=1;",
+  "manual-input": "shape=manualInput;",
+  triangle: "triangle;direction=north;",
+  cloud: "ellipse;shape=cloud;",
+  text: "text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;",
+};
+
+const DRAWIO_ARROW: Record<string, string> = {
+  none: "none;",
+  arrow: "block;endFill=1;",
+  open: "open;endFill=0;",
+  triangle: "block;endFill=0;",
+  diamond: "diamond;endFill=1;",
+  odiamond: "diamond;endFill=0;",
+  circle: "oval;endFill=1;",
+};
+
+function edgeStyle(e: DiagramModel["edges"][number]): string {
+  const route = e.routing === "straight" ? "" : e.routing === "curved" ? "curved=1;" : "edgeStyle=orthogonalEdgeStyle;rounded=1;";
+  const end = DRAWIO_ARROW[e.arrowEnd ?? "arrow"];
+  // draw.io uses startFill for the start marker.
+  const start = DRAWIO_ARROW[e.arrowStart ?? "none"].replace("endFill", "startFill");
+  const dash = e.dash === "dashed" ? "dashed=1;" : e.dash === "dotted" ? "dashed=1;dashPattern=1 3;" : "";
+  return `${route}html=1;endArrow=${end}startArrow=${start}${dash}strokeColor=${e.color ?? "#5f6368"};`;
+}
+
+/** Mermaid flowchart node syntax per shape. */
+const MERMAID_SHAPE: Record<string, [string, string]> = {
+  rectangle: ['["', '"]'],
+  rounded: ['("', '")'],
+  terminator: ['(["', '"])'],
+  ellipse: ['(("', '"))'],
+  circle: ['(("', '"))'],
+  diamond: ['{"', '"}'],
+  parallelogram: ['[/"', '"/]'],
+  hexagon: ['{{"', '"}}'],
+  document: ['["', '"]'],
+  cylinder: ['[("', '")]'],
+  predefined: ['[["', '"]]'],
+  "manual-input": ['[/"', '"\\]'],
+  triangle: ['["', '"]'],
+  cloud: ['("', '")'],
+  text: ['["', '"]'],
+};
+
 /** Mermaid flowchart: groups become subgraphs. Renders in GitHub, GitLab, Notion and Confluence. */
 export function toMermaid(m: DiagramModel): string {
   const lines = ["flowchart LR"];
@@ -116,6 +183,10 @@ export function toMermaid(m: DiagramModel): string {
         lines.push(`${ind}subgraph ${n.id}["${q(`${entry.label}: ${n.label}`)}"]`);
         emit(n.id, depth + 1);
         lines.push(`${ind}end`);
+      } else if (n.kind === "generic.shape" || n.kind === "generic.note") {
+        // Plain shapes read like a flowchart: the text only.
+        const shape = MERMAID_SHAPE[String(resolvedProps(n.kind, n.props).shape ?? "rectangle")] ?? MERMAID_SHAPE.rectangle;
+        lines.push(`${ind}${n.id}${shape[0]}${q(n.label).replace(/\n/g, "<br/>")}${shape[1]}`);
       } else {
         const shape = n.kind === "gcp.cloud_sql" || n.kind === "gcp.memorystore_redis" ? [`[("`, `")]`] : n.kind === "generic.client" ? [`(["`, `"])`] : [`["`, `"]`];
         lines.push(`${ind}${n.id}${shape[0]}${q(n.label)}<br/><small>${q(entry?.label ?? n.kind)}</small>${shape[1]}`);
@@ -125,7 +196,10 @@ export function toMermaid(m: DiagramModel): string {
   emit(undefined, 1);
   for (const e of m.edges) {
     const label = e.label ?? e.protocol;
-    lines.push(label ? `  ${e.from} -->|${q(label)}| ${e.to}` : `  ${e.from} --> ${e.to}`);
+    const noHead = (e.arrowEnd ?? "arrow") === "none";
+    const both = e.arrowStart && e.arrowStart !== "none";
+    const link = e.dash && e.dash !== "solid" ? (noHead ? "-.-" : both ? "<-.->" : "-.->") : noHead ? "---" : both ? "<-->" : "-->";
+    lines.push(label ? `  ${e.from} ${link}|${q(label)}| ${e.to}` : `  ${e.from} ${link} ${e.to}`);
   }
   return lines.join("\n") + "\n";
 }

@@ -3,7 +3,7 @@
  * properties form, the agent's knowledge of what it can draw, validation rules, and the
  * Terraform compiler (see terraform.ts for the per-kind mappings).
  */
-export type PropType = "string" | "number" | "boolean" | "enum";
+export type PropType = "string" | "number" | "boolean" | "enum" | "color";
 
 export interface PropSpec {
   key: string;
@@ -53,6 +53,45 @@ const C = {
   network: "#a142f4",
   security: "#d93025",
   devops: "#12b5cb",
+};
+
+/** Shapes for flowcharts and general diagrams (generic.shape's `shape` property). */
+export const SHAPES = [
+  "rectangle",
+  "rounded",
+  "terminator",
+  "ellipse",
+  "circle",
+  "diamond",
+  "parallelogram",
+  "hexagon",
+  "document",
+  "cylinder",
+  "predefined",
+  "manual-input",
+  "triangle",
+  "cloud",
+  "text",
+] as const;
+export type ShapeName = (typeof SHAPES)[number];
+
+/** Flowchart meaning of each shape, for the palette and tooltips. */
+export const SHAPE_LABELS: Record<ShapeName, { title: string; label: string; size: [number, number] }> = {
+  rectangle: { title: "Process", label: "Process", size: [160, 70] },
+  rounded: { title: "Rounded rectangle", label: "Step", size: [160, 70] },
+  terminator: { title: "Start / end", label: "Start", size: [150, 56] },
+  ellipse: { title: "Ellipse", label: "Event", size: [150, 80] },
+  circle: { title: "Connector", label: "A", size: [64, 64] },
+  diamond: { title: "Decision", label: "Decision?", size: [150, 100] },
+  parallelogram: { title: "Input / output", label: "Input", size: [170, 70] },
+  hexagon: { title: "Preparation", label: "Prepare", size: [160, 70] },
+  document: { title: "Document", label: "Report", size: [150, 80] },
+  cylinder: { title: "Database", label: "Data store", size: [120, 90] },
+  predefined: { title: "Predefined process", label: "Subroutine", size: [170, 70] },
+  "manual-input": { title: "Manual input", label: "Enter data", size: [160, 70] },
+  triangle: { title: "Triangle", label: "", size: [100, 90] },
+  cloud: { title: "Cloud", label: "Cloud", size: [170, 100] },
+  text: { title: "Text", label: "Text", size: [160, 40] },
 };
 
 const ALL_GROUPS = ["gcp.project", "gcp.region", "gcp.vpc", "gcp.subnet", "generic.group"];
@@ -235,6 +274,20 @@ export const CATALOG: CatalogEntry[] = [
     props: [],
   },
   {
+    kind: "generic.shape",
+    label: "Shape",
+    category: "Other",
+    description: "A flowchart or basic shape (process, decision, start/end, input/output, document, database…). Documentation only.",
+    parents: ALL_GROUPS,
+    icon: { abbr: "SHP", color: "#475569" },
+    props: [
+      { key: "shape", label: "Shape", type: "enum", default: "rectangle", options: [...SHAPES] },
+      { key: "fill", label: "Fill", type: "color", default: "#ffffff" },
+      { key: "stroke", label: "Border", type: "color", default: "#475569" },
+      { key: "textColor", label: "Text", type: "color", default: "#18181b" },
+    ],
+  },
+  {
     kind: "generic.note",
     label: "Note",
     category: "Other",
@@ -256,7 +309,7 @@ export const CATALOG: CatalogEntry[] = [
 ];
 
 /** Kinds that exist only on the diagram and are never deployed. */
-export const DOC_ONLY_KINDS = new Set(["generic.client", "generic.component", "generic.group", "generic.note"]);
+export const DOC_ONLY_KINDS = new Set(["generic.client", "generic.component", "generic.group", "generic.note", "generic.shape"]);
 
 // Documentation-only groups may wrap anything (an "Org" boundary around projects, a team
 // around services), so every kind accepts one as a parent.
@@ -290,6 +343,8 @@ export function coerce(spec: PropSpec, v: unknown): string | number | boolean | 
       return typeof v === "boolean" ? v : v === "true" ? true : v === "false" ? false : undefined;
     case "enum":
       return spec.options?.includes(String(v)) ? String(v) : undefined;
+    case "color":
+      return /^#[0-9a-fA-F]{6}$/.test(String(v)) ? String(v).toLowerCase() : undefined;
     default:
       return String(v);
   }

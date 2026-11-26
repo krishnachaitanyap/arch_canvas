@@ -446,3 +446,43 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 .react-flow__edge.selected .react-flow__edge-path { stroke: #4f46e5 !important; stroke-width: 2.5 !important; }
 .react-flow__handle { width: 8px; height: 8px; background: #fff; border: 1.5px solid #6366f1; opacity: 0; transition: opacity .15s; }
 .react-flow__node:hover .react-flow__handle, .react-flow__node.selected .react-flow__handle, .react-flow.connecting .react-flow__handle { opacity: 1; }
+
+/* ---------- general shapes and connectors ---------- */
+.shape-node { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.shape-node .shape-svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.shape-node .shape-label { position: relative; max-width: 82%; max-height: 90%; overflow: hidden; text-align: center; font-size: 13px; line-height: 1.3; white-space: pre-wrap; word-break: break-word; }
+.shape-node .shape-label.low { margin-top: 12%; }
+.shape-node .shape-label .inline-edit { text-align: center; min-width: 90px; }
+.shape-node.text-only .shape-label { max-width: 100%; }
+.shape-node.added .shape-svg { filter: drop-shadow(0 0 3px rgba(30,142,62,.7)); }
+.shape-node.changed .shape-svg { filter: drop-shadow(0 0 3px rgba(242,153,0,.7)); }
+.react-flow__handle.side-handle { width: 9px; height: 9px; }
+.prop-row { display: flex; gap: 8px; }
+.prop-row > label { flex: 1; min-width: 0; }
+.prop-row select { width: 100%; }
+.color-label input[type="color"] { width: 100%; height: 30px; padding: 2px; }
+.tile svg.shape-svg { width: 36px; height: 30px; }
+
+/* ---------- right-click style menu ---------- */
+.ctx-menu { min-width: 230px; max-width: 280px; max-height: calc(100% - 16px); overflow: auto; }
+.ctx-menu .ctx-item { display: flex; justify-content: space-between; gap: 16px; border: 0; background: none; padding: 6px 10px; text-align: left; font-size: 13px; border-radius: 6px; }
+.ctx-menu .ctx-item:hover:not(:disabled) { background: #f4f4f5; }
+.ctx-swatches { padding: 4px 10px 6px; display: flex; flex-direction: column; gap: 4px; }
+.ctx-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #71717a; font-weight: 600; }
+.ctx-swatches > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.swatch { width: 20px; height: 20px; padding: 0; border-radius: 5px; border: 1px solid #d4d4d8; cursor: pointer; }
+.swatch.on { outline: 2px solid #4f46e5; outline-offset: 1px; }
+.swatch.custom { position: relative; overflow: hidden; background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red); }
+.swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.ctx-shapes { display: grid !important; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.shape-pick { padding: 3px; border: 1px solid transparent; border-radius: 5px; background: none; display: flex; justify-content: center; }
+.shape-pick:hover, .shape-pick.on { border-color: #a5b4fc; background: #eef2ff; }
+.shape-pick svg { width: 26px; height: 18px; }
+.ctx-seg { display: flex !important; gap: 2px; }
+.ctx-seg button { flex: 1; font-size: 11.5px; padding: 3px 4px; border-radius: 5px; white-space: nowrap; }
+.ctx-seg button.on { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
+.ctx-seg.heads button { font-size: 12px; padding: 2px; }
+.tile-text { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font: 700 22px Georgia, serif; color: #3f3f46; }
+/* Connection points: visible on hover, larger on shapes. */
+.react-flow__node:hover .react-flow__handle { opacity: 1; }
+.react-flow__handle.side-handle { width: 10px; height: 10px; border-width: 2px; }

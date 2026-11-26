@@ -6,6 +6,7 @@ import {
   readDrawio,
   SAMPLE_MODEL,
   toDrawio,
+  toMermaid,
   validateModel,
 } from "../src/index.js";
 
@@ -163,7 +164,7 @@ describe("hand-drawn diagram with plain shapes", () => {
     const r = drawioToModel((await readDrawio(plain))[0]);
     const kinds = Object.fromEntries(r.model.nodes.map((n) => [n.label, n.kind]));
     expect(kinds).toEqual({
-      "???": "generic.component",
+      "???": "generic.shape",
       Backend: "generic.group",
       Production: "gcp.project",
       "Orders API": "gcp.cloud_run",
@@ -177,9 +178,57 @@ describe("hand-drawn diagram with plain shapes", () => {
     for (const l of ["Orders DB", "Session cache", "Kafka events", "Backend"]) expect(byLabel(r, l)!.parentId).toBe("production");
     expect(byLabel(r, "Orders API")!.parentId).toBe("backend");
     expect(r.items.find((i) => i.label === "Backend")).toMatchObject({ kind: "generic.group", container: true });
-    expect(r.items.find((i) => i.label === "???")).toMatchObject({ kind: "generic.component", confidence: "low" });
+    expect(byLabel(r, "???")).toMatchObject({ kind: "generic.shape", props: { shape: "circle" } }); // 60×60 ellipse
     expect(r.items.some((i) => i.label.startsWith("Note"))).toBe(false);
     expect(r.model.edges.map((x) => `${x.from}>${x.to}`)).toEqual(["customer>orders_api", "orders_api>orders_db", "orders_api>session_cache", "orders_api>kafka_events"]);
     expect(generateWorkflows(r.model)[0].summary).toBe("Customer → Orders API, using Orders DB and Session cache, and hands work off to Kafka events.");
+  });
+});
+
+describe("flowcharts", () => {
+  const flow = page(
+    [
+      v("start", "Start", "rounded=1;arcSize=50;whiteSpace=wrap;", 0, 0, 120, 40),
+      v("order", "Process order", "rounded=0;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;", 0, 80, 140, 60),
+      v("ok", "In stock?", "rhombus;whiteSpace=wrap;", 0, 180, 140, 90),
+      v("db", "Orders", "shape=cylinder3;whiteSpace=wrap;", 220, 80, 80, 80),
+      v("ship", "Ship it", "shape=parallelogram;whiteSpace=wrap;", 0, 320, 140, 60),
+      `<mxCell id="e1" value="" style="endArrow=block;endFill=1;html=1;" edge="1" parent="1" source="start" target="order"><mxGeometry relative="1" as="geometry"/></mxCell>`,
+      `<mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;dashed=1;endArrow=open;html=1;" edge="1" parent="1" source="order" target="db"><mxGeometry relative="1" as="geometry"/></mxCell>`,
+      `<mxCell id="e3" value="yes" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;endFill=0;startArrow=diamond;startFill=0;html=1;" edge="1" parent="1" source="ok" target="ship"><mxGeometry relative="1" as="geometry"/></mxCell>`,
+    ].join(""),
+  );
+
+  it("keeps flowchart shapes as shapes, not cloud resources", async () => {
+    const r = drawioToModel((await readDrawio(flow))[0]);
+    const shape = (label: string) => r.model.nodes.find((n) => n.label === label);
+    expect(r.model.nodes.every((n) => n.kind === "generic.shape")).toBe(true);
+    expect(shape("Start")!.props.shape).toBe("terminator");
+    expect(shape("Process order")!.props).toEqual({ shape: "rectangle", fill: "#dae8fc", stroke: "#6c8ebf" });
+    expect(shape("In stock?")!.props.shape).toBe("diamond");
+    expect(shape("Orders")!.props.shape).toBe("cylinder");
+    expect(shape("Ship it")!.props.shape).toBe("parallelogram");
+  });
+
+  it("imports line styles and arrowheads", async () => {
+    const r = drawioToModel((await readDrawio(flow))[0]);
+    const [e1, e2, e3] = r.model.edges;
+    expect(e1).toMatchObject({ routing: "straight" });
+    expect(e1.arrowEnd).toBeUndefined();
+    expect(e2).toMatchObject({ dash: "dashed", arrowEnd: "open" });
+    expect(e3).toMatchObject({ label: "yes", arrowEnd: "triangle", arrowStart: "odiamond" });
+  });
+
+  it("round-trips shapes and styles through draw.io, and exports Mermaid flowchart syntax", async () => {
+    const r = drawioToModel((await readDrawio(flow))[0]);
+    const again = drawioToModel((await readDrawio(toDrawio(r.model, "Flow")))[0]);
+    expect(again.model.nodes.map(({ id, kind, props, label }) => ({ id, kind, props, label }))).toEqual(
+      r.model.nodes.map(({ id, kind, props, label }) => ({ id, kind, props, label })),
+    );
+    expect(again.model.edges).toEqual(r.model.edges);
+    const mmd = toMermaid(r.model);
+    expect(mmd).toContain('in_stock{"In stock?"}');
+    expect(mmd).toContain('ship_it[/"Ship it"/]');
+    expect(mmd).toContain("process_order -.-> orders");
   });
 });

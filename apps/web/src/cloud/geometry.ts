@@ -222,8 +222,7 @@ export function pasteOps(
     if (!own) topLevel.push(n.id);
     ops.push({ op: "add_node", id: rename.get(n.id)!, kind: n.kind, label: n.label, parentId: parent, props: n.props, ...(n.icon ? { icon: n.icon } : {}) });
   }
-  for (const e of clip.edges)
-    ops.push({ op: "connect", from: rename.get(e.from)!, to: rename.get(e.to)!, label: e.label, protocol: e.protocol, routing: e.routing });
+  for (const { id: _id, from, to, ...rest } of clip.edges) ops.push({ op: "connect", from: rename.get(from)!, to: rename.get(to)!, ...rest });
   const r = applyOps(m, ops);
   if (!r.ok) return { error: r.error };
   const layout: Layout = { ...r.model.layout };

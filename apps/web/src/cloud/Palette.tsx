@@ -1,7 +1,7 @@
 import { type DragEvent, useEffect, useMemo, useState } from "react";
-import { CATALOG, type Category, iconDataUrl, iconScore, type IconEntry } from "@archcanvas/shared";
+import { CATALOG, type Category, iconDataUrl, iconScore, type IconEntry, SHAPE_LABELS, type ShapeName, SHAPES } from "@archcanvas/shared";
 import { allPacks, loadPack, useIconsVersion } from "../icons/registry";
-import { ResourceIcon } from "./flow";
+import { ResourceIcon, ShapeOutline } from "./flow";
 
 /** What a palette tile adds to the canvas. */
 export interface PaletteItem {
@@ -12,6 +12,8 @@ export interface PaletteItem {
   hint?: string;
   /** Icon markup for pack items (already loaded). */
   svg?: string;
+  /** Properties for the new node (e.g. which shape). */
+  props?: Record<string, unknown>;
 }
 
 export const DRAG_TYPE = "application/x-archcanvas-item";
@@ -47,6 +49,7 @@ const SYNONYMS: Record<string, string> = {
   "generic.group": "group boundary container team environment",
   "generic.component": "component box system service external saas",
   "generic.note": "note text comment annotation sticky",
+  "generic.shape": "shape flowchart diagram box",
 };
 
 /**
@@ -89,10 +92,21 @@ const multiCloudItems: PaletteItem[] = [
   c("External API / SaaS", "lucide:cloud", "external api saas third party vendor"),
 ];
 
+const shapeItems: PaletteItem[] = SHAPES.map((shape) => ({
+  key: `shape:${shape}`,
+  kind: "generic.shape",
+  label: SHAPE_LABELS[shape].label,
+  props: { shape },
+  hint: `${SHAPE_LABELS[shape].title} shape flowchart ${shape}`,
+}));
+
 const gcpItems: PaletteItem[] = CATALOG.filter((c) => c.kind.startsWith("gcp."))
   .sort((a, b) => GCP_ORDER.indexOf(a.category) - GCP_ORDER.indexOf(b.category))
   .map((c) => ({ key: c.kind, kind: c.kind, label: c.label, hint: c.description }));
-const basicItems: PaletteItem[] = BASICS.map((k) => CATALOG.find((c) => c.kind === k)!).map((c) => ({ key: c.kind, kind: c.kind, label: c.label, hint: c.description }));
+const basicItems: PaletteItem[] = [
+  { key: "basic:text", kind: "generic.shape", label: "Text", props: { shape: "text" }, hint: "text label free text heading annotation (or double-click the canvas)" },
+  ...BASICS.map((k) => CATALOG.find((c) => c.kind === k)!).map((c) => ({ key: c.kind, kind: c.kind, label: c.label, hint: c.description })),
+];
 
 /** Icon-pack entries become documentation components; AWS group icons (VPC, subnet…) become groups. */
 const fromIcon = (packId: string, i: IconEntry): PaletteItem => ({
@@ -125,6 +139,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
     const out: Segment[] = [
       { id: "gcp", title: "Google Cloud", note: "Deploys with Terraform", items: gcpItems, defaultOpen: true },
       { id: "basics", title: "Diagram basics", items: basicItems, defaultOpen: true },
+      { id: "shapes", title: "Flowchart & shapes", note: "Connect them with lines; set arrowheads and dashes in Properties", items: shapeItems, defaultOpen: true },
       { id: "multicloud", title: "Multi-cloud & on-prem", note: "Documentation; mix freely with any cloud", items: multiCloudItems, defaultOpen: true },
     ];
     for (const p of packs) {
@@ -212,12 +227,16 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
                         onDragStart={(e) => onDragStart(e, it)}
                         onClick={() => onAdd(it)}
                       >
-                        {it.svg ? (
+                        {it.key === "basic:text" ? (
+                          <span className="tile-text">T</span>
+                        ) : it.kind === "generic.shape" ? (
+                          <ShapeOutline shape={String(it.props?.shape)} w={36} h={it.props?.shape === "circle" ? 30 : 26} fill="#fff" stroke="#475569" sw={1.3} />
+                        ) : it.svg ? (
                           <img src={iconDataUrl(it.svg)} alt="" width={32} height={32} loading="lazy" draggable={false} />
                         ) : (
                           <ResourceIcon kind={it.kind} icon={it.icon} size={32} />
                         )}
-                        <span>{it.label}</span>
+                        <span>{it.kind === "generic.shape" && it.key.startsWith("shape:") ? SHAPE_LABELS[it.props!.shape as ShapeName].title : it.label}</span>
                       </button>
                     ))}
                   </div>

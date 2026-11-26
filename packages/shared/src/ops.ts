@@ -6,9 +6,13 @@ import {
   type DiagramNode,
   NODE_ID,
   nodeById,
+  ARROWHEADS,
+  type Arrowhead,
   type Protocol,
   PROTOCOLS,
   type Routing,
+  type Side,
+  SIDES,
 } from "./model.js";
 
 /** Every change to a model, by a person or the agent, is one of these operations. */
@@ -16,9 +20,35 @@ export type Op =
   | { op: "add_node"; id: string; kind: string; label: string; parentId?: string; props?: Record<string, unknown>; icon?: string }
   | { op: "update_node"; id: string; label?: string; parentId?: string | null; props?: Record<string, unknown>; icon?: string | null }
   | { op: "remove_node"; id: string }
-  | { op: "connect"; from: string; to: string; label?: string; protocol?: Protocol; routing?: Routing }
-  | { op: "update_edge"; from: string; to: string; label?: string | null; protocol?: Protocol | null; routing?: Routing | null }
+  | ({ op: "connect"; from: string; to: string; label?: string; protocol?: Protocol; routing?: Routing } & EdgeStyle)
+  | ({
+      op: "update_edge";
+      from: string;
+      to: string;
+      label?: string | null;
+      protocol?: Protocol | null;
+      routing?: Routing | null;
+    } & { [K in keyof EdgeStyle]?: EdgeStyle[K] | null })
   | { op: "disconnect"; from: string; to: string };
+
+/** Visual connection options (no effect on Terraform or workflows). */
+export interface EdgeStyle {
+  dash?: "solid" | "dashed" | "dotted";
+  arrowStart?: Arrowhead;
+  arrowEnd?: Arrowhead;
+  color?: string;
+  fromHandle?: Side;
+  toHandle?: Side;
+}
+const STYLE_KEYS = ["dash", "arrowStart", "arrowEnd", "color", "fromHandle", "toHandle"] as const;
+
+function checkStyle(o: Partial<Record<(typeof STYLE_KEYS)[number], unknown>>): string | undefined {
+  for (const k of ["arrowStart", "arrowEnd"] as const) if (o[k] != null && !ARROWHEADS.includes(o[k] as Arrowhead)) return `${k} must be one of ${ARROWHEADS.join(", ")}`;
+  for (const k of ["fromHandle", "toHandle"] as const) if (o[k] != null && !SIDES.includes(o[k] as Side)) return `${k} must be one of ${SIDES.join(", ")}`;
+  if (o.dash != null && !["solid", "dashed", "dotted"].includes(String(o.dash))) return "dash must be solid, dashed or dotted";
+  if (o.color != null && !/^#[0-9a-fA-F]{6}$/.test(String(o.color))) return "color must be #rrggbb";
+  return undefined;
+}
 
 export type OpResult = { ok: true; model: DiagramModel } | { ok: false; error: string };
 
@@ -88,6 +118,9 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       if (op.label) edge.label = op.label;
       if (op.protocol) edge.protocol = op.protocol;
       if (op.routing) edge.routing = op.routing;
+      const styleErr = checkStyle(op);
+      if (styleErr) return fail(styleErr);
+      for (const k of STYLE_KEYS) if (op[k] != null) (edge as Record<string, unknown>)[k] = op[k];
       return ok({ ...m, edges: [...m.edges, edge] });
     }
     case "update_edge": {
@@ -95,8 +128,10 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       const e = m.edges.find((x) => x.id === id);
       if (!e) return fail(`"${op.from}" is not connected to "${op.to}"`);
       if (op.protocol && !PROTOCOLS.includes(op.protocol)) return fail(`protocol must be one of ${PROTOCOLS.join(", ")}`);
+      const styleErr = checkStyle(op);
+      if (styleErr) return fail(styleErr);
       const next: DiagramEdge = { ...e };
-      for (const k of ["label", "protocol", "routing"] as const) {
+      for (const k of ["label", "protocol", "routing", ...STYLE_KEYS] as const) {
         const v = op[k];
         if (v === null || v === "") delete next[k];
         else if (v !== undefined) (next as Record<string, unknown>)[k] = k === "label" ? String(v).slice(0, 60) : v;
