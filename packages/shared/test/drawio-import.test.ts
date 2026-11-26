@@ -106,7 +106,9 @@ describe("AWS diagram", () => {
       Shoppers: "generic.client",
     });
     expect(r.items.find((i) => i.label === "Orders function")).toMatchObject({ confidence: "medium", reason: "AWS icon → Cloud Run service" });
-    expect(r.items.find((i) => i.label === "Fraud ML")).toMatchObject({ kind: null, confidence: "none" });
+    // No GCP equivalent: kept as a documentation-only component with its AWS icon.
+    expect(r.items.find((i) => i.label === "Fraud ML")).toMatchObject({ kind: "generic.component", confidence: "low" });
+    expect(byLabel(r, "Fraud ML")!.icon).toBe("aws~sagemaker");
     expect(byLabel(r, "Private subnet 10.0.1.0/24")!.props).toEqual({ cidr: "10.0.1.0/24" });
     // Nesting is kept where GCP allows it...
     expect(byLabel(r, "Orders function")!.parentId).toBe(byLabel(r, "Private subnet 10.0.1.0/24")!.id);
@@ -161,6 +163,7 @@ describe("hand-drawn diagram with plain shapes", () => {
     const r = drawioToModel((await readDrawio(plain))[0]);
     const kinds = Object.fromEntries(r.model.nodes.map((n) => [n.label, n.kind]));
     expect(kinds).toEqual({
+      "???": "generic.component",
       Production: "gcp.project",
       "Orders API": "gcp.cloud_run",
       "Orders DB": "gcp.cloud_sql",
@@ -171,7 +174,7 @@ describe("hand-drawn diagram with plain shapes", () => {
     // Shapes drawn inside the dashed "Production" box belong to it; "Backend" has no GCP meaning and is flattened.
     for (const l of ["Orders API", "Orders DB", "Session cache", "Kafka events"]) expect(byLabel(r, l)!.parentId).toBe("production");
     expect(r.items.find((i) => i.label === "Backend")).toMatchObject({ kind: null, container: true });
-    expect(r.items.find((i) => i.label === "???")).toMatchObject({ kind: null });
+    expect(r.items.find((i) => i.label === "???")).toMatchObject({ kind: "generic.component", confidence: "low" });
     expect(r.items.some((i) => i.label.startsWith("Note"))).toBe(false);
     expect(r.model.edges.map((x) => `${x.from}>${x.to}`)).toEqual(["customer>orders_api", "orders_api>orders_db", "orders_api>session_cache", "orders_api>kafka_events"]);
     expect(generateWorkflows(r.model)[0].summary).toBe("Customer → Orders API, using Orders DB and Session cache, and hands work off to Kafka events.");

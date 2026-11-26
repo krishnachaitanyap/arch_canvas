@@ -14,6 +14,11 @@ export const NodeSchema = z.object({
   label: z.string().min(1).max(80),
   parentId: z.string().optional(),
   props: z.record(z.unknown()).default({}),
+  /**
+   * Icon override, as "pack:name" (e.g. "aws:AWSLambda", "lucide:database", or an uploaded
+   * pack's id). Purely visual: Terraform and workflows ignore it.
+   */
+  icon: z.string().max(240).optional(),
 });
 
 export const PROTOCOLS = ["https", "http", "grpc", "tcp", "sql", "redis", "pubsub", "storage", "secret"] as const;

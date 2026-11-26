@@ -449,7 +449,8 @@ class Compiler {
     const from = nodeById(this.m, e.from);
     const to = nodeById(this.m, e.to);
     if (!from || !to) return [];
-    if (from.kind === "generic.client" || to.kind === "generic.client") return [];
+    // People and documentation-only components are never deployed.
+    if (from.kind.startsWith("generic.") || to.kind.startsWith("generic.")) return [];
 
     // Cloud Run ↔ data store: access is granted whichever way the arrow was drawn.
     if (from.kind === "gcp.cloud_run" && STORE_KINDS.has(to.kind)) return this.runToStore(from, to);

@@ -268,16 +268,18 @@ function Editor({ diagramId, projectId, canEdit, registerCurrent, initial, title
     commit({ ...model, layout });
   }
 
-  function addResource(kind: string) {
+  function addResource(kind: string, extra: { label?: string; icon?: string } = {}) {
     const entry = catalogEntry(kind)!;
     const sel = selection?.type === "node" ? model.nodes.find((n) => n.id === selection.id) : undefined;
     // Put it in the selected group, or the selected resource's group, when the catalog allows.
     const candidates = sel ? [sel, ...(sel.parentId ? [model.nodes.find((n) => n.id === sel.parentId)!] : [])] : [];
     const parent = candidates.find((c) => c && entry.parents.includes(c.kind));
-    const base = kind.split(".").pop()!.replace(/^(cloud_|gcs_|memorystore_)/, "");
+    const base = extra.label
+      ? extra.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^(\d)/, "n_$1").slice(0, 30) || "component"
+      : kind.split(".").pop()!.replace(/^(cloud_|gcs_|memorystore_)/, "");
     let id = base;
     for (let i = 2; model.nodes.some((n) => n.id === id); i++) id = `${base}_${i}`;
-    const r = applyOp(model, { op: "add_node", id, kind, label: entry.label, parentId: parent?.id });
+    const r = applyOp(model, { op: "add_node", id, kind, label: (extra.label ?? entry.label).slice(0, 80), parentId: parent?.id, ...(extra.icon ? { icon: extra.icon } : {}) });
     if (!r.ok) return setStatus({ kind: "error", text: r.error });
     commit(r.model);
     setSelection({ type: "node", id });
@@ -378,7 +380,7 @@ function Editor({ diagramId, projectId, canEdit, registerCurrent, initial, title
       {presenting && (
         <Presentation model={model} title={title} workflows={workflows} startWorkflow={presenting.start} onClose={() => setPresenting(null)} />
       )}
-      <Palette onAdd={addResource} disabled={readOnly} />
+      <Palette onAdd={addResource} onAddIcon={(hit) => addResource("generic.component", { label: hit.t, icon: hit.ref })} disabled={readOnly} />
 
       <div className="cloud-canvas">
         <ReactFlow

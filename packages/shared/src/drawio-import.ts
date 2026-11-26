@@ -183,6 +183,8 @@ interface Classified {
   kind: string | null;
   reason: string;
   confidence: Confidence;
+  /** Icon reference to show, e.g. "aws~sagemaker" (best match in the AWS pack). */
+  icon?: string;
 }
 
 function provider(style: string): string | null {
@@ -232,7 +234,14 @@ function classifyResource(c: DrawioCell): Classified {
     return { kind: "gcp.pubsub_topic", reason: "Queue shape → Pub/Sub topic", confidence: "medium" };
   for (const [re, kind] of LABEL_RULES)
     if (re.test(label)) return { kind, reason: `Label "${c.label.split("\n")[0]}" → ${catalogEntry(kind)!.label}`, confidence: "low" };
-  return { kind: null, reason: prov ? `${prov} icon with no GCP equivalent yet` : "Not recognised", confidence: "none" };
+  // Nothing GCP-shaped: keep it as a documentation-only component rather than dropping it.
+  if (prov) {
+    const name = icon.split(" ").filter((t) => !/^(mxgraph|aws4|aws3|gcp2?|azure|resourceicon|hexicon|img|lib)$/.test(t)).pop();
+    const family = prov === "AWS" ? "aws" : prov === "Google Cloud" ? "gcp" : "azure";
+    return { kind: "generic.component", reason: `${prov} icon with no GCP equivalent → component (documentation only)`, confidence: "low", icon: name ? `${family}~${name}` : undefined };
+  }
+  if (c.label.trim()) return { kind: "generic.component", reason: "Not recognised → component (documentation only)", confidence: "low" };
+  return { kind: null, reason: "Not recognised", confidence: "none" };
 }
 
 function classifyGroup(c: DrawioCell): Classified {
@@ -312,6 +321,7 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
   // Classify
   const items: ImportItem[] = [];
   const kindOf = new Map<string, string | null>();
+  const iconOf = new Map<string, string | undefined>();
   for (const v of vertices) {
     const container = containers.has(v.id);
     const partOfShape = !isTop(v) && !containers.has(v.parent!) && byId.get(v.parent!)?.vertex;
@@ -331,6 +341,7 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
       if (container) c = { kind: null, reason: `${catalogEntry(c.kind)?.label} is not a group; contents kept`, confidence: "none" };
     }
     kindOf.set(v.id, c.kind);
+    iconOf.set(v.id, v.attrs.archcanvas_icon || c.icon);
     // Our export labels groups "VPC network: main"; drop the type prefix again.
     let label = v.label.split("\n")[0];
     const prefix = c.kind ? `${catalogEntry(c.kind)?.label}: ` : "";
@@ -385,7 +396,8 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
       nestingChanged = true;
       warnings.push(`"${item.label}" can't go inside "${byId.get(ancestors[0])!.label.split("\n")[0]}" (${catalogEntry(kindOf.get(ancestors[0])!)?.label}), so it was moved up.`);
     }
-    const r = applyOp(model, { op: "add_node", id, kind: item.kind!, label: item.label.slice(0, 80) || entry.label, parentId, props });
+    const icon = iconOf.get(item.cellId);
+    const r = applyOp(model, { op: "add_node", id, kind: item.kind!, label: item.label.slice(0, 80) || entry.label, parentId, props, ...(icon ? { icon } : {}) });
     if (!r.ok) {
       warnings.push(`Skipped "${item.label}": ${r.error}`);
       item.kind = null;
@@ -436,6 +448,9 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
   if (skippedEdges) warnings.push(`${skippedEdges} connection${skippedEdges === 1 ? " was" : "s were"} not imported because an end isn't attached to an imported resource.`);
 
   const unmatched = items.filter((i) => !i.kind && !i.container).length;
+  const components = items.filter((i) => i.kind === "generic.component").length;
+  if (components)
+    warnings.push(`${components} shape${components === 1 ? " has" : "s have"} no GCP equivalent and became documentation-only components (not deployed by Terraform).`);
   if (unmatched) warnings.push(`${unmatched} shape${unmatched === 1 ? " was" : "s were"} not recognised. Pick a type for ${unmatched === 1 ? "it" : "them"} below, or leave skipped.`);
 
   // Keep positions only for exact ArchCanvas round trips; anything else is auto-laid out

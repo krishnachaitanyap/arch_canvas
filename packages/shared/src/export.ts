@@ -73,7 +73,9 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
     const value = entry?.container ? `${entry.label}: ${n.label}` : `<b>${esc(n.label)}</b><br><font color="${color}" style="font-size:10px">${esc(entry?.label ?? n.kind)}</font>`;
     // <object> carries ArchCanvas metadata as draw.io custom properties (Edit Data), so
     // re-importing is lossless and people can set types in draw.io itself.
-    const props = Object.keys(n.props).length ? ` archcanvas_props="${esc(JSON.stringify(n.props))}"` : "";
+    const props =
+      (Object.keys(n.props).length ? ` archcanvas_props="${esc(JSON.stringify(n.props))}"` : "") +
+      (n.icon ? ` archcanvas_icon="${esc(n.icon)}"` : "");
     cells.push(
       `<object id="${cellId(n.id)}" label="${esc(value)}" archcanvas_kind="${esc(n.kind)}" archcanvas_id="${esc(n.id)}"${props}>` +
         `<mxCell style="${style}" vertex="1" parent="${n.parentId ? cellId(n.parentId) : "1"}">` +

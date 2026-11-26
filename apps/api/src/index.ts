@@ -7,6 +7,7 @@ import { migrate } from "./migrate.js";
 import { agentRoutes } from "./routes/agent.js";
 import { aiRoutes } from "./routes/ai.js";
 import { diagramRoutes } from "./routes/diagrams.js";
+import { iconRoutes } from "./routes/icons.js";
 import { terraformRoutes } from "./routes/terraform.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 
@@ -46,6 +47,7 @@ await app.register(async (secured) => {
   secured.addHook("onRequest", authenticate);
   await secured.register(workspaceRoutes);
   await secured.register(diagramRoutes);
+  await secured.register(iconRoutes);
   await secured.register(aiRoutes);
   await secured.register(agentRoutes);
   await secured.register(terraformRoutes);

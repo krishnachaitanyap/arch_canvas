@@ -14,7 +14,7 @@ export interface PropSpec {
   description?: string;
 }
 
-export type Category = "External" | "Groups" | "Compute" | "Data" | "Messaging" | "Networking" | "Security" | "DevOps";
+export type Category = "External" | "Groups" | "Compute" | "Data" | "Messaging" | "Networking" | "Security" | "DevOps" | "Other";
 
 export interface CatalogEntry {
   kind: string;
@@ -54,6 +54,8 @@ const C = {
   security: "#d93025",
   devops: "#12b5cb",
 };
+
+const ALL_GROUPS = ["gcp.project", "gcp.region", "gcp.vpc", "gcp.subnet"];
 
 export const CATALOG: CatalogEntry[] = [
   {
@@ -221,7 +223,20 @@ export const CATALOG: CatalogEntry[] = [
     icon: { abbr: "AR", color: C.devops },
     props: [],
   },
+  {
+    kind: "generic.component",
+    label: "Component",
+    category: "Other",
+    description:
+      "Any other system: an AWS or Azure service, a SaaS API, an on-prem system, or a tool shown by its icon. Documentation only: it appears in workflows and presentations but isn't deployed by Terraform.",
+    parents: ALL_GROUPS,
+    icon: { abbr: "CMP", color: "#71717a" },
+    props: [],
+  },
 ];
+
+/** Kinds that exist only on the diagram and are never deployed. */
+export const DOC_ONLY_KINDS = new Set(["generic.client", "generic.component"]);
 
 const BY_KIND = new Map(CATALOG.map((e) => [e.kind, e]));
 

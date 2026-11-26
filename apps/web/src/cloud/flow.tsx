@@ -1,4 +1,22 @@
 import { Handle, MarkerType, type Edge, type Node, type NodeProps, Position } from "@xyflow/react";
+import {
+  Archive,
+  Box,
+  Container,
+  Database,
+  FolderKanban,
+  KeyRound,
+  type LucideIcon,
+  MapPin,
+  MessagesSquare,
+  Network,
+  Package,
+  Split,
+  Users,
+  Waypoints,
+  Zap,
+} from "lucide-react";
+import { kindIconRef, useIcon } from "../icons/registry";
 import { catalogEntry, childrenOf, type DiagramModel, type DiagramNode, type ModelDiff } from "@archcanvas/shared";
 import { NODE_H, NODE_W } from "./layout";
 
@@ -19,11 +37,38 @@ export interface CloudNodeData extends Record<string, unknown> {
 }
 type CloudNode = Node<CloudNodeData>;
 
-export function ResourceIcon({ kind, size = 32 }: { kind: string; size?: number }) {
-  const icon = catalogEntry(kind)?.icon ?? { abbr: "?", color: "#5f6368" };
+const DEFAULT_ICONS: Record<string, LucideIcon> = {
+  "generic.client": Users,
+  "generic.component": Box,
+  "gcp.project": FolderKanban,
+  "gcp.region": MapPin,
+  "gcp.vpc": Network,
+  "gcp.subnet": Waypoints,
+  "gcp.cloud_run": Container,
+  "gcp.cloud_sql": Database,
+  "gcp.gcs_bucket": Archive,
+  "gcp.memorystore_redis": Zap,
+  "gcp.pubsub_topic": MessagesSquare,
+  "gcp.load_balancer": Split,
+  "gcp.secret": KeyRound,
+  "gcp.artifact_registry": Package,
+};
+
+/**
+ * The icon for a node: its own icon if set, else the workspace's Google Cloud pack icon for
+ * its type, else a Lucide badge in the category colour. Icons render through <img>, so
+ * uploaded SVGs can never run scripts.
+ */
+export function ResourceIcon({ kind, icon, size = 32 }: { kind: string; icon?: string; size?: number }) {
+  const own = useIcon(icon);
+  const fromPack = useIcon(own ? undefined : kindIconRef(kind));
+  const url = own ?? fromPack;
+  if (url) return <img className="ricon-img" src={url} width={size} height={size} alt="" draggable={false} />;
+  const entry = catalogEntry(kind);
+  const Glyph = DEFAULT_ICONS[kind] ?? Box;
   return (
-    <span className="ricon" style={{ background: icon.color, width: size, height: size, fontSize: size * 0.3 }} aria-hidden>
-      {icon.abbr}
+    <span className="ricon" style={{ background: entry?.icon.color ?? "#5f6368", width: size, height: size }} aria-hidden>
+      <Glyph size={Math.round(size * 0.58)} strokeWidth={2} color="#fff" />
     </span>
   );
 }
@@ -33,7 +78,7 @@ function ResourceNode({ data, selected }: NodeProps<CloudNode>) {
   return (
     <div className={`rnode ${data.status ?? ""} ${selected ? "selected" : ""}`} title={entry?.description}>
       <Handle type="target" position={Position.Left} />
-      <ResourceIcon kind={data.node.kind} />
+      <ResourceIcon kind={data.node.kind} icon={data.node.icon} />
       <div className="rnode-text">
         <div className="rnode-label">{data.node.label}</div>
         <div className="rnode-kind">{entry?.label ?? data.node.kind}</div>
@@ -51,7 +96,7 @@ function GroupNode({ data, selected }: NodeProps<CloudNode>) {
   return (
     <div className={`gnode ${data.status ?? ""} ${selected ? "selected" : ""}`} style={{ borderColor: color }}>
       <div className="gnode-head" style={{ color }}>
-        <ResourceIcon kind={data.node.kind} size={20} />
+        <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={20} />
         <span className="gnode-label">{data.node.label}</span>
         <span className="gnode-kind">
           {entry?.label}

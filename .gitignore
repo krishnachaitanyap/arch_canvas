@@ -10,3 +10,4 @@ dist/
 .terraform.lock.hcl
 apps/web/public/fonts/
 .data/
+apps/web/public/icons/

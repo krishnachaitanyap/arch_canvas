@@ -18,16 +18,35 @@ import { ResourceIcon } from "./flow";
 import { download } from "./exporters";
 import { slug } from "../util";
 import { IntegrationCard } from "./FlowsPanel";
+import { IconLibrary } from "../icons/IconLibrary";
+import type { SearchHit } from "../icons/registry";
+import { Modal } from "../home/Home";
 
 // ------------------------------------------------------------------ palette
 
-const CATEGORY_ORDER: Category[] = ["Groups", "Compute", "Data", "Messaging", "Networking", "Security", "DevOps", "External"];
+const CATEGORY_ORDER: Category[] = ["Groups", "Compute", "Data", "Messaging", "Networking", "Security", "DevOps", "External", "Other"];
 
-export function Palette({ onAdd, disabled }: { onAdd: (kind: string) => void; disabled: boolean }) {
+export function Palette({ onAdd, onAddIcon, disabled }: { onAdd: (kind: string) => void; onAddIcon: (hit: SearchHit) => void; disabled: boolean }) {
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState<"gcp" | "icons">("gcp");
   const items = CATALOG.filter((c) => `${c.label} ${c.kind} ${c.category}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <aside className="palette">
+      <div className="tabs small seg">
+        <button className={tab === "gcp" ? "active" : ""} onClick={() => setTab("gcp")} title="Google Cloud resources that compile to Terraform">
+          GCP
+        </button>
+        <button className={tab === "icons" ? "active" : ""} onClick={() => setTab("icons")} title="AWS, open-source and uploaded icons (documentation only)">
+          Icons
+        </button>
+      </div>
+      {tab === "icons" ? (
+        <>
+          {disabled ? <p className="hint">Read-only.</p> : <IconLibrary compact onPick={onAddIcon} />}
+          <p className="hint">Icons are added as documentation-only components: they connect, group and present, but aren't deployed by Terraform.</p>
+        </>
+      ) : (
+        <>
       <input placeholder="Search GCP resources" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search resources" />
       {CATEGORY_ORDER.map((cat) => {
         const list = items.filter((c) => c.category === cat);
@@ -45,6 +64,8 @@ export function Palette({ onAdd, disabled }: { onAdd: (kind: string) => void; di
         );
       })}
       <p className="hint">Click to add. New resources go inside the selected group when allowed.</p>
+        </>
+      )}
     </aside>
   );
 }
@@ -122,7 +143,7 @@ function NodeProperties({ model, nodeId, onOp, readOnly }: { model: DiagramModel
   return (
     <div className="props">
       <h3>
-        <ResourceIcon kind={node.kind} size={22} /> {entry?.label ?? node.kind}
+        <ResourceIcon kind={node.kind} icon={node.icon} size={22} /> {entry?.label ?? node.kind}
       </h3>
       <p className="hint">{entry?.description}</p>
       <label>
@@ -135,6 +156,7 @@ function NodeProperties({ model, nodeId, onOp, readOnly }: { model: DiagramModel
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
         />
       </label>
+      <IconField node={node} onOp={onOp} readOnly={readOnly} />
       <label>
         Id <span className="hint">(Terraform name)</span>
         <input value={node.id} disabled />
@@ -166,6 +188,36 @@ function NodeProperties({ model, nodeId, onOp, readOnly }: { model: DiagramModel
       <button className="danger" disabled={readOnly} onClick={() => onOp({ op: "remove_node", id: node.id })}>
         Delete {entry?.container ? "group" : "resource"}
       </button>
+    </div>
+  );
+}
+
+function IconField({ node, onOp, readOnly }: { node: { id: string; kind: string; label: string; icon?: string }; onOp: (op: Op) => void; readOnly: boolean }) {
+  const [picking, setPicking] = useState(false);
+  return (
+    <div className="icon-field">
+      <ResourceIcon kind={node.kind} icon={node.icon} size={36} />
+      <div className="row wrap">
+        <button disabled={readOnly} onClick={() => setPicking(true)}>
+          Change icon…
+        </button>
+        {node.icon && (
+          <button disabled={readOnly} onClick={() => onOp({ op: "update_node", id: node.id, icon: null })}>
+            Default
+          </button>
+        )}
+      </div>
+      {picking && (
+        <Modal title={`Icon for ${node.label}`} onClose={() => setPicking(false)} wide>
+          <IconLibrary
+            initialQuery={node.label}
+            onPick={(hit) => {
+              onOp({ op: "update_node", id: node.id, icon: hit.ref });
+              setPicking(false);
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { type DiagramModel, emptyModel, SAMPLE_MODEL } from "@archcanvas/shared";
+import { resetDemo } from "./demo-api";
 import { api, type AppConfig, type Diagram, type DiagramKind, devUser, type Project, type Role, setDevUser, type Workspace } from "./api";
 import { Home } from "./home/Home";
+import { setWorkspacePacks } from "./icons/registry";
 import type { CurrentState } from "./history/VersionHistory";
 
 // Each editor is its own chunk: the whiteboard pulls in Excalidraw + Mermaid, the cloud editor React Flow + ELK.
@@ -84,6 +86,17 @@ export function App() {
     return () => clearTimeout(t);
   }, [status]);
 
+  // Overlays (history, presentation) start below the top bar, whose height varies (demo banner).
+  useEffect(() => {
+    const bar = document.querySelector(".topbar");
+    if (!bar) return;
+    const set = () => document.documentElement.style.setProperty("--chrome-h", `${Math.round(bar.getBoundingClientRect().bottom)}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(document.body);
+    return () => ro.disconnect();
+  }, [config]);
+
   // Warn before closing the tab with unsaved changes.
   useEffect(() => {
     const onUnload = (e: BeforeUnloadEvent) => {
@@ -92,6 +105,16 @@ export function App() {
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [doc, getCurrent]);
+
+  // Icon packs uploaded to the workspace in view (the open diagram's, or the selected one).
+  const iconWorkspace = doc?.loaded?.workspace_id ?? wsId;
+  const reloadIconPacks = useCallback(async () => {
+    if (!iconWorkspace) return setWorkspacePacks([]);
+    await api.iconPacks(iconWorkspace).then(setWorkspacePacks, () => setWorkspacePacks([]));
+  }, [iconWorkspace]);
+  useEffect(() => {
+    void reloadIconPacks();
+  }, [reloadIconPacks]);
 
   const confirmLeave = () => !doc || !getCurrent()?.dirty || confirm("You have unsaved changes. Leave without saving?");
 
@@ -172,6 +195,28 @@ export function App() {
 
   return (
     <div className="app">
+      {config?.demo && (
+        <div className="demo-banner">
+          <span>
+            <b>Live demo</b> · runs entirely in your browser; your changes stay on this device. The AI assistant and terraform validate need the server:{" "}
+            <a href="https://github.com/krishnachaitanyap/arch_canvas#run-locally" target="_blank" rel="noreferrer">
+              run it locally
+            </a>
+            .
+          </span>
+          <button
+            className="link"
+            onClick={() => {
+              if (confirm("Reset the demo? Your changes in this browser are deleted and the examples come back.")) {
+                resetDemo();
+                location.reload();
+              }
+            }}
+          >
+            Reset demo data
+          </button>
+        </div>
+      )}
       <header className="topbar">
         <button className="logo" onClick={goHome} title="All projects">
           ArchCanvas
@@ -276,6 +321,7 @@ export function App() {
             localStorage.setItem(LS_PROJECT, id);
           }}
           reload={reload}
+          reloadIconPacks={reloadIconPacks}
           onOpen={(id, o) => void open(id, o)}
           onNew={create}
           onImport={importDiagram}

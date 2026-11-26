@@ -12,8 +12,8 @@ import {
 
 /** Every change to a model, by a person or the agent, is one of these operations. */
 export type Op =
-  | { op: "add_node"; id: string; kind: string; label: string; parentId?: string; props?: Record<string, unknown> }
-  | { op: "update_node"; id: string; label?: string; parentId?: string | null; props?: Record<string, unknown> }
+  | { op: "add_node"; id: string; kind: string; label: string; parentId?: string; props?: Record<string, unknown>; icon?: string }
+  | { op: "update_node"; id: string; label?: string; parentId?: string | null; props?: Record<string, unknown>; icon?: string | null }
   | { op: "remove_node"; id: string }
   | { op: "connect"; from: string; to: string; label?: string; protocol?: Protocol }
   | { op: "disconnect"; from: string; to: string };
@@ -35,6 +35,7 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       if (propsErr) return fail(propsErr);
       const node: DiagramNode = { id: op.id, kind: op.kind, label: op.label || entry.label, props: { ...op.props } };
       if (op.parentId) node.parentId = op.parentId;
+      if (op.icon) node.icon = op.icon.slice(0, 240);
       return ok({ ...m, nodes: [...m.nodes, node] });
     }
     case "update_node": {
@@ -42,6 +43,8 @@ export function applyOp(m: DiagramModel, op: Op): OpResult {
       if (!node) return fail(`no node with id "${op.id}"`);
       const next: DiagramNode = { ...node, props: { ...node.props } };
       if (op.label !== undefined) next.label = op.label;
+      if (op.icon === null || op.icon === "") delete next.icon;
+      else if (op.icon !== undefined) next.icon = op.icon.slice(0, 240);
       if (op.parentId !== undefined) {
         const parentId = op.parentId ?? undefined;
         const parentErr = checkParent(m, node.id, node.kind, parentId);

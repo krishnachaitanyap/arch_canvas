@@ -4,6 +4,7 @@ import { api, type DiagramKind, type DiagramSummary, type Member, type Project, 
 
 // The review dialog shows a live canvas preview, so it brings React Flow with it.
 const ImportDialog = lazy(() => import("./ImportDialog"));
+const IconPacksDialog = lazy(() => import("./IconPacksDialog").then((m) => ({ default: m.IconPacksDialog })));
 import { timeAgo } from "../util";
 
 type SetStatus = (s: { kind: "ok" | "error"; text: string } | null) => void;
@@ -18,6 +19,7 @@ export interface HomeProps {
   onProject: (id: string) => void;
   /** Reload workspaces and projects (after create / rename / delete). */
   reload: (select?: { workspaceId?: string; projectId?: string }) => Promise<void>;
+  reloadIconPacks: () => Promise<void>;
   onOpen: (diagramId: string, opts?: { history?: boolean }) => void;
   onNew: (kind: DiagramKind | "sample") => void;
   onImport: (title: string, model: DiagramModel, fileName: string) => void;
@@ -28,7 +30,7 @@ const canEdit = (r: Role | undefined) => r === "owner" || r === "editor";
 
 export function Home(props: HomeProps) {
   const { workspaces, workspace, projects, project, onWorkspace, onProject, reload, setStatus } = props;
-  const [dialog, setDialog] = useState<null | "workspace" | "project" | "members" | "rename-ws">(null);
+  const [dialog, setDialog] = useState<null | "workspace" | "project" | "members" | "rename-ws" | "icons">(null);
   const role = workspace?.role;
 
   const run = async (fn: () => Promise<unknown>, ok?: string) => {
@@ -63,6 +65,9 @@ export function Home(props: HomeProps) {
             <span className={`role-pill ${workspace.role}`}>{workspace.role}</span>
             <button className="link" onClick={() => setDialog("members")}>
               {workspace.member_count} member{workspace.member_count === 1 ? "" : "s"}
+            </button>
+            <button className="link" onClick={() => setDialog("icons")}>
+              Icon packs
             </button>
             {role === "owner" && (
               <button className="link" onClick={() => setDialog("rename-ws")}>
@@ -145,6 +150,11 @@ export function Home(props: HomeProps) {
             return ok;
           }}
         />
+      )}
+      {dialog === "icons" && workspace && (
+        <Suspense fallback={null}>
+          <IconPacksDialog workspace={workspace} onClose={() => setDialog(null)} onChanged={props.reloadIconPacks} setStatus={setStatus} />
+        </Suspense>
       )}
       {dialog === "members" && workspace && (
         <MembersDialog workspace={workspace} me={props.me} onClose={() => setDialog(null)} onChanged={() => reload({ workspaceId: workspace.id })} setStatus={setStatus} />

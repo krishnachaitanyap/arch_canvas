@@ -1,4 +1,5 @@
-import type { DiagramModel, Workflow } from "@archcanvas/shared";
+import type { DiagramModel, IconEntry, IconFamily, IconPackMeta, Workflow } from "@archcanvas/shared";
+import { demoApi } from "./demo-api";
 
 export type DiagramKind = "whiteboard" | "cloud";
 
@@ -69,6 +70,8 @@ export interface Version extends VersionSummary {
 export type DiagramWrite = Partial<Pick<Diagram, "title" | "kind" | "source" | "scene" | "model">> & { message?: string; projectId?: string };
 
 export interface AppConfig {
+  /** Browser-only demo build (no server). */
+  demo?: boolean;
   devUser?: string;
   aiEnabled: boolean;
   aiProvider: string;
@@ -129,8 +132,23 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
-export const api = {
+export interface IconPackUpload {
+  name: string;
+  family: IconFamily;
+  license?: string;
+  url?: string;
+  icons: IconEntry[];
+}
+
+const serverApi = {
   config: () => request<AppConfig>("/api/config"),
+
+  // icon packs uploaded to a workspace
+  iconPacks: (workspaceId: string) => request<IconPackMeta[]>(`/api/workspaces/${workspaceId}/icon-packs`),
+  iconPack: (id: string) => request<{ icons: IconEntry[] }>(`/api/icon-packs/${id}`),
+  uploadIconPack: (workspaceId: string, pack: IconPackUpload) =>
+    request<IconPackMeta & { rejected: number }>(`/api/workspaces/${workspaceId}/icon-packs`, { method: "POST", body: JSON.stringify(pack) }),
+  deleteIconPack: (id: string) => request<void>(`/api/icon-packs/${id}`, { method: "DELETE" }),
   // workspaces, members, projects
   workspaces: () => request<Workspace[]>("/api/workspaces"),
   createWorkspace: (name: string) => request<Workspace>("/api/workspaces", { method: "POST", body: JSON.stringify({ name }) }),
@@ -212,3 +230,6 @@ export const api = {
     }
   },
 };
+
+/** The demo build (VITE_DEMO=1) swaps in a browser-only backend with the same calls. */
+export const api: typeof serverApi = import.meta.env.VITE_DEMO === "1" ? (demoApi as unknown as typeof serverApi) : serverApi;

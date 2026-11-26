@@ -4,20 +4,51 @@
     {
       "name": "db",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:db"],
+      "runtimeArgs": [
+        "run",
+        "dev:db"
+      ],
       "port": 5432
     },
     {
       "name": "api",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["--env-file=.env", "node_modules/tsx/dist/cli.mjs", "watch", "apps/api/src/index.ts"],
+      "runtimeArgs": [
+        "--env-file=.env",
+        "node_modules/tsx/dist/cli.mjs",
+        "watch",
+        "apps/api/src/index.ts"
+      ],
       "port": 8082
     },
     {
       "name": "web",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["--env-file=.env", "node_modules/vite/bin/vite.js", "apps/web", "--port", "5174", "--strictPort"],
+      "runtimeArgs": [
+        "--env-file=.env",
+        "node_modules/vite/bin/vite.js",
+        "apps/web",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
       "port": 5174
+    },
+    {
+      "name": "demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/vite/bin/vite.js",
+        "preview",
+        "apps/web",
+        "--port",
+        "5180",
+        "--strictPort",
+        "--base",
+        "/arch_canvas/"
+      ],
+      "port": 5180,
+      "url": "http://localhost:5180"
     }
   ]
 }

@@ -148,9 +148,9 @@ export function Presentation({
                     {slide.w.title} · step {slide.si + 1} of {slide.w.steps.length}
                   </div>
                   <h1 className="route">
-                    <ResourceIcon kind={nodeById(model, s.from)?.kind ?? ""} size={30} /> {name(s.from)}
+                    <ResourceIcon kind={nodeById(model, s.from)?.kind ?? ""} icon={nodeById(model, s.from)?.icon} size={30} /> {name(s.from)}
                     <span className="arrow">{s.mode === "async" ? "⇢" : "→"}</span>
-                    <ResourceIcon kind={nodeById(model, s.to)?.kind ?? ""} size={30} /> {name(s.to)}
+                    <ResourceIcon kind={nodeById(model, s.to)?.kind ?? ""} icon={nodeById(model, s.to)?.icon} size={30} /> {name(s.to)}
                   </h1>
                   <p className="lead">{s.text}</p>
                   {i && (
@@ -227,11 +227,11 @@ function TitleSlide({ model, title, workflows }: { model: DiagramModel; title: s
 }
 
 function OverviewSlide({ model }: { model: DiagramModel }) {
-  const groups = new Map<string, { label: string; kind: string }[]>();
+  const groups = new Map<string, { label: string; kind: string; icon?: string }[]>();
   for (const n of model.nodes) {
     const e = catalogEntry(n.kind);
     if (!e || e.container) continue;
-    groups.set(e.category, [...(groups.get(e.category) ?? []), { label: n.label, kind: n.kind }]);
+    groups.set(e.category, [...(groups.get(e.category) ?? []), { label: n.label, kind: n.kind, icon: n.icon }]);
   }
   const containers = model.nodes.filter((n) => catalogEntry(n.kind)?.container);
   return (
@@ -244,7 +244,7 @@ function OverviewSlide({ model }: { model: DiagramModel }) {
           <div className="chips">
             {items.map((x) => (
               <span key={x.label} className="chip">
-                <ResourceIcon kind={x.kind} size={18} /> {x.label}
+                <ResourceIcon kind={x.kind} icon={x.icon} size={18} /> {x.label}
               </span>
             ))}
           </div>

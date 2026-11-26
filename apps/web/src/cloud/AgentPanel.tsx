@@ -104,7 +104,13 @@ export function AgentPanel({
             <p>
               Describe an architecture or a change. The assistant edits the diagram and shows the changes for you to accept.
             </p>
-            {config && !config.aiEnabled && <p className="banner warn">AI is disabled on this server.</p>}
+            {config && !config.aiEnabled && (
+              <p className="banner warn">
+                {config.demo
+                  ? "The live demo runs in your browser without a server, so the assistant is off. Everything else works: import, Terraform, flows, presentations, history."
+                  : "AI is disabled on this server."}
+              </p>
+            )}
             {SUGGESTIONS.map((s) => (
               <button key={s} className="suggestion" onClick={() => void send(s)} disabled={busy}>
                 {s}
