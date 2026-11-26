@@ -641,3 +641,6 @@ textarea.inline-edit { font-weight: 400; resize: none; height: 100%; }
 .rotate-handle:active { cursor: grabbing; }
 .rotate-handle::after { content: ""; position: absolute; top: 100%; left: 50%; width: 1px; height: 10px; background: #1a73e8; }
 .rnode-icon { display: flex; transition: none; }
+.fb-lines { display: inline-flex; align-items: center; gap: 2px; }
+.format-bar .fb-lines button { width: 36px; }
+.format-bar .fb-sep.thin { margin: 0 3px; height: 16px; }

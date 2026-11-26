@@ -57,7 +57,7 @@ import { absBox, type AlignMode, align, type Clip, containerAt, copySelection, g
 import { autoLayout, hasLayout, structureKey } from "./layout";
 import { DRAG_TYPE, Palette, type PaletteItem } from "./Palette";
 import { ContextMenu, type MenuState } from "./ContextMenu";
-import { FormatBar } from "./FormatBar";
+import { FormatBar, type LineStyle } from "./FormatBar";
 import { PageTabs } from "./PageTabs";
 import { Presentation } from "./Presentation";
 import { Properties, Review, type Selection, TerraformPanel } from "./panels";
@@ -128,6 +128,14 @@ function Editor({
   const { zoom } = useViewport();
   /** How new connections are drawn (the toolbar's connector style). */
   const [newRouting, setNewRouting] = useState<"orthogonal" | "straight" | "curved">("orthogonal");
+  /** Pattern and arrowheads for new lines (the toolbar's line style; remembered on this device). */
+  const [newLine, setNewLine] = useState<LineStyle>(() => {
+    try {
+      return { dash: "solid", ends: "end", ...JSON.parse(localStorage.getItem("archcanvas.lineStyle") ?? "{}") };
+    } catch {
+      return { dash: "solid", ends: "end" };
+    }
+  });
   const [paletteOpen, setPaletteOpen] = useState(true);
   /** The canvas tab in view; everything you add, paste or lay out happens on it. */
   const [activePage, setActivePage] = useState<string>(() => pagesOf(initial).at(0)!.id);
@@ -557,9 +565,9 @@ function Editor({
       } else if (mod && k === "a") {
         e.preventDefault();
         setSelectedIds(new Set(modelRef.current.nodes.filter((n) => pageOf(modelRef.current, n.id) === pageRef.current).map((n) => n.id)));
-      } else if (k === "f2" && selection?.type === "node" && !readOnly) {
+      } else if (k === "f2" && selection && !readOnly) {
         e.preventDefault();
-        setEditing(selection.id);
+        setEditing(selection.type === "edge" ? `edge:${selection.id}` : selection.id);
       } else if (k === "escape") {
         setMenu(null);
         setSelectedIds(new Set());
@@ -988,6 +996,19 @@ function Editor({
               const on = !firstSelected?.shadow;
               styleSelected((kind) => (kind === "generic.shape" ? { shadow: on } : null));
             }}
+            lineStyle={newLine}
+            onLineStyle={(patch) => {
+              const next = { ...newLine, ...patch };
+              setNewLine(next);
+              localStorage.setItem("archcanvas.lineStyle", JSON.stringify(next));
+              const edgePatch: Record<string, unknown> = {};
+              if (patch.dash) edgePatch.dash = patch.dash === "solid" ? null : patch.dash;
+              if (patch.ends) {
+                edgePatch.arrowEnd = patch.ends === "end" || patch.ends === "both" ? null : "none";
+                edgePatch.arrowStart = patch.ends === "start" || patch.ends === "both" ? "arrow" : null;
+              }
+              styleSelected(() => null, edgePatch);
+            }}
             routing={newRouting}
             onRouting={(r) => {
               setNewRouting(r);
@@ -1017,7 +1038,17 @@ function Editor({
             onConnect={(c) => {
               if (!c.source || !c.target) return;
               const side = (h: string | null | undefined) => (h && ["t", "r", "b", "l"].includes(h) ? (h as "t") : undefined);
-              op({ op: "connect", from: c.source, to: c.target, ...(newRouting !== "orthogonal" ? { routing: newRouting } : {}), ...(side(c.sourceHandle) ? { fromHandle: side(c.sourceHandle) } : {}), ...(side(c.targetHandle) ? { toHandle: side(c.targetHandle) } : {}) });
+              op({
+                op: "connect",
+                from: c.source,
+                to: c.target,
+                ...(newRouting !== "orthogonal" ? { routing: newRouting } : {}),
+                ...(newLine.dash !== "solid" ? { dash: newLine.dash } : {}),
+                ...(newLine.ends === "none" || newLine.ends === "start" ? { arrowEnd: "none" as const } : {}),
+                ...(newLine.ends === "both" || newLine.ends === "start" ? { arrowStart: "arrow" as const } : {}),
+                ...(side(c.sourceHandle) ? { fromHandle: side(c.sourceHandle) } : {}),
+                ...(side(c.targetHandle) ? { toHandle: side(c.targetHandle) } : {}),
+              });
             }}
             onReconnect={(old, c) => {
               const e = modelRef.current.edges.find((x) => x.id === old.id);
@@ -1040,7 +1071,15 @@ function Editor({
               if (pick) setSelection((prev) => (prev?.type === pick.type && prev.id === pick.id ? prev : pick));
             }}
             onNodeClick={() => tab !== "assistant" && tab !== "flows" && setTab("properties")}
-            onEdgeClick={() => setTab("properties")}
+            onEdgeClick={(e, ed) => {
+              // Lines are controlled by the model, so selecting one is done here (Shift/⌘ adds to the selection).
+              const key = `edge:${ed.id}`;
+              setSelectedIds((prev) => (e.shiftKey || e.metaKey || e.ctrlKey ? new Set([...prev, key]) : new Set([key])));
+              setSelection({ type: "edge", id: ed.id });
+              setTab("properties");
+            }}
+            // Double-click a line to add or edit its text, as in draw.io.
+            onEdgeDoubleClick={(_, ed) => !readOnly && setEditing(`edge:${ed.id}`)}
             onPaneClick={() => {
               setHighlight(null);
               setMenu(null);

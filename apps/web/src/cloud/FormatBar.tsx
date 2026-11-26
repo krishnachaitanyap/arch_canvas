@@ -21,6 +21,24 @@ import type { PaletteItem } from "./Palette";
 
 const ZOOMS = [25, 50, 75, 100, 125, 150, 200, 300];
 
+export type LineEnds = "none" | "end" | "both" | "start";
+export interface LineStyle {
+  dash: "solid" | "dashed" | "dotted";
+  ends: LineEnds;
+}
+
+/** A small picture of a line: its pattern and which ends have arrows. */
+function LineGlyph({ dash = "solid", ends = "end" }: { dash?: LineStyle["dash"]; ends?: LineEnds }) {
+  const pattern = dash === "dashed" ? "4 3" : dash === "dotted" ? "1 3" : undefined;
+  return (
+    <svg width="26" height="14" viewBox="0 0 26 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <line x1={ends === "start" || ends === "both" ? 7 : 2} y1="7" x2={ends === "end" || ends === "both" ? 19 : 24} y2="7" strokeDasharray={pattern} />
+      {(ends === "end" || ends === "both") && <path d="M18 3 L24 7 L18 11 Z" fill="currentColor" />}
+      {(ends === "start" || ends === "both") && <path d="M8 3 L2 7 L8 11 Z" fill="currentColor" />}
+    </svg>
+  );
+}
+
 /** What the + menu adds, at the next free spot. */
 const INSERT: PaletteItem[] = [
   { key: "ins:text", kind: "generic.shape", label: "Text", props: { shape: "text" } },
@@ -76,6 +94,9 @@ export function FormatBar(p: {
   onShadow: () => void;
   routing: Routing;
   onRouting: (r: Routing) => void;
+  /** Line pattern and arrowheads for new lines (and the selected ones). */
+  lineStyle: LineStyle;
+  onLineStyle: (patch: Partial<LineStyle>) => void;
   onInsert: (item: PaletteItem) => void;
 }) {
   const [inserting, setInserting] = useState(false);
@@ -157,6 +178,44 @@ export function FormatBar(p: {
           {icon}
         </button>
       ))}
+      <span className="fb-sep" />
+      <div className="fb-lines" role="group" aria-label="Line style">
+        {(
+          [
+            ["none", "No arrows"],
+            ["end", "Arrow at one end"],
+            ["both", "Arrows at both ends"],
+          ] as const
+        ).map(([ends, title]) => (
+          <button
+            key={ends}
+            className={p.lineStyle.ends === ends ? "on" : ""}
+            title={`${title}: for new lines and the selected ones`}
+            disabled={p.readOnly}
+            onClick={() => p.onLineStyle({ ends })}
+          >
+            <LineGlyph dash={p.lineStyle.dash} ends={ends} />
+          </button>
+        ))}
+        <span className="fb-sep thin" />
+        {(
+          [
+            ["solid", "Solid line"],
+            ["dashed", "Dashed line"],
+            ["dotted", "Dotted line"],
+          ] as const
+        ).map(([dash, title]) => (
+          <button
+            key={dash}
+            className={p.lineStyle.dash === dash ? "on" : ""}
+            title={`${title}: for new lines and the selected ones`}
+            disabled={p.readOnly}
+            onClick={() => p.onLineStyle({ dash })}
+          >
+            <LineGlyph dash={dash} ends="none" />
+          </button>
+        ))}
+      </div>
       <span className="fb-sep" />
       <div className="fb-insert">
         <button title="Insert" disabled={p.readOnly} onClick={() => setInserting((v) => !v)} className={inserting ? "on" : ""}>
