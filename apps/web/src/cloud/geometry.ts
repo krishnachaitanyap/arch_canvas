@@ -1,5 +1,5 @@
 import { applyOps, catalogEntry, type DiagramModel, type DiagramNode, NODE_ID, type Op, pageOf } from "@archcanvas/shared";
-import { NODE_H, NODE_W } from "./layout";
+import { CAPTION_H, isIconItem, NODE_H, NODE_W } from "./layout";
 
 /**
  * Canvas geometry on the model. layout[id] is relative to the node's parent group, which is
@@ -84,7 +84,7 @@ export function growGroups(m: DiagramModel): Layout {
       const l = layout[k.id];
       const s = sizeOf(mm, k);
       w = Math.max(w, l.x + s.w + PAD);
-      h = Math.max(h, l.y + s.h + PAD);
+      h = Math.max(h, l.y + s.h + PAD + (isIconItem(k.kind) ? CAPTION_H : 0));
     }
     if (w !== own.w || h !== own.h) layout[g.id] = { ...layout[g.id], w, h };
   }
@@ -101,7 +101,7 @@ export function placeMissing(m: DiagramModel): Layout {
     // Siblings on the same tab only: other tabs have their own space.
     const siblings = m.nodes.filter((s) => s.parentId === n.parentId && s.id !== n.id && layout[s.id] && (n.parentId || pageOf(m, s.id) === pageOf(m, n.id)));
     const top = n.parentId ? HEADER : 0;
-    const bottom = siblings.reduce((y, s) => Math.max(y, layout[s.id].y + sizeOf(mm, s).h), top - PAD);
+    const bottom = siblings.reduce((y, s) => Math.max(y, layout[s.id].y + sizeOf(mm, s).h + (isIconItem(s.kind) ? CAPTION_H : 0)), top - PAD);
     const d = defaultSize(n.kind);
     layout[n.id] = { x: n.parentId ? PAD : 0, y: bottom + PAD, ...(isContainer(n.kind) || n.kind === "generic.note" ? d : {}) };
   }

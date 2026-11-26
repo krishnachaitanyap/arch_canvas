@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NODE_W } from "../src/cloud/layout";
 import { applyOps, type DiagramModel, emptyModel } from "@archcanvas/shared";
 import { absBox, align, containerAt, copySelection, growGroups, pasteOps, placeMissing, reparentOps } from "../src/cloud/geometry";
 
@@ -54,7 +55,7 @@ describe("canvas geometry", () => {
     const m = build();
     const moved = { ...m, layout: { ...m.layout, db: { x: 340, y: 280 } } };
     const grown = growGroups(moved);
-    expect(grown.vpc.w).toBeGreaterThanOrEqual(340 + 184);
+    expect(grown.vpc.w).toBeGreaterThanOrEqual(340 + NODE_W);
     expect(grown.prod.w).toBeGreaterThanOrEqual(400 + grown.vpc.w!);
     const r = applyOps(m, [{ op: "add_node", id: "cache", kind: "gcp.memorystore_redis", label: "Cache", parentId: "vpc" }]);
     if (!r.ok) throw new Error(r.error);

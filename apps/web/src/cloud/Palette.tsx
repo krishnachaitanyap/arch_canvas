@@ -168,7 +168,7 @@ const fromIcon = (packId: string, i: IconEntry): PaletteItem => {
   };
 };
 
-export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => void; disabled: boolean }) {
+export function Palette({ onAdd, disabled, terraform = false }: { onAdd: (item: PaletteItem) => void; disabled: boolean; terraform?: boolean }) {
   useIconsVersion();
   const packs = allPacks();
   const [query, setQuery] = useState("");
@@ -187,7 +187,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
 
   const segments: Segment[] = useMemo(() => {
     const out: Segment[] = [
-      { id: "gcp", title: "Google Cloud", note: "Deploys with Terraform", items: gcpItems, defaultOpen: true },
+      { id: "gcp", title: "Google Cloud", note: terraform ? "Deploys with Terraform" : undefined, items: gcpItems, defaultOpen: true },
       { id: "basics", title: "Diagram basics", items: basicItems, defaultOpen: true },
       { id: "general", title: "General", note: "Right-click a shape for colours, fonts, lines and shadow", items: generalItems, defaultOpen: true },
       { id: "arrows", title: "Arrows & lines", note: "Free-standing arrows to resize and colour; to link two things, drag between their connection points", items: arrowItems, defaultOpen: true },
@@ -222,7 +222,7 @@ export function Palette({ onAdd, disabled }: { onAdd: (item: PaletteItem) => voi
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [packs.map((p) => p.id).join(), loaded]);
+  }, [packs.map((p) => p.id).join(), loaded, terraform]);
 
   // Load a pack when its segment is open, or for every pack while searching.
   useEffect(() => {

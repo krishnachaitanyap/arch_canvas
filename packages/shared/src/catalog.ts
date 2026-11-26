@@ -454,6 +454,12 @@ export function catalogEntry(kind: string): CatalogEntry | undefined {
   return BY_KIND.get(kind);
 }
 
+/** The model with empty names filled in from the item's type, for text that reads people (workflows, docs). */
+export function withNames<M extends { nodes: { kind: string; label: string }[] }>(m: M): M {
+  if (m.nodes.every((n) => n.label.trim())) return m;
+  return { ...m, nodes: m.nodes.map((n) => (n.label.trim() ? n : { ...n, label: catalogEntry(n.kind)?.label ?? n.kind })) };
+}
+
 /** Props with catalog defaults applied. Unknown keys are dropped. */
 export function resolvedProps(kind: string, props: Record<string, unknown> = {}): Record<string, string | number | boolean> {
   const entry = catalogEntry(kind);

@@ -238,6 +238,11 @@ function Editor({
     setDirty(true);
   }, [future, readOnly]);
 
+  /** Canvas setting: show resource types, regions, warnings and the Terraform panel. */
+  const terraformOn = Boolean(model.settings?.terraform);
+  useEffect(() => {
+    if (tab === "terraform" && !terraformOn) setTab("properties");
+  }, [tab, terraformOn]);
   const pages = pagesOf(model);
   const page = pages.some((p) => p.id === activePage) ? activePage : pages[0].id;
   const pageRef = useRef(page);
@@ -301,7 +306,12 @@ function Editor({
     onStart: (base: DiagramModel) => setProposal({ base, model: base, running: true, changed: false }),
     onProposal: (m: DiagramModel) => setProposal((p) => (p ? { ...p, model: onPage(p.base, m, page), changed: true } : p)),
     onDone: (m: DiagramModel, changed: boolean) => setProposal((p) => (p && changed ? { ...p, model: onPage(p.base, m, page), running: false, changed: true } : null)),
-    onShowTerraform: () => setTab("terraform"),
+    // Asking the assistant for Terraform is an explicit request: turn the details on.
+    onShowTerraform: () => {
+      const m = modelRef.current;
+      if (!m.settings?.terraform) commit({ ...m, settings: { ...m.settings, terraform: true } });
+      setTab("terraform");
+    },
   };
 
   function accept() {
@@ -705,6 +715,19 @@ function Editor({
         Grid
       </button>
       <button
+        className={terraformOn ? "toggle on" : "toggle"}
+        aria-pressed={terraformOn}
+        disabled={readOnly}
+        onClick={() => {
+          const m = modelRef.current;
+          commit({ ...m, settings: { ...m.settings, terraform: !terraformOn } });
+          if (terraformOn && tab === "terraform") setTab("properties");
+        }}
+        title={terraformOn ? "Hide cloud details: resource types, regions, warnings and Terraform" : "Show cloud details on this canvas: resource types, regions, warnings and Terraform"}
+      >
+        Terraform
+      </button>
+      <button
         onClick={() => {
           if (!model.nodes.length || readOnly) return;
           if (Object.keys(model.layout).length && !confirm("Auto layout rearranges every shape. Continue? (You can undo.)")) return;
@@ -897,7 +920,7 @@ function Editor({
         {paletteOpen && (
           <>
             <aside className="palette" style={{ width: paletteW }}>
-              <Palette onAdd={(item) => addItem(item)} disabled={readOnly} />
+              <Palette onAdd={(item) => addItem(item)} disabled={readOnly} terraform={terraformOn} />
             </aside>
             <Resizer onDrag={(dx) => setPaletteW((w) => w + dx)} />
           </>
@@ -1164,7 +1187,9 @@ function Editor({
                 ["review", `Review${issues.filter((i) => i.severity !== "suggestion").length ? ` (${issues.filter((i) => i.severity !== "suggestion").length})` : ""}`],
                 ["terraform", "Terraform"],
               ] as [Tab, string][]
-            ).map(([t, label]) => (
+            )
+              .filter(([t]) => t !== "terraform" || terraformOn)
+              .map(([t, label]) => (
               <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
                 {label}
               </button>

@@ -64,6 +64,8 @@ export interface CloudNodeData extends Record<string, unknown> {
   node: DiagramNode;
   status?: Status;
   issues?: number;
+  /** Terraform details on: show types, regions and warnings. */
+  details?: boolean;
 }
 type CloudNode = Node<CloudNodeData>;
 
@@ -126,37 +128,54 @@ export const EditorContext = createContext<EditorActions>({
 
 function InlineText({ id, value, className, multiline, onCommit }: { id: string; value: string; className?: string; multiline?: boolean; onCommit: (v: string) => void }) {
   const ctx = useContext(EditorContext);
-  const [draft, setDraft] = useState(value);
-  const editing = ctx.editing === id;
-  useEffect(() => setDraft(value), [value, editing]);
-  if (!editing) return <div className={className}>{value}</div>;
-  const done = (commit: boolean) => {
-    ctx.setEditing(null);
-    if (commit && draft.trim() && draft !== value) onCommit(draft.trim());
-  };
-  const props = {
-    autoFocus: true,
-    value: draft,
-    className: `inline-edit nodrag nopan ${className ?? ""}`,
-    onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
-    onBlur: () => done(true),
-    onKeyDown: (e: React.KeyboardEvent) => {
-      e.stopPropagation();
-      if (e.key === "Escape") done(false);
-      if (e.key === "Enter" && (!multiline || e.metaKey || e.ctrlKey)) done(true);
-    },
-    onFocus: (e: { target: HTMLInputElement | HTMLTextAreaElement }) => e.target.select(),
-  };
-  return multiline ? <EditInPlace className={className} value={value} onDone={(v, commit) => { ctx.setEditing(null); if (commit && v.trim() && v.trim() !== value) onCommit(v.trim()); }} /> : <input {...props} />;
+  if (ctx.editing !== id) return <div className={className}>{value}</div>;
+  return (
+    <EditInPlace
+      className={className}
+      value={value}
+      singleLine={!multiline}
+      onDone={(v, commit, unmounting) => {
+        // When editing moves straight to another item, keep that one editing.
+        if (!unmounting) ctx.setEditing(null);
+        // Empty is allowed: the item just shows no text, as in draw.io.
+        const text = v.trim();
+        if (commit && text !== value.trim()) onCommit(text);
+      }}
+    />
+  );
 }
 
 /**
  * Edits text where it is drawn, as draw.io does: same font and position, no box, all text
  * selected to start. Enter adds a line; ⌘/Ctrl+Enter or clicking away saves; Esc cancels.
  */
-function EditInPlace({ value, className, onDone }: { value: string; className?: string; onDone: (v: string, commit: boolean) => void }) {
+function EditInPlace({
+  value,
+  className,
+  singleLine,
+  onDone,
+}: {
+  value: string;
+  className?: string;
+  singleLine?: boolean;
+  onDone: (v: string, commit: boolean, unmounting?: boolean) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const finished = useRef(false);
+  const latest = useRef(value);
+  const done = useRef(onDone);
+  done.current = onDone;
+  // Closed without a blur (e.g. editing jumped to another item): keep what was typed.
+  useEffect(() => {
+    // (Re)mounted, e.g. by React's development double-mount: editing is live again.
+    finished.current = false;
+    return () => {
+      if (!finished.current) {
+        finished.current = true;
+        done.current(latest.current, true, true);
+      }
+    };
+  }, []);
   useEffect(() => {
     const el = ref.current!;
     el.innerText = value;
@@ -168,10 +187,27 @@ function EditInPlace({ value, className, onDone }: { value: string; className?: 
     sel?.addRange(range);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Keys are handled on the element itself: the canvas stops some key events before React sees them.
+  const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  keys.current = (e: KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === "Escape") finish(false);
+    // Names save on Enter (Shift+Enter breaks the line); paragraph text takes Enter as a new line.
+    if (e.key === "Enter" && ((singleLine && !e.shiftKey) || e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      finish(true);
+    }
+  };
+  useEffect(() => {
+    const el = ref.current!;
+    const on = (e: KeyboardEvent) => keys.current(e);
+    el.addEventListener("keydown", on);
+    return () => el.removeEventListener("keydown", on);
+  }, []);
   const finish = (commit: boolean) => {
     if (finished.current) return;
     finished.current = true;
-    onDone(ref.current?.innerText.replace(/\n$/, "") ?? value, commit);
+    onDone((ref.current?.innerText ?? latest.current).replace(/\n$/, ""), commit);
   };
   return (
     <div
@@ -181,32 +217,56 @@ function EditInPlace({ value, className, onDone }: { value: string; className?: 
       suppressContentEditableWarning
       spellCheck={false}
       onBlur={() => finish(true)}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Escape") finish(false);
-        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) finish(true);
-      }}
+      onInput={() => (latest.current = (ref.current?.innerText ?? "").replace(/\n$/, ""))}
+
     />
   );
 }
 
-function ResourceNode({ id, data, selected }: NodeProps<CloudNode>) {
+/**
+ * A resource or component, drawn like a draw.io icon: the icon fills the box (resize to scale
+ * it) and the name sits underneath. Types, regions and warnings show only with Terraform
+ * details turned on for the canvas.
+ */
+function ResourceNode({ id, data, selected, width, height }: NodeProps<CloudNode>) {
   const entry = catalogEntry(data.node.kind);
   const ctx = useContext(EditorContext);
+  const w = width ?? NODE_W;
+  const h = height ?? NODE_H;
+  const size = Math.max(20, Math.round(Math.min(w, h) * 0.78));
   return (
     <div
       className={`rnode ${data.status ?? ""} ${selected ? "selected" : ""}`}
-      title={entry?.description}
+      title={data.details ? entry?.description : undefined}
       onDoubleClick={() => ctx.editable && ctx.setEditing(id)}
     >
-      <Handle type="target" position={Position.Left} />
-      <ResourceIcon kind={data.node.kind} icon={data.node.icon} />
-      <div className="rnode-text">
+      <NodeResizer
+        isVisible={selected && ctx.editable}
+        minWidth={28}
+        minHeight={28}
+        keepAspectRatio
+        lineClassName="sel-line"
+        handleClassName="sel-handle"
+        onResizeEnd={(_, r) => ctx.resized(id, { x: r.x, y: r.y, w: r.width, h: r.height })}
+      />
+      <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={size} />
+      {data.details && data.issues ? (
+        <span className="rnode-badge" title={`${data.issues} warning(s)`}>
+          {data.issues}
+        </span>
+      ) : null}
+      <div className="rnode-caption">
+        {/* A name: Enter saves, Shift+Enter breaks the line. */}
         <InlineText id={id} value={data.node.label} className="rnode-label" onCommit={(v) => ctx.rename(id, v)} />
-        <div className="rnode-kind">{entry?.label ?? data.node.kind}</div>
+        {data.details && (entry?.label ?? data.node.kind) !== data.node.label.trim() && <div className="rnode-kind">{entry?.label ?? data.node.kind}</div>}
       </div>
-      {data.issues ? <span className="rnode-badge" title={`${data.issues} warning(s)`}>{data.issues}</span> : null}
-      <Handle type="source" position={Position.Right} />
+      {/* Target first, source on top: dragging from a point starts a line from this item. */}
+      {SIDES.map((side) => (
+        <Handle key={`t-${side}`} id={side} type="target" position={SIDE_POS[side]} className="side-handle" />
+      ))}
+      {SIDES.map((side) => (
+        <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
+      ))}
     </div>
   );
 }
@@ -240,7 +300,7 @@ function GroupNode({ id, data, selected }: NodeProps<CloudNode>) {
   return (
     <div
       className={`gnode ${data.status ?? ""} ${selected ? "selected" : ""} head-${header}`}
-      title={kindLabel || undefined}
+      title={data.details ? kindLabel || undefined : undefined}
       style={{
         borderStyle: border === "none" ? "solid" : border,
         borderColor: border === "none" ? "transparent" : color,
@@ -260,7 +320,7 @@ function GroupNode({ id, data, selected }: NodeProps<CloudNode>) {
         {header === "tab" && <GroupTab kind={data.node.kind} icon={data.node.icon} color={color} />}
         {header === "icon" && <ResourceIcon kind={data.node.kind} icon={data.node.icon} size={20} />}
         <InlineText id={id} value={data.node.label} className="gnode-label" onCommit={(v) => ctx.rename(id, v)} />
-        {kindLabel && (header === "icon" || header === "label") && <span className="gnode-kind">{kindLabel}</span>}
+        {data.details && kindLabel && kindLabel !== data.node.label.trim() && (header === "icon" || header === "label") && <span className="gnode-kind">{kindLabel}</span>}
       </div>
     </div>
   );
@@ -684,11 +744,12 @@ function ShapeNode({ id, data, selected, width, height }: NodeProps<CloudNode>) 
         </div>
       )}
       {/* A source and a target handle on every side (same id), so lines can start and end anywhere. */}
-      {SIDES.map((side) => (
-        <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
-      ))}
+      {/* Target first, source on top: dragging from a point starts a line from this item. */}
       {SIDES.map((side) => (
         <Handle key={`t-${side}`} id={side} type="target" position={SIDE_POS[side]} className="side-handle" />
+      ))}
+      {SIDES.map((side) => (
+        <Handle key={`s-${side}`} id={side} type="source" position={SIDE_POS[side]} className="side-handle" />
       ))}
     </div>
   );
@@ -902,8 +963,9 @@ export const edgeTypes = { smart: SmartEdge };
 /** Model → React Flow nodes/edges. Parents are emitted before children, as React Flow requires. */
 export function toFlow(
   m: DiagramModel,
-  opts: { diff?: ModelDiff; issues?: Map<string, number>; selected?: string | null; selectedIds?: Set<string>; highlight?: Highlight | null; editable?: boolean } = {},
+  opts: { diff?: ModelDiff; issues?: Map<string, number>; selected?: string | null; selectedIds?: Set<string>; highlight?: Highlight | null; editable?: boolean; details?: boolean } = {},
 ): { nodes: CloudNode[]; edges: Edge[] } {
+  const details = opts.details ?? Boolean(m.settings?.terraform);
   const statusOf = (id: string): Status | undefined =>
     opts.diff?.addedNodes.includes(id)
       ? "added"
@@ -928,8 +990,8 @@ export function toFlow(
         type: container ? "group" : note ? "note" : shape ? "shape" : "resource",
         position: { x: box.x, y: box.y },
         ...(n.parentId ? { parentId: n.parentId } : {}),
-        data: { node: n, status: statusOf(n.id), issues: opts.issues?.get(n.id) },
-        style: container || note || shape ? { width: w, height: h } : { width: w },
+        data: { node: n, status: statusOf(n.id), issues: opts.issues?.get(n.id), details },
+        style: { width: w, height: h },
         width: w,
         height: h,
         selected: opts.selectedIds ? opts.selectedIds.has(n.id) : opts.selected === n.id,
@@ -950,7 +1012,11 @@ export function toFlow(
     const base = n?.parentId ? abs(n.parentId) : { x: 0, y: 0, w: 0, h: 0 };
     return { x: base.x + l.x, y: base.y + l.y, w: l.w ?? NODE_W, h: l.h ?? NODE_H };
   };
-  const isShape = (id: string) => m.nodes.find((x) => x.id === id)?.kind === "generic.shape";
+  // Shapes and resources have connection points on all four sides (notes keep left/right).
+  const isShape = (id: string) => {
+    const k = m.nodes.find((x) => x.id === id)?.kind;
+    return Boolean(k && k !== "generic.note" && !catalogEntry(k)?.container);
+  };
   const sides = (from: string, to: string): [Side, Side] => {
     const a = abs(from);
     const b = abs(to);

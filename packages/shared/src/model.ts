@@ -12,7 +12,8 @@ export const NodeSchema = z.object({
   id: z.string().regex(NODE_ID, "id must be snake_case: lowercase letters, digits, underscores"),
   kind: z.string().min(1),
   // Names are short in the UI; notes (generic.note) use this for their text.
-  label: z.string().min(1).max(500),
+  // May be empty (an icon with no text, as in draw.io); workflows and docs then use the type's name.
+  label: z.string().max(500),
   parentId: z.string().optional(),
   props: z.record(z.unknown()).default({}),
   /**
@@ -77,6 +78,8 @@ export const DiagramModelSchema = z.object({
    * Unset means one page. Terraform, validation and workflows cover every page.
    */
   pages: z.array(PageSchema).max(50).optional(),
+  /** Canvas settings. terraform: show cloud details (resource types, regions, warnings, Terraform). Off unless turned on. */
+  settings: z.object({ terraform: z.boolean().optional() }).optional(),
 });
 
 export type DiagramNode = z.infer<typeof NodeSchema>;
