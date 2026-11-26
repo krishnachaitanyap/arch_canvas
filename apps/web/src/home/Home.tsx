@@ -102,12 +102,10 @@ function ProjectTabs({
   });
   const unused = SUGGESTED_TABS.filter((n) => !tabs.some((t) => t.name.toLowerCase() === n.toLowerCase()));
   return (
-    <div className={`project-tabs ${tabs.length ? "" : "compact"}`} role={tabs.length ? "tablist" : undefined} aria-label="Project tabs">
-      {tabs.length > 0 && (
-        <button role="tab" aria-selected={active === "all"} className={`ptab ${active === "all" ? "on" : ""} ${over === "all" ? "over" : ""}`} onClick={() => onSelect("all")} {...(editable ? dropProps(null) : {})}>
-          All <span className="ptab-count">{counts.all ?? 0}</span>
-        </button>
-      )}
+    <div className="project-tabs" role="tablist" aria-label="Project tabs">
+      <button role="tab" aria-selected={active === "all"} className={`ptab ${active === "all" ? "on" : ""} ${over === "all" ? "over" : ""}`} onClick={() => onSelect("all")} {...(editable ? dropProps(null) : {})}>
+        All <span className="ptab-count">{counts.all ?? 0}</span>
+      </button>
       {tabs.map((t, i) => (
         <div key={t.id} className="ptab-wrap">
           <button
@@ -164,8 +162,8 @@ function ProjectTabs({
       ))}
       {editable && (
         <div className="ptab-wrap">
-          <button className="ptab add" onClick={() => setAdding((a) => !a)} title="Group this project's diagrams into tabs, e.g. HA / DR, CI/CD" aria-expanded={adding}>
-            {tabs.length ? "+ Tab" : "+ Add tabs"}
+          <button className="ptab add" onClick={() => setAdding((a) => !a)} title="Add a tab (e.g. HA / DR, CI/CD)" aria-expanded={adding}>
+            + Tab
           </button>
           {adding && (
             <div className="ptab-menu add-menu">
@@ -471,15 +469,11 @@ function ProjectView({
         </div>
       )}
 
-      {/* The tab bar appears once the project has tabs; until then there's only a small "+ Add tabs" by the filter. */}
-      {tabs.length > 0 && <ProjectTabs tabs={tabs} active={active} counts={counts} editable={editable} onSelect={selectTab} onChange={saveTabs} onDropDiagram={fileUnder} />}
+      {(tabs.length > 0 || editable) && (
+        <ProjectTabs tabs={tabs} active={active} counts={counts} editable={editable} onSelect={selectTab} onChange={saveTabs} onDropDiagram={fileUnder} />
+      )}
 
-      <div className="filter-row">
-        <input className="filter" placeholder={tabName ? `Filter diagrams in ${tabName}` : "Filter diagrams"} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter diagrams" />
-        {!tabs.length && editable && (
-          <ProjectTabs tabs={tabs} active={active} counts={counts} editable={editable} onSelect={selectTab} onChange={saveTabs} onDropDiagram={fileUnder} />
-        )}
-      </div>
+      <input className="filter" placeholder={tabName ? `Filter diagrams in ${tabName}` : "Filter diagrams"} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter diagrams" />
 
       {diagrams === null ? (
         <p className="hint">Loading…</p>
