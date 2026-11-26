@@ -2,6 +2,8 @@ import {
   applyOp,
   CATALOG,
   compileTerraform,
+  describeIntegrations,
+  generateWorkflows,
   type DiagramModel,
   type Op,
   type Protocol,
@@ -71,6 +73,12 @@ const TOOLS: ToolSpec[] = [
     parameters: { type: "object", properties: {} },
   },
   {
+    name: "get_workflows",
+    description:
+      "Return the workflows (request and async flows, step by step) and how each integration works (mechanism, security, configuration, caveats). Use it to answer questions about how components interact.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "generate_terraform",
     description:
       "Compile the diagram to Terraform for the google provider and open it in the user's Terraform tab. Returns file names, resource count and warnings.",
@@ -100,7 +108,7 @@ How to build diagrams:
 - Do as much as possible in one edit_diagram call.
 - After editing, call validate_diagram once and fix errors and warnings that are within the request. Mention remaining suggestions briefly.
 - Edit the existing diagram for change requests: keep everything the user did not ask to change.
-- For questions (explain, review, compare, cost), answer in text; use validate_diagram for reviews; do not edit unless asked.
+- For questions (explain, review, compare, cost), answer in text; use validate_diagram for reviews and get_workflows for how components interact; do not edit unless asked.
 - If the user asks for Terraform/IaC, make sure the diagram is valid, then call generate_terraform.
 - Finish with 1–4 sentences summarising what you did. No markdown headings.`;
 }
@@ -152,6 +160,17 @@ export function execute(call: ToolCall, model: DiagramModel): ExecResult {
     case "validate_diagram": {
       const issues = validateModel(model);
       return { ok: true, summary: `Reviewed: ${count(issues, "error")} errors, ${count(issues, "warning")} warnings`, result: { issues } };
+    }
+    case "get_workflows": {
+      const workflows = generateWorkflows(model);
+      return {
+        ok: true,
+        summary: `Read ${workflows.length} workflows`,
+        result: {
+          workflows: workflows.map((w) => ({ title: w.title, mode: w.mode, summary: w.summary, steps: w.steps.map((s) => s.text) })),
+          integrations: describeIntegrations(model).map(({ terraform: _t, ...i }) => i),
+        },
+      };
     }
     case "generate_terraform": {
       const out = compileTerraform(model);

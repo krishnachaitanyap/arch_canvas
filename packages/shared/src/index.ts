@@ -5,4 +5,7 @@ export * from "./terraform.js";
 export * from "./validate.js";
 export * from "./export.js";
 export { renderBlocks } from "./hcl.js";
+export * from "./compare.js";
+export * from "./flows.js";
+export * from "./doc.js";
 export { SAMPLE_MODEL } from "./sample.js";

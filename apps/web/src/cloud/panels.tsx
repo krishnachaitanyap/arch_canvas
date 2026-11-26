@@ -8,6 +8,7 @@ import {
   type DiagramModel,
   type Issue,
   type Op,
+  describeEdge,
   PROTOCOLS,
   type PropSpec,
   resolvedProps,
@@ -16,6 +17,7 @@ import { api, type TerraformValidation } from "../api";
 import { ResourceIcon } from "./flow";
 import { download } from "./exporters";
 import { slug } from "../util";
+import { IntegrationCard } from "./FlowsPanel";
 
 // ------------------------------------------------------------------ palette
 
@@ -92,6 +94,15 @@ export function Properties({
         <button disabled={readOnly} onClick={() => onOp({ op: "disconnect", from: e.from, to: e.to })}>
           Delete connection
         </button>
+        {(() => {
+          const info = describeEdge(model, e);
+          return info ? (
+            <>
+              <h3>How this integration works</h3>
+              <IntegrationCard integration={info} />
+            </>
+          ) : null;
+        })()}
       </div>
     );
   }

@@ -1,21 +1,75 @@
-import type { DiagramModel } from "@archcanvas/shared";
+import type { DiagramModel, Workflow } from "@archcanvas/shared";
 
 export type DiagramKind = "whiteboard" | "cloud";
+
+export type Role = "owner" | "editor" | "viewer";
+
+export interface Workspace {
+  id: string;
+  name: string;
+  role: Role;
+  project_count: number;
+  member_count: number;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  diagram_count: number;
+  updated_at: string;
+}
+
+export interface Member {
+  user_id: string;
+  role: Role;
+  added_by: string | null;
+  created_at: string;
+}
 
 export interface DiagramSummary {
   id: string;
   title: string;
   kind: DiagramKind;
+  project_id: string;
+  created_by: string | null;
   updated_at: string;
+  version: number | null;
+  node_count: number | null;
 }
 
 export interface Diagram extends DiagramSummary {
   source: string;
   scene: { elements?: readonly unknown[]; files?: Record<string, unknown> };
   model: DiagramModel | null;
+  role?: Role;
+  workspace_id?: string;
+  workspace_name?: string;
+  project_name?: string;
+  versionCreated?: boolean;
 }
 
+export interface VersionSummary {
+  version: number;
+  name: string | null;
+  kind: DiagramKind;
+  created_by: string | null;
+  created_at: string;
+  restored_from: number | null;
+  node_count: number | null;
+  edge_count: number | null;
+}
+
+export interface Version extends VersionSummary {
+  source: string;
+  scene: Diagram["scene"];
+  model: DiagramModel | null;
+}
+
+export type DiagramWrite = Partial<Pick<Diagram, "title" | "kind" | "source" | "scene" | "model">> & { message?: string; projectId?: string };
+
 export interface AppConfig {
+  devUser?: string;
   aiEnabled: boolean;
   aiProvider: string;
   aiModel: string;
@@ -47,11 +101,21 @@ export function setTokenProvider(fn: () => Promise<string | null>): void {
   getToken = fn;
 }
 
+// Dev mode only (API without OIDC): act as another user to try out workspace roles.
+const LS_DEV_USER = "archcanvas.devUser";
+export const devUser = () => localStorage.getItem(LS_DEV_USER);
+export function setDevUser(user: string | null): void {
+  if (user) localStorage.setItem(LS_DEV_USER, user);
+  else localStorage.removeItem(LS_DEV_USER);
+}
+
 async function headers(body: boolean): Promise<Record<string, string>> {
   const token = await getToken();
+  const dev = devUser();
   return {
     ...(body ? { "content-type": "application/json" } : {}),
     ...(token ? { authorization: `Bearer ${token}` } : {}),
+    ...(dev && !token ? { "x-dev-user": dev } : {}),
   };
 }
 
@@ -67,16 +131,53 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   config: () => request<AppConfig>("/api/config"),
-  listDiagrams: () => request<DiagramSummary[]>("/api/diagrams"),
+  // workspaces, members, projects
+  workspaces: () => request<Workspace[]>("/api/workspaces"),
+  createWorkspace: (name: string) => request<Workspace>("/api/workspaces", { method: "POST", body: JSON.stringify({ name }) }),
+  renameWorkspace: (id: string, name: string) => request<Workspace>(`/api/workspaces/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  deleteWorkspace: (id: string) => request<void>(`/api/workspaces/${id}`, { method: "DELETE" }),
+  members: (id: string) => request<Member[]>(`/api/workspaces/${id}/members`),
+  setMember: (id: string, userId: string, role: Role) =>
+    request<Member>(`/api/workspaces/${id}/members`, { method: "PUT", body: JSON.stringify({ userId, role }) }),
+  removeMember: (id: string, userId: string) =>
+    request<void>(`/api/workspaces/${id}/members/${encodeURIComponent(userId)}`, { method: "DELETE" }),
+  projects: (workspaceId: string) => request<Project[]>(`/api/workspaces/${workspaceId}/projects`),
+  createProject: (workspaceId: string, name: string, description = "") =>
+    request<Project>(`/api/workspaces/${workspaceId}/projects`, { method: "POST", body: JSON.stringify({ name, description }) }),
+  updateProject: (id: string, d: { name?: string; description?: string }) =>
+    request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(d) }),
+  deleteProject: (id: string) => request<void>(`/api/projects/${id}`, { method: "DELETE" }),
+
+  // diagrams
+  listDiagrams: (projectId?: string) =>
+    request<(DiagramSummary & { project_name?: string; workspace_id?: string })[]>(
+      `/api/diagrams${projectId ? `?projectId=${projectId}` : ""}`,
+    ),
   getDiagram: (id: string) => request<Diagram>(`/api/diagrams/${id}`),
-  createDiagram: (d: Partial<Diagram>) => request<Diagram>("/api/diagrams", { method: "POST", body: JSON.stringify(d) }),
-  updateDiagram: (id: string, d: Partial<Diagram>) =>
-    request<Diagram>(`/api/diagrams/${id}`, { method: "PUT", body: JSON.stringify(d) }),
+  createDiagram: (d: DiagramWrite & { projectId: string }) =>
+    request<Diagram>("/api/diagrams", { method: "POST", body: JSON.stringify(d) }),
+  updateDiagram: (id: string, d: DiagramWrite) => request<Diagram>(`/api/diagrams/${id}`, { method: "PUT", body: JSON.stringify(d) }),
+  deleteDiagram: (id: string) => request<void>(`/api/diagrams/${id}`, { method: "DELETE" }),
+  duplicateDiagram: (id: string, d: { projectId?: string; title?: string; version?: number } = {}) =>
+    request<Diagram>(`/api/diagrams/${id}/duplicate`, { method: "POST", body: JSON.stringify(d) }),
+
+  // versions
+  versions: (id: string) => request<VersionSummary[]>(`/api/diagrams/${id}/versions`),
+  version: (id: string, version: number) => request<Version>(`/api/diagrams/${id}/versions/${version}`),
+  nameVersion: (id: string, version: number, name: string) =>
+    request<{ version: number; name: string | null }>(`/api/diagrams/${id}/versions/${version}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+  restoreVersion: (id: string, version: number) =>
+    request<Diagram>(`/api/diagrams/${id}/versions/${version}/restore`, { method: "POST" }),
   generate: (prompt: string, currentSource?: string) =>
     request<{ source: string }>("/api/ai/generate", {
       method: "POST",
       body: JSON.stringify({ prompt, currentSource: currentSource || undefined }),
     }),
+  narrateWorkflows: (model: DiagramModel, title?: string) =>
+    request<{ workflows: Workflow[]; rewritten: number }>("/api/ai/workflows", { method: "POST", body: JSON.stringify({ model, title }) }),
   validateTerraform: (model: DiagramModel) =>
     request<TerraformValidation>("/api/terraform/validate", { method: "POST", body: JSON.stringify({ model }) }),
 

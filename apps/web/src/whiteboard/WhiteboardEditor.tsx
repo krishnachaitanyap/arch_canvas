@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Excalidraw, convertToExcalidrawElements, exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
 import type { BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
@@ -6,6 +6,7 @@ import "@excalidraw/excalidraw/index.css";
 import { parseMermaidToExcalidraw } from "@excalidraw/mermaid-to-excalidraw";
 import { api, type Diagram } from "../api";
 import { slug } from "../util";
+import type { CurrentState } from "../history/VersionHistory";
 
 const STARTER = `flowchart LR
   user([User]) -->|HTTPS| lb[Load balancer]
@@ -16,6 +17,9 @@ const STARTER = `flowchart LR
 
 export interface WhiteboardProps {
   diagramId: string | null;
+  projectId: string | null;
+  canEdit: boolean;
+  registerCurrent: (fn: () => CurrentState) => void;
   initial: Diagram | null;
   title: string;
   toolbar: HTMLElement | null;
@@ -24,9 +28,24 @@ export interface WhiteboardProps {
 }
 
 /** Freeform whiteboard: Excalidraw canvas with Mermaid diagram-as-code and one-shot AI. */
-export function WhiteboardEditor({ diagramId, initial, title, toolbar, setStatus, onSaved }: WhiteboardProps) {
+export function WhiteboardEditor({ diagramId, projectId, canEdit, registerCurrent, initial, title, toolbar, setStatus, onSaved }: WhiteboardProps) {
   const [excalidraw, setExcalidraw] = useState<ExcalidrawImperativeAPI | null>(null);
   const [source, setSource] = useState(initial ? initial.source : STARTER);
+  // Unsaved-change tracking: Excalidraw bumps each element's version on every edit.
+  const saved = useRef<{ source: string; sig: number | null }>({ source: initial?.source ?? "", sig: null });
+  const sig = useCallback(() => (excalidraw ? excalidraw.getSceneElements().reduce((n, e) => n + e.version, 0) : 0), [excalidraw]);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+
+  useEffect(() => {
+    registerCurrent(() => ({
+      kind: "whiteboard",
+      model: null,
+      source: sourceRef.current,
+      elementCount: excalidraw?.getSceneElements().length,
+      dirty: !diagramId || sourceRef.current !== saved.current.source || (saved.current.sig !== null && sig() !== saved.current.sig),
+    }));
+  }, [registerCurrent, excalidraw, diagramId, sig]);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -53,6 +72,7 @@ export function WhiteboardEditor({ diagramId, initial, title, toolbar, setStatus
       excalidraw.updateScene({ elements: (initial.scene.elements ?? []) as never });
       if (initial.scene.files) excalidraw.addFiles(Object.values(initial.scene.files as BinaryFiles));
       excalidraw.scrollToContent(undefined, { fitToContent: true });
+      setTimeout(() => (saved.current.sig = sig()), 0);
     } else void render(STARTER);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [excalidraw]);
@@ -77,10 +97,12 @@ export function WhiteboardEditor({ diagramId, initial, title, toolbar, setStatus
     setBusy("Saving…");
     const scene = { elements: excalidraw.getSceneElements(), files: excalidraw.getFiles() };
     try {
+      if (!diagramId && !projectId) throw new Error("Pick a project first");
       const d = diagramId
         ? await api.updateDiagram(diagramId, { title, source, scene })
-        : await api.createDiagram({ title, kind: "whiteboard", source, scene });
-      setStatus({ kind: "ok", text: "Saved" });
+        : await api.createDiagram({ projectId: projectId!, title, kind: "whiteboard", source, scene });
+      saved.current = { source, sig: sig() };
+      setStatus({ kind: "ok", text: d.versionCreated === false ? "No changes since the last version" : `Saved as v${d.version}` });
       onSaved(d);
     } catch (err) {
       setStatus({ kind: "error", text: (err as Error).message });
@@ -111,9 +133,13 @@ export function WhiteboardEditor({ diagramId, initial, title, toolbar, setStatus
     <>
       <button onClick={() => void onExport("svg")}>Export SVG</button>
       <button onClick={() => void onExport("png")}>Export PNG</button>
-      <button className="primary" onClick={() => void onSave()} disabled={Boolean(busy)}>
-        Save
-      </button>
+      {canEdit ? (
+        <button className="primary" onClick={() => void onSave()} disabled={Boolean(busy)}>
+          Save
+        </button>
+      ) : (
+        <span className="kind-pill">View only</span>
+      )}
     </>
   );
 

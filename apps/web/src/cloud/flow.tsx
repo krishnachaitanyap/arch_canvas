@@ -4,6 +4,14 @@ import { NODE_H, NODE_W } from "./layout";
 
 export type Status = "added" | "changed" | "removed";
 
+/** Emphasis for walkthroughs: the current step is highlighted, earlier steps stay visible, the rest dims. */
+export interface Highlight {
+  nodes: string[];
+  edges: string[];
+  visitedNodes?: string[];
+  visitedEdges?: string[];
+}
+
 export interface CloudNodeData extends Record<string, unknown> {
   node: DiagramNode;
   status?: Status;
@@ -59,7 +67,7 @@ export const nodeTypes = { resource: ResourceNode, group: GroupNode };
 /** Model → React Flow nodes/edges. Parents are emitted before children, as React Flow requires. */
 export function toFlow(
   m: DiagramModel,
-  opts: { diff?: ModelDiff; issues?: Map<string, number>; selected?: string | null } = {},
+  opts: { diff?: ModelDiff; issues?: Map<string, number>; selected?: string | null; highlight?: Highlight | null } = {},
 ): { nodes: CloudNode[]; edges: Edge[] } {
   const statusOf = (id: string): Status | undefined =>
     opts.diff?.addedNodes.includes(id)
@@ -87,6 +95,7 @@ export function toFlow(
         height: h,
         selected: opts.selected === n.id,
         zIndex: container ? 0 : 10,
+        className: emphasis(opts.highlight, n.id, "node", Boolean(container)),
       });
       visit(n.id);
     }
@@ -95,23 +104,33 @@ export function toFlow(
 
   const edges: Edge[] = m.edges.map((e) => {
     const status = opts.diff?.addedEdges.includes(e.id) ? "added" : opts.diff?.removedEdges.includes(e.id) ? "removed" : undefined;
-    const color = status === "added" ? "#1e8e3e" : status === "removed" ? "#d93025" : "#5f6368";
+    const hl = opts.highlight;
+    const current = hl?.edges.includes(e.id);
+    const visited = hl?.visitedEdges?.includes(e.id);
+    const color = current ? "#4f46e5" : status === "added" ? "#1e8e3e" : status === "removed" ? "#d93025" : visited ? "#6366f1" : "#5f6368";
     return {
       id: e.id,
       source: e.from,
       target: e.to,
       label: e.label ?? e.protocol,
       type: "smoothstep",
-      animated: status === "added",
-      zIndex: 20,
-      className: status ?? "",
-      style: { stroke: color, strokeWidth: 1.6, ...(status === "removed" ? { strokeDasharray: "6 4" } : {}) },
+      animated: status === "added" || Boolean(current),
+      zIndex: current ? 30 : 20,
+      className: [status ?? "", hl ? (current ? "hl" : visited ? "visited" : "dim") : ""].join(" ").trim(),
+      style: { stroke: color, strokeWidth: current ? 3 : visited ? 2 : 1.6, ...(status === "removed" ? { strokeDasharray: "6 4" } : {}) },
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
       labelStyle: { fontSize: 11, fill: "#3c4043" },
       labelBgStyle: { fill: "#fff" },
     };
   });
   return { nodes, edges };
+}
+
+function emphasis(hl: Highlight | null | undefined, id: string, _t: "node", container: boolean): string {
+  if (!hl) return "";
+  if (hl.nodes.includes(id)) return "hl";
+  if (hl.visitedNodes?.includes(id)) return "visited";
+  return container ? "dim-group" : "dim";
 }
 
 /**

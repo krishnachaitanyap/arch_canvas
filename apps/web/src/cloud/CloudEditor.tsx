@@ -19,22 +19,28 @@ import {
   diffModels,
   type DiagramModel,
   emptyModel,
+  generateWorkflows,
   type ModelDiff,
   type Op,
+  toArchitectureDoc,
   toDrawio,
   toMermaid,
   toPlantUml,
   validateModel,
+  type Workflow,
 } from "@archcanvas/shared";
 import { api, type AppConfig, type Diagram } from "../api";
+import type { CurrentState } from "../history/VersionHistory";
 import { AgentPanel } from "./AgentPanel";
 import { download, exportImage } from "./exporters";
-import { type CloudNodeData, nodeTypes, toFlow, withGhosts } from "./flow";
+import { type CloudNodeData, type Highlight, nodeTypes, toFlow, withGhosts } from "./flow";
+import { FlowsPanel } from "./FlowsPanel";
+import { Presentation } from "./Presentation";
 import { autoLayout, hasLayout, structureKey } from "./layout";
 import { Palette, Properties, Review, type Selection, TerraformPanel } from "./panels";
 import { slug } from "../util";
 
-type Tab = "assistant" | "properties" | "review" | "terraform";
+type Tab = "assistant" | "properties" | "flows" | "review" | "terraform";
 
 interface Proposal {
   base: DiagramModel;
@@ -45,6 +51,11 @@ interface Proposal {
 
 export interface EditorProps {
   diagramId: string | null;
+  /** Project that a new diagram is created in on first save. */
+  projectId: string | null;
+  canEdit: boolean;
+  /** Lets the shell read the editor's current (possibly unsaved) state, e.g. for comparisons. */
+  registerCurrent: (fn: () => CurrentState) => void;
   initial: DiagramModel;
   title: string;
   toolbar: HTMLElement | null;
@@ -61,7 +72,7 @@ export function CloudEditor(props: EditorProps) {
   );
 }
 
-function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved }: EditorProps) {
+function Editor({ diagramId, projectId, canEdit, registerCurrent, initial, title, toolbar, config, setStatus, onSaved }: EditorProps) {
   const rf = useReactFlow();
   const [model, setModel] = useState<DiagramModel>(initial);
   const modelRef = useRef(model);
@@ -74,7 +85,26 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
   const [proposalLayout, setProposalLayout] = useState<DiagramModel["layout"] | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const readOnly = Boolean(proposal);
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const readOnly = Boolean(proposal) || !canEdit;
+  const [highlight, setHighlight] = useState<Highlight | null>(null);
+  const [presenting, setPresenting] = useState<{ start?: number } | null>(null);
+  // AI-rewritten workflow wording, valid only for the content it was written for.
+  const [narrated, setNarrated] = useState<{ key: string; workflows: Workflow[] } | null>(null);
+  const contentKey = useMemo(() => JSON.stringify([model.nodes, model.edges]), [model.nodes, model.edges]);
+  const workflows = useMemo(
+    () => (narrated && narrated.key === contentKey ? narrated.workflows : generateWorkflows(model)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contentKey, narrated],
+  );
+  useEffect(() => {
+    if (tab !== "flows") setHighlight(null);
+  }, [tab]);
+
+  useEffect(() => {
+    registerCurrent(() => ({ kind: "cloud", model: modelRef.current, source: "", dirty: dirtyRef.current || !diagramId }));
+  }, [registerCurrent, diagramId]);
 
   const fit = useCallback(() => setTimeout(() => void rf.fitView({ padding: 0.15, duration: 300 }), 60), [rf]);
 
@@ -213,8 +243,14 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
   }, [issues]);
 
   const flow = useMemo(
-    () => toFlow(display, { diff, issues: proposal ? undefined : issueCounts, selected: selection?.type === "node" ? selection.id : null }),
-    [display, diff, issueCounts, proposal, selection],
+    () =>
+      toFlow(display, {
+        diff,
+        issues: proposal ? undefined : issueCounts,
+        selected: selection?.type === "node" ? selection.id : null,
+        highlight: proposal ? null : highlight,
+      }),
+    [display, diff, issueCounts, proposal, selection, highlight],
   );
   const [nodes, setNodes] = useState<Node<CloudNodeData>[]>(flow.nodes);
   useEffect(() => setNodes(flow.nodes), [flow.nodes]);
@@ -252,11 +288,12 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
   async function save() {
     setSaving(true);
     try {
+      if (!diagramId && !projectId) throw new Error("Pick a project first");
       const d = diagramId
         ? await api.updateDiagram(diagramId, { title, kind: "cloud", model })
-        : await api.createDiagram({ title, kind: "cloud", model });
+        : await api.createDiagram({ projectId: projectId!, title, kind: "cloud", model });
       setDirty(false);
-      setStatus({ kind: "ok", text: "Saved" });
+      setStatus({ kind: "ok", text: d.versionCreated === false ? "No changes since the last version" : `Saved as v${d.version}` });
       onSaved(d);
     } catch (e) {
       setStatus({ kind: "error", text: (e as Error).message });
@@ -275,6 +312,8 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
           return download(`${name}.mmd`, toMermaid(model));
         case "plantuml":
           return download(`${name}.puml`, toPlantUml(model));
+        case "doc":
+          return download(`${name}-architecture.md`, toArchitectureDoc(model, title, workflows), "text/markdown");
         case "json":
           return download(`${name}.archcanvas.json`, JSON.stringify({ title, kind: "cloud", model }, null, 2), "application/json");
         case "svg":
@@ -299,6 +338,9 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
       <button onClick={() => void relayout()} disabled={readOnly || !model.nodes.length}>
         Auto layout
       </button>
+      <button onClick={() => setPresenting({})} disabled={!model.edges.length || Boolean(proposal)} title="Walk through the workflows">
+        Present
+      </button>
       <select
         value=""
         aria-label="Export"
@@ -316,17 +358,25 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
         <option value="png">PNG image</option>
         <option value="mermaid">Mermaid (.mmd)</option>
         <option value="plantuml">PlantUML (.puml)</option>
+        <option value="doc">Architecture doc (.md)</option>
         <option value="json">ArchCanvas JSON</option>
       </select>
-      <button className="primary" onClick={() => void save()} disabled={saving || readOnly}>
-        {saving ? "Saving…" : dirty || !diagramId ? "Save" : "Saved"}
-      </button>
+      {canEdit ? (
+        <button className="primary" onClick={() => void save()} disabled={saving || readOnly}>
+          {saving ? "Saving…" : dirty || !diagramId ? "Save" : "Saved"}
+        </button>
+      ) : (
+        <span className="kind-pill">View only</span>
+      )}
     </>
   );
 
   return (
     <div className="cloud">
       {toolbar && createPortal(tools, toolbar)}
+      {presenting && (
+        <Presentation model={model} title={title} workflows={workflows} startWorkflow={presenting.start} onClose={() => setPresenting(null)} />
+      )}
       <Palette onAdd={addResource} disabled={readOnly} />
 
       <div className="cloud-canvas">
@@ -347,7 +397,10 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
             setSelection({ type: "edge", id: e.id });
             setTab("properties");
           }}
-          onPaneClick={() => setSelection(null)}
+          onPaneClick={() => {
+            setSelection(null);
+            setHighlight(null);
+          }}
           nodesDraggable={!readOnly}
           nodesConnectable={!readOnly}
           deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
@@ -376,7 +429,7 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
                   <b className="del">−{diff!.removedNodes.length}</b> resources,{" "}
                   <b className="add">+{diff!.addedEdges.length}</b> <b className="del">−{diff!.removedEdges.length}</b> connections
                 </span>
-                <button className="primary" onClick={accept}>
+                <button className="primary" onClick={accept} disabled={!canEdit} title={canEdit ? undefined : "Viewers cannot change diagrams"}>
                   Accept
                 </button>
                 <button onClick={reject}>Reject</button>
@@ -392,6 +445,7 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
             [
               ["assistant", "Assistant"],
               ["properties", "Properties"],
+              ["flows", "Flows"],
               ["review", `Review${issues.filter((i) => i.severity !== "suggestion").length ? ` (${issues.filter((i) => i.severity !== "suggestion").length})` : ""}`],
               ["terraform", "Terraform"],
             ] as [Tab, string][]
@@ -406,6 +460,23 @@ function Editor({ diagramId, initial, title, toolbar, config, setStatus, onSaved
         </div>
         <div className="tab-body scroll" hidden={tab !== "properties"}>
           <Properties model={model} selection={selection} onOp={op} readOnly={readOnly} />
+        </div>
+        <div className="tab-body scroll" hidden={tab !== "flows"}>
+          <FlowsPanel
+            model={model}
+            title={title}
+            workflows={workflows}
+            aiNarrated={Boolean(narrated && narrated.key === contentKey)}
+            aiEnabled={Boolean(config?.aiEnabled)}
+            onNarrated={(w) => setNarrated(w ? { key: contentKey, workflows: w } : null)}
+            onHighlight={(h, focus) => {
+              setHighlight(h);
+              const nodes = (focus ?? h?.nodes ?? []).map((id) => rf.getNode(id)).filter((n) => n !== undefined);
+              if (nodes.length) void rf.fitView({ nodes, padding: 0.8, duration: 350, maxZoom: 1.3 });
+            }}
+            onPresent={(start) => setPresenting({ start })}
+            setStatus={setStatus}
+          />
         </div>
         <div className="tab-body scroll" hidden={tab !== "review"}>
           <Review

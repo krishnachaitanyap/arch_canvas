@@ -1,150 +1,275 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { type DiagramModel, emptyModel, SAMPLE_MODEL } from "@archcanvas/shared";
-import { api, type AppConfig, type Diagram, type DiagramKind, type DiagramSummary } from "./api";
+import { api, type AppConfig, type Diagram, type DiagramKind, devUser, type Project, type Role, setDevUser, type Workspace } from "./api";
+import { Home } from "./home/Home";
+import type { CurrentState } from "./history/VersionHistory";
 
 // Each editor is its own chunk: the whiteboard pulls in Excalidraw + Mermaid, the cloud editor React Flow + ELK.
 const CloudEditor = lazy(() => import("./cloud/CloudEditor").then((m) => ({ default: m.CloudEditor })));
 const WhiteboardEditor = lazy(() => import("./whiteboard/WhiteboardEditor").then((m) => ({ default: m.WhiteboardEditor })));
+const VersionHistory = lazy(() => import("./history/VersionHistory").then((m) => ({ default: m.VersionHistory })));
 
 interface Doc {
-  /** Bumped to remount the editor when another diagram is opened. */
+  /** Bumped to remount the editor when another diagram (or a restored version) is loaded. */
   key: number;
   id: string | null;
+  projectId: string | null;
   kind: DiagramKind;
   title: string;
   loaded: Diagram | null;
   model: DiagramModel;
+  role: Role;
+  version: number | null;
 }
 
 type Status = { kind: "ok" | "error"; text: string } | null;
 
+const LS_WS = "archcanvas.workspace";
+const LS_PROJECT = "archcanvas.project";
 let nextKey = 1;
-const newDoc = (kind: DiagramKind, title = "Untitled architecture", model = emptyModel()): Doc => ({
-  key: nextKey++,
-  id: null,
-  kind,
-  title,
-  loaded: null,
-  model,
-});
 
 export function App() {
-  const [doc, setDoc] = useState<Doc>(() => newDoc("cloud"));
-  const [diagrams, setDiagrams] = useState<DiagramSummary[]>([]);
-  const [status, setStatus] = useState<Status>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [wsId, setWsId] = useState<string | null>(() => localStorage.getItem(LS_WS));
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem(LS_PROJECT));
+  const [doc, setDoc] = useState<Doc | null>(null);
+  const [history, setHistory] = useState(false);
+  const [status, setStatus] = useState<Status>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const currentRef = useRef<(() => CurrentState) | null>(null);
 
-  const refreshList = useCallback(() => {
-    api.listDiagrams().then(setDiagrams).catch(() => setDiagrams([]));
+  const workspace = workspaces.find((w) => w.id === wsId) ?? null;
+  const project = projects.find((p) => p.id === projectId) ?? null;
+
+  const registerCurrent = useCallback((fn: () => CurrentState) => {
+    currentRef.current = fn;
   }, []);
-  useEffect(refreshList, [refreshList]);
+  const getCurrent = useCallback(() => currentRef.current?.() ?? null, []);
+
+  /** Loads workspaces and the selected workspace's projects, keeping (or applying) the selection. */
+  const reload = useCallback(
+    async (select: { workspaceId?: string; projectId?: string } = {}) => {
+      try {
+        const ws = await api.workspaces();
+        setWorkspaces(ws);
+        const w = ws.find((x) => x.id === (select.workspaceId ?? wsId)) ?? ws[0];
+        if (!w) return;
+        setWsId(w.id);
+        localStorage.setItem(LS_WS, w.id);
+        const ps = await api.projects(w.id);
+        setProjects(ps);
+        const p = ps.find((x) => x.id === (select.projectId ?? projectId)) ?? ps[0] ?? null;
+        setProjectId(p?.id ?? null);
+        if (p) localStorage.setItem(LS_PROJECT, p.id);
+      } catch (e) {
+        setStatus({ kind: "error", text: (e as Error).message });
+      }
+    },
+    [wsId, projectId],
+  );
+
   useEffect(() => {
-    api.config().then(setConfig).catch(() => setConfig(null));
+    api.config().then(setConfig, () => setConfig(null));
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   useEffect(() => {
     if (status?.kind !== "ok") return;
-    const t = setTimeout(() => setStatus(null), 2500);
+    const t = setTimeout(() => setStatus(null), 3000);
     return () => clearTimeout(t);
   }, [status]);
 
-  async function open(id: string) {
+  // Warn before closing the tab with unsaved changes.
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (doc && getCurrent()?.dirty) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [doc, getCurrent]);
+
+  const confirmLeave = () => !doc || !getCurrent()?.dirty || confirm("You have unsaved changes. Leave without saving?");
+
+  async function open(id: string, opts: { history?: boolean } = {}) {
+    if (doc?.id !== id && !confirmLeave()) return;
     try {
       const d = await api.getDiagram(id);
       setStatus(null);
+      currentRef.current = null;
       setDoc({
         key: nextKey++,
         id: d.id,
+        projectId: d.project_id,
         kind: d.kind,
         title: d.title,
         loaded: d,
         model: d.model ?? emptyModel(),
+        role: d.role ?? "viewer",
+        version: d.version,
       });
+      setHistory(Boolean(opts.history));
     } catch (e) {
       setStatus({ kind: "error", text: (e as Error).message });
     }
   }
 
-  function create(choice: string) {
+  function create(kind: DiagramKind | "sample") {
+    if (!project || !workspace) return;
+    currentRef.current = null;
     setStatus(null);
-    if (choice === "cloud") setDoc(newDoc("cloud"));
-    if (choice === "whiteboard") setDoc(newDoc("whiteboard", "Untitled whiteboard"));
-    if (choice === "sample") setDoc(newDoc("cloud", "GCP web app (sample)", structuredClone(SAMPLE_MODEL)));
+    setHistory(false);
+    setDoc({
+      key: nextKey++,
+      id: null,
+      projectId: project.id,
+      kind: kind === "whiteboard" ? "whiteboard" : "cloud",
+      title: kind === "whiteboard" ? "Untitled whiteboard" : kind === "sample" ? "GCP web app (sample)" : "Untitled architecture",
+      loaded: null,
+      model: kind === "sample" ? structuredClone(SAMPLE_MODEL) : emptyModel(),
+      role: workspace.role,
+      version: null,
+    });
+  }
+
+  function goHome() {
+    if (!confirmLeave()) return;
+    setDoc(null);
+    setHistory(false);
+    currentRef.current = null;
+    void reload();
   }
 
   const onSaved = (d: Diagram) => {
-    setDoc((cur) => ({ ...cur, id: d.id }));
-    refreshList();
+    setDoc((cur) => (cur ? { ...cur, id: d.id, version: d.version } : cur));
   };
+
+  const canEdit = doc?.role === "owner" || doc?.role === "editor";
+  const editorProps = doc && {
+    diagramId: doc.id,
+    projectId: doc.projectId,
+    canEdit,
+    registerCurrent,
+    title: doc.title,
+    toolbar,
+    setStatus,
+    onSaved,
+  };
+  const docProject = doc ? projects.find((p) => p.id === doc.projectId) : undefined;
 
   return (
     <div className="app">
       <header className="topbar">
-        <span className="logo">ArchCanvas</span>
-        <input
-          className="title"
-          value={doc.title}
-          onChange={(e) => setDoc((d) => ({ ...d, title: e.target.value }))}
-          aria-label="Diagram title"
-        />
-        <span className="kind-pill">{doc.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
-        <select value={doc.id ?? ""} onChange={(e) => e.target.value && void open(e.target.value)} aria-label="Open diagram">
-          <option value="">Open…</option>
-          {diagrams.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.kind === "cloud" ? "☁ " : "✎ "}
-              {d.title}
-            </option>
-          ))}
-        </select>
-        <select
-          value=""
-          aria-label="New diagram"
-          onChange={(e) => {
-            create(e.target.value);
-            e.target.value = "";
-          }}
-        >
-          <option value="" disabled>
-            New…
-          </option>
-          <option value="cloud">GCP architecture</option>
-          <option value="sample">GCP architecture from sample</option>
-          <option value="whiteboard">Whiteboard (Mermaid)</option>
-        </select>
+        <button className="logo" onClick={goHome} title="All projects">
+          ArchCanvas
+        </button>
+        {doc ? (
+          <>
+            <nav className="crumbs">
+              <button className="link" onClick={goHome}>
+                {doc.loaded?.workspace_name ?? workspace?.name}
+              </button>
+              <span>/</span>
+              <button className="link" onClick={goHome}>
+                {doc.loaded?.project_name ?? docProject?.name}
+              </button>
+              <span>/</span>
+            </nav>
+            <input
+              className="title"
+              value={doc.title}
+              disabled={!canEdit}
+              onChange={(e) => setDoc((d) => d && { ...d, title: e.target.value })}
+              aria-label="Diagram title"
+            />
+            <span className="kind-pill">{doc.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
+            <button className="version-badge" disabled={!doc.id} onClick={() => setHistory(true)} title="Version history and compare">
+              {doc.version ? `v${doc.version}` : "unsaved"} · History
+            </button>
+          </>
+        ) : (
+          <span className="hint">{workspace ? `${workspace.name}${project ? ` / ${project.name}` : ""}` : ""}</span>
+        )}
         <div className="spacer" />
         {status && (
-          <span className={`status ${status.kind}`} title={status.text}>
-            {status.text}
-          </span>
+          <div className={`status ${status.kind}`} role={status.kind === "error" ? "alert" : "status"}>
+            <span>{status.text}</span>
+            <button className="link" onClick={() => setStatus(null)} aria-label="Dismiss">
+              ✕
+            </button>
+          </div>
         )}
         <div className="toolbar-slot" ref={setToolbar} />
+        {config?.devUser && (
+          <label className="dev-user" title="Dev mode (no OIDC): act as another user to try workspace roles">
+            as
+            <input
+              defaultValue={devUser() ?? config.devUser}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v === (devUser() ?? config.devUser)) return;
+                setDevUser(v && v !== config.devUser ? v : null);
+                setDoc(null);
+                setHistory(false);
+                void reload();
+              }}
+              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+              aria-label="Acting user (dev mode)"
+            />
+          </label>
+        )}
       </header>
 
-      <Suspense fallback={<div className="loading">Loading editor…</div>}>
-        {doc.kind === "cloud" ? (
-          <CloudEditor
-            key={doc.key}
-            diagramId={doc.id}
-            initial={doc.model}
-            title={doc.title}
-            toolbar={toolbar}
-            config={config}
-            setStatus={setStatus}
-            onSaved={onSaved}
-          />
-        ) : (
-          <WhiteboardEditor
-            key={doc.key}
-            diagramId={doc.id}
-            initial={doc.loaded}
-            title={doc.title}
-            toolbar={toolbar}
-            setStatus={setStatus}
-            onSaved={onSaved}
-          />
-        )}
-      </Suspense>
+      {doc && editorProps ? (
+        <Suspense fallback={<div className="loading">Loading editor…</div>}>
+          {doc.kind === "cloud" ? (
+            <CloudEditor key={doc.key} {...editorProps} initial={doc.model} config={config} />
+          ) : (
+            <WhiteboardEditor key={doc.key} {...editorProps} initial={doc.loaded} />
+          )}
+          {history && doc.id && (
+            <VersionHistory
+              diagramId={doc.id}
+              title={doc.title}
+              canEdit={canEdit}
+              getCurrent={getCurrent}
+              onClose={() => setHistory(false)}
+              onRestored={() => {
+                currentRef.current = null;
+                setHistory(false);
+                setDoc((d) => d && { ...d, version: null });
+                void api.getDiagram(doc.id!).then((d) =>
+                  setDoc((cur) => cur && { ...cur, key: nextKey++, loaded: d, model: d.model ?? emptyModel(), version: d.version, kind: d.kind }),
+                );
+              }}
+              onDuplicated={(id) => {
+                currentRef.current = null;
+                void open(id);
+              }}
+              setStatus={setStatus}
+            />
+          )}
+        </Suspense>
+      ) : (
+        <Home
+          workspaces={workspaces}
+          workspace={workspace}
+          projects={projects}
+          project={project}
+          me={devUser() ?? config?.devUser ?? ""}
+          onWorkspace={(id) => void reload({ workspaceId: id })}
+          onProject={(id) => {
+            setProjectId(id);
+            localStorage.setItem(LS_PROJECT, id);
+          }}
+          reload={reload}
+          onOpen={(id, o) => void open(id, o)}
+          onNew={create}
+          setStatus={setStatus}
+        />
+      )}
     </div>
   );
 }

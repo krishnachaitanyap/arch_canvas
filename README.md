@@ -44,6 +44,31 @@ Add `--profile sso` for Keycloak, `--profile local-llm` for Ollama.
 - **Terraform**: a deterministic compiler (`packages/shared/src/terraform.ts`) turns the diagram into `google` provider code. Connections become IAM, VPC access, Pub/Sub push subscriptions and load balancer backends. Download as a zip, or validate with `terraform validate`.
 - **Export**: draw.io (`.drawio`), SVG, PNG, Mermaid, PlantUML and JSON.
 
+## Workspaces, projects, versions and compare
+
+- **Workspaces** hold **projects**, and projects hold diagrams. Each workspace has members with roles:
+  - **owner**: also manages members and workspace settings
+  - **editor**: creates and changes projects and diagrams
+  - **viewer**: can only read
+  Members are added by OIDC user id or email. Non-members can't see the workspace at all.
+- **Versions:** every save that changes something creates a numbered version, and a save with no changes doesn't. You can name versions, restore an old one (it's saved as a new version, so history is never rewritten), or copy any version into a new diagram, in this project or another one.
+- **Compare** any two versions, the editor's unsaved state, or another diagram's latest version:
+  - a visual diff on the canvas (added, changed, removed)
+  - a field-level change list
+  - the Terraform diff, showing which resources would be created or destroyed
+  - a Mermaid or text diff
+- **Dev mode** (no `OIDC_ISSUER`): the "as" box in the top bar switches the acting user (sent as the `x-dev-user` header), so you can try the roles.
+
+## Workflows, integrations and presentations
+
+Workflows and integration explanations come from the diagram (`packages/shared/src/flows.ts`), using the same edge rules as the Terraform compiler, so they always describe what actually gets deployed.
+
+- **Workflows:** request flows start at users (or at services nothing calls), and each Pub/Sub topic starts its own async workflow.
+- **How each integration works:** for every connection, the mechanism, security (IAM), configuration (environment variables), what to watch out for, and the Terraform resources it creates.
+- **Normal view:** the **Flows** tab in the editor. Clicking a step highlights it on the canvas. Selecting a connection shows its explanation in Properties. **Download doc** produces a Markdown architecture document with a Mermaid diagram, components, workflows, integrations, review and deployment.
+- **Presentation:** **Present** opens a full-screen walkthrough (title, overview, each workflow step by step with the canvas zooming to the connection, wrap-up). Use ← and → to move, F for fullscreen, Esc to exit.
+- **AI wording** (optional): Gemini rewrites titles and step text. It can't add, remove or reorder steps; anything that doesn't match the diagram is discarded.
+
 See [docs/PLAN-cloud-agent-iac.md](docs/PLAN-cloud-agent-iac.md) for the roadmap.
 
 ## AI providers

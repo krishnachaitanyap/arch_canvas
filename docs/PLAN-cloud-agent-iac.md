@@ -140,3 +140,31 @@ That slice touches every layer with about 8 resources. After that, widening the 
 - An eval set of about 30 prompts for the agent.
 - Run `terraform validate` in CI.
 - Production build of the API with the shared package (it currently runs TypeScript source through tsx).
+
+## Workspaces, projects, versions and compare (2026-11-26)
+
+**Done**
+- Migration `003`: workspaces, members with owner/editor/viewer roles, projects, and numbered or named versions. Existing diagrams move into "Default workspace / General", and their creators become owners.
+- Access checks for every route (`apps/api/src/access.ts`). New users get a personal workspace on first visit.
+- Version history: saves with no changes don't create versions; versions can be named, restored (as a new version) or duplicated into any project.
+- Compare (`packages/shared/src/compare.ts`): visual diff, field-level change list, Terraform diff with create/destroy, and line diff. Works across diagrams.
+- Web: home screen (workspace switcher, projects, diagram cards, members, move, duplicate, delete), breadcrumbs, version badge, and the History overlay.
+
+**Next**
+- Real-time presence and comments on versions.
+- Invite emails, and SCIM/IdP group mapping to roles.
+- API integration tests against a real Postgres (role checks are only smoke-tested with curl so far).
+
+## Workflows, integrations and presentation mode (2026-11-26)
+
+**Done**
+- `flows.ts`: workflows split at Pub/Sub boundaries, and an explanation for each integration that matches the Terraform mappings. `doc.ts` generates the Markdown architecture document.
+- Flows tab with canvas highlighting, integration cards in Properties, the "Architecture doc (.md)" export, and full-screen presentation mode.
+- `POST /api/ai/workflows` for AI wording, validated against the generated structure; the agent's `get_workflows` tool.
+
+**Not yet verified:** AI wording against a live Gemini model (no key yet).
+
+**Next**
+- Let users define, name and save their own workflows (for example "Checkout"), including steps that repeat a connection.
+- Sequence-diagram view of a workflow.
+- Speaker notes, and exporting the presentation to PDF or slides.
