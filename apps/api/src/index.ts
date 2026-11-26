@@ -4,8 +4,10 @@ import { config } from "./config.js";
 import { authenticate } from "./auth.js";
 import { pool } from "./db.js";
 import { migrate } from "./migrate.js";
+import { agentRoutes } from "./routes/agent.js";
 import { aiRoutes } from "./routes/ai.js";
 import { diagramRoutes } from "./routes/diagrams.js";
+import { terraformRoutes } from "./routes/terraform.js";
 
 const app = Fastify({ logger: true, bodyLimit: 5 * 1024 * 1024 });
 
@@ -24,6 +26,8 @@ app.get("/readyz", async (_req, reply) => {
 
 app.get("/api/config", async () => ({
   aiEnabled: config.LLM_PROVIDER !== "none",
+  aiProvider: config.LLM_PROVIDER,
+  aiModel: config.LLM_MODEL,
   authEnabled: Boolean(config.OIDC_ISSUER),
 }));
 
@@ -32,6 +36,8 @@ await app.register(async (secured) => {
   secured.addHook("onRequest", authenticate);
   await secured.register(diagramRoutes);
   await secured.register(aiRoutes);
+  await secured.register(agentRoutes);
+  await secured.register(terraformRoutes);
 });
 
 if (process.env.MIGRATE_ON_START !== "false") await migrate();

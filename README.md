@@ -20,21 +20,31 @@ cloudbuild.yaml      Build + push images to Artifact Registry
 
 ## Run locally
 
-Requirements: Node 20+, Docker (for Postgres).
+Requirements: Node 20+. No Docker needed: `npm run dev:db` runs an embedded Postgres (data in `.data/pg`).
 
 ```bash
-cp .env.example .env            # add ANTHROPIC_API_KEY, or set LLM_PROVIDER=openai_compatible for Ollama
-docker run -d --name archcanvas-pg -p 5432:5432 \
-  -e POSTGRES_USER=archcanvas -e POSTGRES_PASSWORD=archcanvas -e POSTGRES_DB=archcanvas postgres:16-alpine
+cp .env.example .env            # set GEMINI_API_KEY (or another LLM_PROVIDER), PORT, API_PROXY_TARGET
 npm install
-set -a; source .env; set +a
-npm run dev:api                 # http://localhost:8080 (runs DB migrations on start)
-npm run dev:web                 # http://localhost:5173
-npm run dev:collab              # ws://localhost:1234 (optional for now)
+npm run dev:db                  # Postgres on :5432
+node --env-file=.env node_modules/tsx/dist/cli.mjs watch apps/api/src/index.ts     # API (runs migrations)
+node --env-file=.env node_modules/vite/bin/vite.js apps/web --port 5174            # web app
+npm test                        # unit tests (shared model, Terraform compiler, agent tools)
 ```
+
+The same three commands are in `.claude/launch.json`. Install Terraform on the API host to enable **Validate** in the Terraform tab.
 
 Or the whole stack in containers: `docker compose up -d --build` → http://localhost:8000.
 Add `--profile sso` for Keycloak, `--profile local-llm` for Ollama.
+
+## GCP architecture diagrams (Milestone 1)
+
+- **Typed model** (`packages/shared`): nodes, groups and connections checked against a GCP resource catalog.
+- **Structured editor**: React Flow canvas with nested groups (project → region → VPC → subnet), ELK auto-layout, palette, properties, undo/redo.
+- **Assistant** (Gemini by default): edits the diagram through validated tool calls and shows changes as a highlighted proposal to accept or reject. It also reviews designs and generates Terraform.
+- **Terraform**: a deterministic compiler (`packages/shared/src/terraform.ts`) turns the diagram into `google` provider code. Connections become IAM, VPC access, Pub/Sub push subscriptions and load balancer backends. Download as a zip, or validate with `terraform validate`.
+- **Export**: draw.io (`.drawio`), SVG, PNG, Mermaid, PlantUML and JSON.
+
+See [docs/PLAN-cloud-agent-iac.md](docs/PLAN-cloud-agent-iac.md) for the roadmap.
 
 ## AI providers
 
@@ -42,7 +52,8 @@ Set `LLM_PROVIDER`:
 
 | Value | Use for | Config |
 |---|---|---|
-| `anthropic` | Cloud default | `ANTHROPIC_API_KEY`, `LLM_MODEL` |
+| `gemini` | Default. Gemini API key, or Vertex AI when the key is empty | `GEMINI_API_KEY` or `VERTEX_PROJECT_ID`, `VERTEX_REGION`; `LLM_MODEL` |
+| `anthropic` | Claude via the Anthropic API | `ANTHROPIC_API_KEY`, `LLM_MODEL` |
 | `vertex` | Claude on Vertex AI (GCP, data stays in your project) | `VERTEX_PROJECT_ID`, `VERTEX_REGION`; auth via Workload Identity |
 | `openai_compatible` | Self-hosted / air-gapped: vLLM, Ollama, LiteLLM, Azure OpenAI | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `LLM_MODEL` |
 | `none` | AI disabled | — |

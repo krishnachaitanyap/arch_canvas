@@ -8,4 +8,5 @@ dist/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
-public/fonts/
+apps/web/public/fonts/
+.data/

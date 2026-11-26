@@ -1,0 +1,132 @@
+import { Handle, MarkerType, type Edge, type Node, type NodeProps, Position } from "@xyflow/react";
+import { catalogEntry, childrenOf, type DiagramModel, type DiagramNode, type ModelDiff } from "@archcanvas/shared";
+import { NODE_H, NODE_W } from "./layout";
+
+export type Status = "added" | "changed" | "removed";
+
+export interface CloudNodeData extends Record<string, unknown> {
+  node: DiagramNode;
+  status?: Status;
+  issues?: number;
+}
+type CloudNode = Node<CloudNodeData>;
+
+export function ResourceIcon({ kind, size = 32 }: { kind: string; size?: number }) {
+  const icon = catalogEntry(kind)?.icon ?? { abbr: "?", color: "#5f6368" };
+  return (
+    <span className="ricon" style={{ background: icon.color, width: size, height: size, fontSize: size * 0.3 }} aria-hidden>
+      {icon.abbr}
+    </span>
+  );
+}
+
+function ResourceNode({ data, selected }: NodeProps<CloudNode>) {
+  const entry = catalogEntry(data.node.kind);
+  return (
+    <div className={`rnode ${data.status ?? ""} ${selected ? "selected" : ""}`} title={entry?.description}>
+      <Handle type="target" position={Position.Left} />
+      <ResourceIcon kind={data.node.kind} />
+      <div className="rnode-text">
+        <div className="rnode-label">{data.node.label}</div>
+        <div className="rnode-kind">{entry?.label ?? data.node.kind}</div>
+      </div>
+      {data.issues ? <span className="rnode-badge" title={`${data.issues} warning(s)`}>{data.issues}</span> : null}
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+
+function GroupNode({ data, selected }: NodeProps<CloudNode>) {
+  const entry = catalogEntry(data.node.kind);
+  const color = entry?.icon.color ?? "#80868b";
+  const region = data.node.kind === "gcp.region" ? (data.node.props.region as string | undefined) ?? "us-central1" : undefined;
+  return (
+    <div className={`gnode ${data.status ?? ""} ${selected ? "selected" : ""}`} style={{ borderColor: color }}>
+      <div className="gnode-head" style={{ color }}>
+        <ResourceIcon kind={data.node.kind} size={20} />
+        <span className="gnode-label">{data.node.label}</span>
+        <span className="gnode-kind">
+          {entry?.label}
+          {region ? ` · ${region}` : ""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export const nodeTypes = { resource: ResourceNode, group: GroupNode };
+
+/** Model → React Flow nodes/edges. Parents are emitted before children, as React Flow requires. */
+export function toFlow(
+  m: DiagramModel,
+  opts: { diff?: ModelDiff; issues?: Map<string, number>; selected?: string | null } = {},
+): { nodes: CloudNode[]; edges: Edge[] } {
+  const statusOf = (id: string): Status | undefined =>
+    opts.diff?.addedNodes.includes(id)
+      ? "added"
+      : opts.diff?.removedNodes.includes(id)
+        ? "removed"
+        : opts.diff?.changedNodes.includes(id)
+          ? "changed"
+          : undefined;
+  const nodes: CloudNode[] = [];
+  const visit = (parentId: string | undefined) => {
+    for (const n of childrenOf(m, parentId)) {
+      const container = catalogEntry(n.kind)?.container;
+      const box = m.layout[n.id] ?? { x: 0, y: 0 };
+      const w = box.w ?? NODE_W;
+      const h = box.h ?? NODE_H;
+      nodes.push({
+        id: n.id,
+        type: container ? "group" : "resource",
+        position: { x: box.x, y: box.y },
+        ...(n.parentId ? { parentId: n.parentId } : {}),
+        data: { node: n, status: statusOf(n.id), issues: opts.issues?.get(n.id) },
+        style: container ? { width: w, height: h } : { width: w },
+        width: w,
+        height: h,
+        selected: opts.selected === n.id,
+        zIndex: container ? 0 : 10,
+      });
+      visit(n.id);
+    }
+  };
+  visit(undefined);
+
+  const edges: Edge[] = m.edges.map((e) => {
+    const status = opts.diff?.addedEdges.includes(e.id) ? "added" : opts.diff?.removedEdges.includes(e.id) ? "removed" : undefined;
+    const color = status === "added" ? "#1e8e3e" : status === "removed" ? "#d93025" : "#5f6368";
+    return {
+      id: e.id,
+      source: e.from,
+      target: e.to,
+      label: e.label ?? e.protocol,
+      type: "smoothstep",
+      animated: status === "added",
+      zIndex: 20,
+      className: status ?? "",
+      style: { stroke: color, strokeWidth: 1.6, ...(status === "removed" ? { strokeDasharray: "6 4" } : {}) },
+      markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
+      labelStyle: { fontSize: 11, fill: "#3c4043" },
+      labelBgStyle: { fill: "#fff" },
+    };
+  });
+  return { nodes, edges };
+}
+
+/**
+ * What the canvas shows while the agent proposes changes: the proposal, plus removed nodes
+ * and edges from the base drawn as ghosts.
+ */
+export function withGhosts(base: DiagramModel, proposal: DiagramModel, diff: ModelDiff): DiagramModel {
+  const present = new Set(proposal.nodes.map((n) => n.id));
+  const ghosts = base.nodes
+    .filter((n) => diff.removedNodes.includes(n.id))
+    .map((n) => (n.parentId && !present.has(n.parentId) ? { ...n, parentId: undefined } : n));
+  const ghostEdges = base.edges.filter((e) => diff.removedEdges.includes(e.id));
+  return {
+    ...proposal,
+    nodes: [...proposal.nodes, ...ghosts],
+    edges: [...proposal.edges, ...ghostEdges.filter((e) => [...present, ...ghosts.map((g) => g.id)].includes(e.from))],
+  };
+}

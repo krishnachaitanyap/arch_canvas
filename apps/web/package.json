@@ -12,8 +12,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@archcanvas/shared": "^0.1.0",
     "@excalidraw/excalidraw": "^0.18.0",
     "@excalidraw/mermaid-to-excalidraw": "^1.1.2",
+    "@xyflow/react": "^13.0.3",
+    "elkjs": "^0.9.3",
+    "html-to-image": "^1.11.11",
+    "jszip": "^3.10.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

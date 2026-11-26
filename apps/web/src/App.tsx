@@ -1,188 +1,150 @@
-import { useCallback, useEffect, useState } from "react";
-import { Excalidraw, convertToExcalidrawElements, exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI, BinaryFiles } from "@excalidraw/excalidraw/types";
-import { parseMermaidToExcalidraw } from "@excalidraw/mermaid-to-excalidraw";
-import { api, type DiagramSummary } from "./api";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { type DiagramModel, emptyModel, SAMPLE_MODEL } from "@archcanvas/shared";
+import { api, type AppConfig, type Diagram, type DiagramKind, type DiagramSummary } from "./api";
 
-const STARTER = `flowchart LR
-  user([User]) -->|HTTPS| lb[Load balancer]
-  lb --> web[Web app]
-  web -->|REST| api[API service]
-  api --> db[(Postgres)]
-  api -->|prompt| llm{{LLM gateway}}`;
+// Each editor is its own chunk: the whiteboard pulls in Excalidraw + Mermaid, the cloud editor React Flow + ELK.
+const CloudEditor = lazy(() => import("./cloud/CloudEditor").then((m) => ({ default: m.CloudEditor })));
+const WhiteboardEditor = lazy(() => import("./whiteboard/WhiteboardEditor").then((m) => ({ default: m.WhiteboardEditor })));
+
+interface Doc {
+  /** Bumped to remount the editor when another diagram is opened. */
+  key: number;
+  id: string | null;
+  kind: DiagramKind;
+  title: string;
+  loaded: Diagram | null;
+  model: DiagramModel;
+}
+
+type Status = { kind: "ok" | "error"; text: string } | null;
+
+let nextKey = 1;
+const newDoc = (kind: DiagramKind, title = "Untitled architecture", model = emptyModel()): Doc => ({
+  key: nextKey++,
+  id: null,
+  kind,
+  title,
+  loaded: null,
+  model,
+});
 
 export function App() {
-  const [excalidraw, setExcalidraw] = useState<ExcalidrawImperativeAPI | null>(null);
-  const [source, setSource] = useState(STARTER);
-  const [prompt, setPrompt] = useState("");
-  const [title, setTitle] = useState("Untitled diagram");
-  const [diagramId, setDiagramId] = useState<string | null>(null);
+  const [doc, setDoc] = useState<Doc>(() => newDoc("cloud"));
   const [diagrams, setDiagrams] = useState<DiagramSummary[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [status, setStatus] = useState<Status>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
 
   const refreshList = useCallback(() => {
     api.listDiagrams().then(setDiagrams).catch(() => setDiagrams([]));
   }, []);
   useEffect(refreshList, [refreshList]);
-
-  const render = useCallback(
-    async (code: string) => {
-      if (!excalidraw) return;
-      try {
-        const { elements, files } = await parseMermaidToExcalidraw(code, { themeVariables: { fontSize: "16px" } });
-        excalidraw.updateScene({ elements: convertToExcalidrawElements(elements) });
-        if (files) excalidraw.addFiles(Object.values(files));
-        excalidraw.scrollToContent(undefined, { fitToContent: true });
-        setStatus(null);
-      } catch (err) {
-        setStatus({ kind: "error", text: `Mermaid error: ${(err as Error).message}` });
-      }
-    },
-    [excalidraw],
-  );
-
-  // Render the starter diagram once the canvas is ready
   useEffect(() => {
-    if (excalidraw) void render(STARTER);
-  }, [excalidraw, render]);
+    api.config().then(setConfig).catch(() => setConfig(null));
+  }, []);
+  useEffect(() => {
+    if (status?.kind !== "ok") return;
+    const t = setTimeout(() => setStatus(null), 2500);
+    return () => clearTimeout(t);
+  }, [status]);
 
-  async function onGenerate(edit: boolean) {
-    if (!prompt.trim()) return;
-    setBusy(edit ? "Updating diagram…" : "Generating diagram…");
+  async function open(id: string) {
     try {
-      const { source: generated } = await api.generate(prompt, edit ? source : undefined);
-      setSource(generated);
-      await render(generated);
-      setPrompt("");
-    } catch (err) {
-      setStatus({ kind: "error", text: (err as Error).message });
-    } finally {
-      setBusy(null);
+      const d = await api.getDiagram(id);
+      setStatus(null);
+      setDoc({
+        key: nextKey++,
+        id: d.id,
+        kind: d.kind,
+        title: d.title,
+        loaded: d,
+        model: d.model ?? emptyModel(),
+      });
+    } catch (e) {
+      setStatus({ kind: "error", text: (e as Error).message });
     }
   }
 
-  async function onSave() {
-    if (!excalidraw) return;
-    setBusy("Saving…");
-    const scene = { elements: excalidraw.getSceneElements(), files: excalidraw.getFiles() };
-    try {
-      if (diagramId) {
-        await api.updateDiagram(diagramId, { title, source, scene });
-      } else {
-        const created = await api.createDiagram({ title, source, scene });
-        setDiagramId(created.id);
-      }
-      setStatus({ kind: "ok", text: "Saved" });
-      refreshList();
-    } catch (err) {
-      setStatus({ kind: "error", text: (err as Error).message });
-    } finally {
-      setBusy(null);
-    }
+  function create(choice: string) {
+    setStatus(null);
+    if (choice === "cloud") setDoc(newDoc("cloud"));
+    if (choice === "whiteboard") setDoc(newDoc("whiteboard", "Untitled whiteboard"));
+    if (choice === "sample") setDoc(newDoc("cloud", "GCP web app (sample)", structuredClone(SAMPLE_MODEL)));
   }
 
-  async function onOpen(id: string) {
-    if (!excalidraw) return;
-    if (!id) return onNew();
-    const d = await api.getDiagram(id);
-    setDiagramId(d.id);
-    setTitle(d.title);
-    setSource(d.source);
-    excalidraw.updateScene({ elements: (d.scene.elements ?? []) as never });
-    if (d.scene.files) excalidraw.addFiles(Object.values(d.scene.files as BinaryFiles));
-    excalidraw.scrollToContent(undefined, { fitToContent: true });
-  }
-
-  function onNew() {
-    setDiagramId(null);
-    setTitle("Untitled diagram");
-    setSource("");
-    excalidraw?.resetScene();
-  }
-
-  async function onExport(kind: "svg" | "png") {
-    if (!excalidraw) return;
-    const opts = {
-      elements: excalidraw.getSceneElements(),
-      appState: { ...excalidraw.getAppState(), exportBackground: true },
-      files: excalidraw.getFiles(),
-    };
-    const blob =
-      kind === "svg"
-        ? new Blob([(await exportToSvg(opts)).outerHTML], { type: "image/svg+xml" })
-        : await exportToBlob({ ...opts, mimeType: "image/png" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${title.replace(/[^\w-]+/g, "_")}.${kind}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
+  const onSaved = (d: Diagram) => {
+    setDoc((cur) => ({ ...cur, id: d.id }));
+    refreshList();
+  };
 
   return (
     <div className="app">
       <header className="topbar">
         <span className="logo">ArchCanvas</span>
-        <input className="title" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Diagram title" />
-        <select value={diagramId ?? ""} onChange={(e) => void onOpen(e.target.value)} aria-label="Open diagram">
-          <option value="">New diagram</option>
+        <input
+          className="title"
+          value={doc.title}
+          onChange={(e) => setDoc((d) => ({ ...d, title: e.target.value }))}
+          aria-label="Diagram title"
+        />
+        <span className="kind-pill">{doc.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
+        <select value={doc.id ?? ""} onChange={(e) => e.target.value && void open(e.target.value)} aria-label="Open diagram">
+          <option value="">Open…</option>
           {diagrams.map((d) => (
             <option key={d.id} value={d.id}>
+              {d.kind === "cloud" ? "☁ " : "✎ "}
               {d.title}
             </option>
           ))}
         </select>
+        <select
+          value=""
+          aria-label="New diagram"
+          onChange={(e) => {
+            create(e.target.value);
+            e.target.value = "";
+          }}
+        >
+          <option value="" disabled>
+            New…
+          </option>
+          <option value="cloud">GCP architecture</option>
+          <option value="sample">GCP architecture from sample</option>
+          <option value="whiteboard">Whiteboard (Mermaid)</option>
+        </select>
         <div className="spacer" />
-        {status && <span className={`status ${status.kind}`}>{status.text}</span>}
-        <button onClick={onNew}>New</button>
-        <button onClick={() => void onExport("svg")}>Export SVG</button>
-        <button onClick={() => void onExport("png")}>Export PNG</button>
-        <button className="primary" onClick={() => void onSave()} disabled={Boolean(busy)}>
-          Save
-        </button>
+        {status && (
+          <span className={`status ${status.kind}`} title={status.text}>
+            {status.text}
+          </span>
+        )}
+        <div className="toolbar-slot" ref={setToolbar} />
       </header>
 
-      <main className="workspace">
-        <aside className="panel">
-          <section>
-            <h2>Ask AI</h2>
-            <textarea
-              rows={5}
-              placeholder="e.g. Microservices e-commerce on GKE with Pub/Sub, Cloud SQL and a Redis cache"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void onGenerate(Boolean(source.trim()));
-              }}
-            />
-            <div className="row">
-              <button className="primary" onClick={() => void onGenerate(false)} disabled={Boolean(busy)}>
-                Generate new
-              </button>
-              <button onClick={() => void onGenerate(true)} disabled={Boolean(busy) || !source.trim()}>
-                Edit current
-              </button>
-            </div>
-            {busy && <p className="hint">{busy}</p>}
-          </section>
-
-          <section className="grow">
-            <h2>Diagram as code (Mermaid)</h2>
-            <textarea
-              className="code"
-              spellCheck={false}
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-            />
-            <button onClick={() => void render(source)}>Render to canvas</button>
-            <p className="hint">Rendering replaces the canvas. Edit freely on the canvas afterwards.</p>
-          </section>
-        </aside>
-
-        <div className="canvas">
-          <Excalidraw excalidrawAPI={setExcalidraw} />
-        </div>
-      </main>
+      <Suspense fallback={<div className="loading">Loading editor…</div>}>
+        {doc.kind === "cloud" ? (
+          <CloudEditor
+            key={doc.key}
+            diagramId={doc.id}
+            initial={doc.model}
+            title={doc.title}
+            toolbar={toolbar}
+            config={config}
+            setStatus={setStatus}
+            onSaved={onSaved}
+          />
+        ) : (
+          <WhiteboardEditor
+            key={doc.key}
+            diagramId={doc.id}
+            initial={doc.loaded}
+            title={doc.title}
+            toolbar={toolbar}
+            setStatus={setStatus}
+            onSaved={onSaved}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
