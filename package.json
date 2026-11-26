@@ -4,7 +4,8 @@
   "private": true,
   "description": "AI-native architecture diagramming platform. Cloud (GCP) and self-hosted from one codebase.",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
@@ -13,9 +14,15 @@
     "dev:collab": "npm run dev -w @archcanvas/collab",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "migrate": "npm run migrate -w @archcanvas/api"
+    "migrate": "npm run migrate -w @archcanvas/api",
+    "dev:db": "node scripts/dev-db.mjs",
+    "test": "vitest run"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "embedded-postgres": "^19.0.0-beta.20",
+    "vitest": "^5.1.2"
   }
 }

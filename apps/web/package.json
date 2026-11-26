@@ -4,23 +4,32 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node scripts/copy-fonts.mjs",
+    "predev": "node scripts/copy-fonts.mjs && node scripts/build-icons.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/copy-fonts.mjs",
+    "prebuild": "node scripts/copy-fonts.mjs && node scripts/build-icons.mjs",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@archcanvas/shared": "^0.1.0",
     "@excalidraw/excalidraw": "^0.18.0",
     "@excalidraw/mermaid-to-excalidraw": "^1.1.2",
+    "@xyflow/react": "^13.0.3",
+    "elkjs": "^0.9.3",
+    "html-to-image": "^1.11.11",
+    "jszip": "^3.10.2",
+    "lucide-react": "^1.81.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@iconify-json/logos": "^1.2.21",
+    "@iconify-json/lucide": "^1.2.159",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "aws-icons": "^3.3.0",
     "typescript": "^5.7.0",
     "vite": "^7.0.0"
   }

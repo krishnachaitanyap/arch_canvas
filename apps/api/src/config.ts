@@ -9,9 +9,13 @@ const schema = z.object({
   OIDC_AUDIENCE: z.string().default("archcanvas"),
   TENANT_CLAIM: z.string().default("tenant"),
 
-  LLM_PROVIDER: z.enum(["anthropic", "vertex", "openai_compatible", "none"]).default("anthropic"),
+  LLM_PROVIDER: z.enum(["gemini", "anthropic", "vertex", "openai_compatible", "none"]).default("anthropic"),
   LLM_MODEL: z.string().default("claude-sonnet-5-5"),
   ANTHROPIC_API_KEY: z.string().optional(),
+  /** Gemini: API key from Google AI Studio. Leave empty to use Vertex AI (VERTEX_PROJECT_ID, VERTEX_REGION). */
+  GEMINI_API_KEY: z.string().optional(),
+  /** Terraform binary used to validate generated code. */
+  TERRAFORM_BIN: z.string().default("terraform"),
   VERTEX_PROJECT_ID: z.string().optional(),
   VERTEX_REGION: z.string().default("us-east5"),
   OPENAI_BASE_URL: z.string().default("http://localhost:11434/v1"),

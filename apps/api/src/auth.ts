@@ -30,11 +30,14 @@ async function getJwks(): Promise<ReturnType<typeof createRemoteJWKSet>> {
  * OIDC bearer-token auth. Works with any standards-compliant IdP:
  * Keycloak (default for self-hosted), Google Identity Platform, Okta, Entra ID.
  *
- * With OIDC_ISSUER unset the API runs in dev mode: no auth, single "default" tenant.
+ * With OIDC_ISSUER unset the API runs in dev mode: no auth, single "default" tenant. The
+ * acting user is "dev-user", or whatever the x-dev-user header says (to try out roles).
  */
 export async function authenticate(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!config.OIDC_ISSUER) {
-    req.principal = { userId: "dev-user", tenantId: "default" };
+    const devUser = req.headers["x-dev-user"];
+    const userId = typeof devUser === "string" && devUser.trim() ? devUser.trim().slice(0, 200) : "dev-user";
+    req.principal = { userId, tenantId: "default", ...(userId.includes("@") ? { email: userId.toLowerCase() } : {}) };
     return;
   }
   const header = req.headers.authorization;

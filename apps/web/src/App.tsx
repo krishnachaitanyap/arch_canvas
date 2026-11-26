@@ -1,188 +1,333 @@
-import { useCallback, useEffect, useState } from "react";
-import { Excalidraw, convertToExcalidrawElements, exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI, BinaryFiles } from "@excalidraw/excalidraw/types";
-import { parseMermaidToExcalidraw } from "@excalidraw/mermaid-to-excalidraw";
-import { api, type DiagramSummary } from "./api";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { type DiagramModel, emptyModel, SAMPLE_MODEL } from "@archcanvas/shared";
+import { resetDemo } from "./demo-api";
+import { api, type AppConfig, type Diagram, type DiagramKind, devUser, type Project, type Role, setDevUser, type Workspace } from "./api";
+import { Home } from "./home/Home";
+import { setWorkspacePacks } from "./icons/registry";
+import type { CurrentState } from "./history/VersionHistory";
 
-const STARTER = `flowchart LR
-  user([User]) -->|HTTPS| lb[Load balancer]
-  lb --> web[Web app]
-  web -->|REST| api[API service]
-  api --> db[(Postgres)]
-  api -->|prompt| llm{{LLM gateway}}`;
+// Each editor is its own chunk: the whiteboard pulls in Excalidraw + Mermaid, the cloud editor React Flow + ELK.
+const CloudEditor = lazy(() => import("./cloud/CloudEditor").then((m) => ({ default: m.CloudEditor })));
+const WhiteboardEditor = lazy(() => import("./whiteboard/WhiteboardEditor").then((m) => ({ default: m.WhiteboardEditor })));
+const VersionHistory = lazy(() => import("./history/VersionHistory").then((m) => ({ default: m.VersionHistory })));
+
+interface Doc {
+  /** Bumped to remount the editor when another diagram (or a restored version) is loaded. */
+  key: number;
+  id: string | null;
+  projectId: string | null;
+  kind: DiagramKind;
+  title: string;
+  loaded: Diagram | null;
+  model: DiagramModel;
+  role: Role;
+  version: number | null;
+  /** Just imported from a file: open on the Flows tab. */
+  imported?: boolean;
+}
+
+type Status = { kind: "ok" | "error"; text: string } | null;
+
+const LS_WS = "archcanvas.workspace";
+const LS_PROJECT = "archcanvas.project";
+let nextKey = 1;
 
 export function App() {
-  const [excalidraw, setExcalidraw] = useState<ExcalidrawImperativeAPI | null>(null);
-  const [source, setSource] = useState(STARTER);
-  const [prompt, setPrompt] = useState("");
-  const [title, setTitle] = useState("Untitled diagram");
-  const [diagramId, setDiagramId] = useState<string | null>(null);
-  const [diagrams, setDiagrams] = useState<DiagramSummary[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [wsId, setWsId] = useState<string | null>(() => localStorage.getItem(LS_WS));
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem(LS_PROJECT));
+  const [doc, setDoc] = useState<Doc | null>(null);
+  const [history, setHistory] = useState(false);
+  const [status, setStatus] = useState<Status>(null);
+  const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const currentRef = useRef<(() => CurrentState) | null>(null);
 
-  const refreshList = useCallback(() => {
-    api.listDiagrams().then(setDiagrams).catch(() => setDiagrams([]));
+  const workspace = workspaces.find((w) => w.id === wsId) ?? null;
+  const project = projects.find((p) => p.id === projectId) ?? null;
+
+  const registerCurrent = useCallback((fn: () => CurrentState) => {
+    currentRef.current = fn;
   }, []);
-  useEffect(refreshList, [refreshList]);
+  const getCurrent = useCallback(() => currentRef.current?.() ?? null, []);
 
-  const render = useCallback(
-    async (code: string) => {
-      if (!excalidraw) return;
+  /** Loads workspaces and the selected workspace's projects, keeping (or applying) the selection. */
+  const reload = useCallback(
+    async (select: { workspaceId?: string; projectId?: string } = {}) => {
       try {
-        const { elements, files } = await parseMermaidToExcalidraw(code, { themeVariables: { fontSize: "16px" } });
-        excalidraw.updateScene({ elements: convertToExcalidrawElements(elements) });
-        if (files) excalidraw.addFiles(Object.values(files));
-        excalidraw.scrollToContent(undefined, { fitToContent: true });
-        setStatus(null);
-      } catch (err) {
-        setStatus({ kind: "error", text: `Mermaid error: ${(err as Error).message}` });
+        const ws = await api.workspaces();
+        setWorkspaces(ws);
+        const w = ws.find((x) => x.id === (select.workspaceId ?? wsId)) ?? ws[0];
+        if (!w) return;
+        setWsId(w.id);
+        localStorage.setItem(LS_WS, w.id);
+        const ps = await api.projects(w.id);
+        setProjects(ps);
+        const p = ps.find((x) => x.id === (select.projectId ?? projectId)) ?? ps[0] ?? null;
+        setProjectId(p?.id ?? null);
+        if (p) localStorage.setItem(LS_PROJECT, p.id);
+      } catch (e) {
+        setStatus({ kind: "error", text: (e as Error).message });
       }
     },
-    [excalidraw],
+    [wsId, projectId],
   );
 
-  // Render the starter diagram once the canvas is ready
   useEffect(() => {
-    if (excalidraw) void render(STARTER);
-  }, [excalidraw, render]);
+    api.config().then(setConfig, () => setConfig(null));
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function onGenerate(edit: boolean) {
-    if (!prompt.trim()) return;
-    setBusy(edit ? "Updating diagram…" : "Generating diagram…");
-    try {
-      const { source: generated } = await api.generate(prompt, edit ? source : undefined);
-      setSource(generated);
-      await render(generated);
-      setPrompt("");
-    } catch (err) {
-      setStatus({ kind: "error", text: (err as Error).message });
-    } finally {
-      setBusy(null);
-    }
-  }
+  useEffect(() => {
+    if (status?.kind !== "ok") return;
+    const t = setTimeout(() => setStatus(null), 3000);
+    return () => clearTimeout(t);
+  }, [status]);
 
-  async function onSave() {
-    if (!excalidraw) return;
-    setBusy("Saving…");
-    const scene = { elements: excalidraw.getSceneElements(), files: excalidraw.getFiles() };
-    try {
-      if (diagramId) {
-        await api.updateDiagram(diagramId, { title, source, scene });
-      } else {
-        const created = await api.createDiagram({ title, source, scene });
-        setDiagramId(created.id);
-      }
-      setStatus({ kind: "ok", text: "Saved" });
-      refreshList();
-    } catch (err) {
-      setStatus({ kind: "error", text: (err as Error).message });
-    } finally {
-      setBusy(null);
-    }
-  }
+  // Overlays (history, presentation) start below the top bar, whose height varies (demo banner).
+  useEffect(() => {
+    const bar = document.querySelector(".topbar");
+    if (!bar) return;
+    const set = () => document.documentElement.style.setProperty("--chrome-h", `${Math.round(bar.getBoundingClientRect().bottom)}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(document.body);
+    return () => ro.disconnect();
+  }, [config]);
 
-  async function onOpen(id: string) {
-    if (!excalidraw) return;
-    if (!id) return onNew();
-    const d = await api.getDiagram(id);
-    setDiagramId(d.id);
-    setTitle(d.title);
-    setSource(d.source);
-    excalidraw.updateScene({ elements: (d.scene.elements ?? []) as never });
-    if (d.scene.files) excalidraw.addFiles(Object.values(d.scene.files as BinaryFiles));
-    excalidraw.scrollToContent(undefined, { fitToContent: true });
-  }
-
-  function onNew() {
-    setDiagramId(null);
-    setTitle("Untitled diagram");
-    setSource("");
-    excalidraw?.resetScene();
-  }
-
-  async function onExport(kind: "svg" | "png") {
-    if (!excalidraw) return;
-    const opts = {
-      elements: excalidraw.getSceneElements(),
-      appState: { ...excalidraw.getAppState(), exportBackground: true },
-      files: excalidraw.getFiles(),
+  // Warn before closing the tab with unsaved changes.
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (doc && getCurrent()?.dirty) e.preventDefault();
     };
-    const blob =
-      kind === "svg"
-        ? new Blob([(await exportToSvg(opts)).outerHTML], { type: "image/svg+xml" })
-        : await exportToBlob({ ...opts, mimeType: "image/png" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${title.replace(/[^\w-]+/g, "_")}.${kind}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [doc, getCurrent]);
+
+  // Icon packs uploaded to the workspace in view (the open diagram's, or the selected one).
+  const iconWorkspace = doc?.loaded?.workspace_id ?? wsId;
+  const reloadIconPacks = useCallback(async () => {
+    if (!iconWorkspace) return setWorkspacePacks([]);
+    await api.iconPacks(iconWorkspace).then(setWorkspacePacks, () => setWorkspacePacks([]));
+  }, [iconWorkspace]);
+  useEffect(() => {
+    void reloadIconPacks();
+  }, [reloadIconPacks]);
+
+  const confirmLeave = () => !doc || !getCurrent()?.dirty || confirm("You have unsaved changes. Leave without saving?");
+
+  async function open(id: string, opts: { history?: boolean } = {}) {
+    if (doc?.id !== id && !confirmLeave()) return;
+    try {
+      const d = await api.getDiagram(id);
+      setStatus(null);
+      currentRef.current = null;
+      setDoc({
+        key: nextKey++,
+        id: d.id,
+        projectId: d.project_id,
+        kind: d.kind,
+        title: d.title,
+        loaded: d,
+        model: d.model ?? emptyModel(),
+        role: d.role ?? "viewer",
+        version: d.version,
+      });
+      setHistory(Boolean(opts.history));
+    } catch (e) {
+      setStatus({ kind: "error", text: (e as Error).message });
+    }
   }
+
+  function create(kind: DiagramKind | "sample") {
+    if (!project || !workspace) return;
+    currentRef.current = null;
+    setStatus(null);
+    setHistory(false);
+    setDoc({
+      key: nextKey++,
+      id: null,
+      projectId: project.id,
+      kind: kind === "whiteboard" ? "whiteboard" : "cloud",
+      title: kind === "whiteboard" ? "Untitled whiteboard" : kind === "sample" ? "GCP web app (sample)" : "Untitled architecture",
+      loaded: null,
+      model: kind === "sample" ? structuredClone(SAMPLE_MODEL) : emptyModel(),
+      role: workspace.role,
+      version: null,
+    });
+  }
+
+  function importDiagram(title: string, model: DiagramModel, fileName: string) {
+    if (!project || !workspace) return;
+    currentRef.current = null;
+    setHistory(false);
+    setDoc({ key: nextKey++, id: null, projectId: project.id, kind: "cloud", title, loaded: null, model, role: workspace.role, version: null, imported: true });
+    const n = model.nodes.length;
+    setStatus({ kind: "ok", text: `Imported ${n} item${n === 1 ? "" : "s"} from ${fileName}. Check Flows, Terraform and Review, then Save.` });
+  }
+
+  function goHome() {
+    if (!confirmLeave()) return;
+    setDoc(null);
+    setHistory(false);
+    currentRef.current = null;
+    void reload();
+  }
+
+  const onSaved = (d: Diagram) => {
+    setDoc((cur) => (cur ? { ...cur, id: d.id, version: d.version } : cur));
+  };
+
+  const canEdit = doc?.role === "owner" || doc?.role === "editor";
+  const editorProps = doc && {
+    diagramId: doc.id,
+    projectId: doc.projectId,
+    canEdit,
+    registerCurrent,
+    title: doc.title,
+    toolbar,
+    setStatus,
+    onSaved,
+  };
+  const docProject = doc ? projects.find((p) => p.id === doc.projectId) : undefined;
 
   return (
     <div className="app">
+      {config?.demo && (
+        <div className="demo-banner">
+          <span>
+            <b>Live demo</b> · runs entirely in your browser; your changes stay on this device. The AI assistant and terraform validate need the server:{" "}
+            <a href="https://github.com/krishnachaitanyap/arch_canvas#run-locally" target="_blank" rel="noreferrer">
+              run it locally
+            </a>
+            .
+          </span>
+          <button
+            className="link"
+            onClick={() => {
+              if (confirm("Reset the demo? Your changes in this browser are deleted and the examples come back.")) {
+                resetDemo();
+                location.reload();
+              }
+            }}
+          >
+            Reset demo data
+          </button>
+        </div>
+      )}
       <header className="topbar">
-        <span className="logo">ArchCanvas</span>
-        <input className="title" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Diagram title" />
-        <select value={diagramId ?? ""} onChange={(e) => void onOpen(e.target.value)} aria-label="Open diagram">
-          <option value="">New diagram</option>
-          {diagrams.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.title}
-            </option>
-          ))}
-        </select>
-        <div className="spacer" />
-        {status && <span className={`status ${status.kind}`}>{status.text}</span>}
-        <button onClick={onNew}>New</button>
-        <button onClick={() => void onExport("svg")}>Export SVG</button>
-        <button onClick={() => void onExport("png")}>Export PNG</button>
-        <button className="primary" onClick={() => void onSave()} disabled={Boolean(busy)}>
-          Save
+        <button className="logo" onClick={goHome} title="All projects">
+          ArchCanvas
         </button>
+        {doc ? (
+          <>
+            <nav className="crumbs">
+              <button className="link" onClick={goHome}>
+                {doc.loaded?.workspace_name ?? workspace?.name}
+              </button>
+              <span>/</span>
+              <button className="link" onClick={goHome}>
+                {doc.loaded?.project_name ?? docProject?.name}
+              </button>
+              <span>/</span>
+            </nav>
+            <input
+              className="title"
+              value={doc.title}
+              disabled={!canEdit}
+              onChange={(e) => setDoc((d) => d && { ...d, title: e.target.value })}
+              aria-label="Diagram title"
+            />
+            <span className="kind-pill">{doc.kind === "cloud" ? "GCP architecture" : "Whiteboard"}</span>
+            <button className="version-badge" disabled={!doc.id} onClick={() => setHistory(true)} title="Version history and compare">
+              {doc.version ? `v${doc.version}` : "unsaved"} · History
+            </button>
+          </>
+        ) : (
+          <span className="hint">{workspace ? `${workspace.name}${project ? ` / ${project.name}` : ""}` : ""}</span>
+        )}
+        <div className="spacer" />
+        {status && (
+          <div className={`status ${status.kind}`} role={status.kind === "error" ? "alert" : "status"}>
+            <span>{status.text}</span>
+            <button className="link" onClick={() => setStatus(null)} aria-label="Dismiss">
+              ✕
+            </button>
+          </div>
+        )}
+        <div className="toolbar-slot" ref={setToolbar} />
+        {config?.devUser && (
+          <label className="dev-user" title="Dev mode (no OIDC): act as another user to try workspace roles">
+            as
+            <input
+              defaultValue={devUser() ?? config.devUser}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v === (devUser() ?? config.devUser)) return;
+                setDevUser(v && v !== config.devUser ? v : null);
+                setDoc(null);
+                setHistory(false);
+                void reload();
+              }}
+              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+              aria-label="Acting user (dev mode)"
+            />
+          </label>
+        )}
       </header>
 
-      <main className="workspace">
-        <aside className="panel">
-          <section>
-            <h2>Ask AI</h2>
-            <textarea
-              rows={5}
-              placeholder="e.g. Microservices e-commerce on GKE with Pub/Sub, Cloud SQL and a Redis cache"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void onGenerate(Boolean(source.trim()));
+      {doc && editorProps ? (
+        <Suspense fallback={<div className="loading">Loading editor…</div>}>
+          {doc.kind === "cloud" ? (
+            <CloudEditor key={doc.key} {...editorProps} initial={doc.model} config={config} initialTab={doc.imported && doc.model.edges.length ? "flows" : undefined} />
+          ) : (
+            <WhiteboardEditor key={doc.key} {...editorProps} initial={doc.loaded} />
+          )}
+          {history && doc.id && (
+            <VersionHistory
+              diagramId={doc.id}
+              title={doc.title}
+              canEdit={canEdit}
+              getCurrent={getCurrent}
+              onClose={() => setHistory(false)}
+              onRestored={() => {
+                currentRef.current = null;
+                setHistory(false);
+                setDoc((d) => d && { ...d, version: null });
+                void api.getDiagram(doc.id!).then((d) =>
+                  setDoc((cur) => cur && { ...cur, key: nextKey++, loaded: d, model: d.model ?? emptyModel(), version: d.version, kind: d.kind }),
+                );
               }}
+              onDuplicated={(id) => {
+                currentRef.current = null;
+                void open(id);
+              }}
+              setStatus={setStatus}
             />
-            <div className="row">
-              <button className="primary" onClick={() => void onGenerate(false)} disabled={Boolean(busy)}>
-                Generate new
-              </button>
-              <button onClick={() => void onGenerate(true)} disabled={Boolean(busy) || !source.trim()}>
-                Edit current
-              </button>
-            </div>
-            {busy && <p className="hint">{busy}</p>}
-          </section>
-
-          <section className="grow">
-            <h2>Diagram as code (Mermaid)</h2>
-            <textarea
-              className="code"
-              spellCheck={false}
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-            />
-            <button onClick={() => void render(source)}>Render to canvas</button>
-            <p className="hint">Rendering replaces the canvas. Edit freely on the canvas afterwards.</p>
-          </section>
-        </aside>
-
-        <div className="canvas">
-          <Excalidraw excalidrawAPI={setExcalidraw} />
-        </div>
-      </main>
+          )}
+        </Suspense>
+      ) : (
+        <Home
+          workspaces={workspaces}
+          workspace={workspace}
+          projects={projects}
+          project={project}
+          me={devUser() ?? config?.devUser ?? ""}
+          onWorkspace={(id) => void reload({ workspaceId: id })}
+          onProject={(id) => {
+            setProjectId(id);
+            localStorage.setItem(LS_PROJECT, id);
+          }}
+          reload={reload}
+          reloadIconPacks={reloadIconPacks}
+          onOpen={(id, o) => void open(id, o)}
+          onNew={create}
+          onImport={importDiagram}
+          setStatus={setStatus}
+        />
+      )}
     </div>
   );
 }
