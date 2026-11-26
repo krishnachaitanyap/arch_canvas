@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import type pg from "pg";
 import { z } from "zod";
 import { DiagramModelSchema, validateModel } from "@archcanvas/shared";
 import { audit, HttpError, principalIds, requireDiagram, requireProject } from "../access.js";
@@ -240,7 +239,7 @@ interface VersionRow {
 }
 
 async function addVersion(
-  c: pg.PoolClient,
+  c: import("../db.js").Db,
   d: { id: string; tenant_id: string; kind: string; source: string; scene: unknown; model: unknown },
   userId: string,
   name: string | null,
@@ -257,7 +256,7 @@ async function addVersion(
   return rows[0].version;
 }
 
-async function latestVersion(c: pg.PoolClient, id: string): Promise<VersionRow | undefined> {
+async function latestVersion(c: import("../db.js").Db, id: string): Promise<VersionRow | undefined> {
   const { rows } = await c.query<VersionRow>(
     "SELECT * FROM diagram_versions WHERE diagram_id = $1 ORDER BY version DESC LIMIT 1",
     [id],
@@ -265,7 +264,7 @@ async function latestVersion(c: pg.PoolClient, id: string): Promise<VersionRow |
   return rows[0];
 }
 
-async function getVersion(c: pg.PoolClient, id: string, version: number): Promise<VersionRow> {
+async function getVersion(c: import("../db.js").Db, id: string, version: number): Promise<VersionRow> {
   const { rows } = await c.query<VersionRow>(
     `SELECT version, name, kind, source, scene, model, created_by, created_at, restored_from
      FROM diagram_versions WHERE diagram_id = $1 AND version = $2`,

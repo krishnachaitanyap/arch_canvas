@@ -1,4 +1,3 @@
-import type pg from "pg";
 import type { Principal } from "./auth.js";
 
 /**
@@ -27,7 +26,7 @@ export class HttpError extends Error {
 /** Members are stored by OIDC subject or by email (for people invited before first login). */
 export const principalIds = (p: Principal) => [p.userId, ...(p.email ? [p.email.toLowerCase()] : [])];
 
-type Db = pg.PoolClient;
+type Db = import("./db.js").Db;
 
 export async function workspaceRole(c: Db, workspaceId: string, p: Principal): Promise<Role | null> {
   const { rows } = await c.query<{ role: Role }>(

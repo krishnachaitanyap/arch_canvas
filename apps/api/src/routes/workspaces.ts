@@ -24,12 +24,15 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       const list = async () =>
         (
           await c.query(
-            `SELECT DISTINCT ON (w.id) w.id, w.name, w.created_at, m.role,
+            // The caller's strongest role per workspace (portable SQL: runs on Postgres and SQLite).
+            `SELECT w.id, w.name, w.created_at,
+                    (SELECT m.role FROM workspace_members m
+                      WHERE m.workspace_id = w.id AND m.user_id = ANY($1)
+                      ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'editor' THEN 1 ELSE 2 END LIMIT 1) AS role,
                     (SELECT count(*)::int FROM projects pr WHERE pr.workspace_id = w.id) AS project_count,
                     (SELECT count(*)::int FROM workspace_members x WHERE x.workspace_id = w.id) AS member_count
-             FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id
-             WHERE m.user_id = ANY($1)
-             ORDER BY w.id, CASE m.role WHEN 'owner' THEN 0 WHEN 'editor' THEN 1 ELSE 2 END`,
+             FROM workspaces w
+             WHERE w.id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ANY($1))`,
             [principalIds(p)],
           )
         ).rows.sort((a, b) => a.name.localeCompare(b.name));
@@ -174,7 +177,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   });
 }
 
-async function createWorkspace(c: import("pg").PoolClient, p: import("../auth.js").Principal, wsName: string) {
+async function createWorkspace(c: import("../db.js").Db, p: import("../auth.js").Principal, wsName: string) {
   const { rows } = await c.query(
     "INSERT INTO workspaces (tenant_id, name, created_by) VALUES ($1, $2, $3) RETURNING id, name, created_at",
     [p.tenantId, wsName, p.userId],
@@ -194,7 +197,7 @@ async function createWorkspace(c: import("pg").PoolClient, p: import("../auth.js
   return { ...ws, role: "owner", project_count: 1, member_count: 1 };
 }
 
-async function assertNotLastOwner(c: import("pg").PoolClient, workspaceId: string, userId: string) {
+async function assertNotLastOwner(c: import("../db.js").Db, workspaceId: string, userId: string) {
   const { rows } = await c.query<{ user_id: string }>(
     "SELECT user_id FROM workspace_members WHERE workspace_id = $1 AND role = 'owner'",
     [workspaceId],

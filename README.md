@@ -60,6 +60,8 @@ Requirements: Node 20+. No Docker needed: `npm run dev:db` starts an embedded Po
 
 On a company network, if `npm install` fails with `SELF_SIGNED_CERT_IN_CHAIN`, `ECONNRESET` or `EPERM`, see [Installing behind a corporate network](docs/enterprise-network.md).
 
+No Postgres at all? `npm run dev:api:sqlite` runs the API on Node's built-in SQLite (Node 22.13+, data in `.data/archcanvas.sqlite`) for local use; see [the SQLite option](docs/enterprise-network.md#option-a-sqlite-nothing-extra-to-install).
+
 ```bash
 cp .env.example .env            # set GEMINI_API_KEY (or another LLM_PROVIDER), PORT, API_PROXY_TARGET
 npm install

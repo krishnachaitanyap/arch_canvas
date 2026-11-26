@@ -16,6 +16,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "migrate": "npm run migrate -w @archcanvas/api",
     "dev:db": "node scripts/dev-db.mjs",
+    "dev:api:sqlite": "node scripts/dev-api-sqlite.mjs",
     "test": "vitest run"
   },
   "engines": {

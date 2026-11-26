@@ -9,6 +9,7 @@ the packages. The usual symptoms:
 | `SELF_SIGNED_CERT_IN_CHAIN` during `npm audit` | Same, for npm's security-advisory service. |
 | `ECONNRESET` partway through an install | A slow or busy proxy / package mirror (e.g. Nexus, Artifactory) dropped the connection. |
 | `EPERM ... rmdir` warnings on Windows | Files locked by a sync tool, antivirus or an editor. Not a network problem. |
+| `npm run dev:db` fails, or `@embedded-postgres/...` won't install | The embedded Postgres build is blocked. Use SQLite instead (see the end of this page). |
 
 Work through the steps in order, then run a clean install (step 6).
 
@@ -108,11 +109,44 @@ Delete `node_modules`, then:
 npm ci
 ```
 
-## If the embedded Postgres package is still blocked
+## If embedded Postgres won't install or start
 
 `@embedded-postgres/<platform>` contains a full Postgres build and is only used by
-`npm run dev:db`. If your proxy blocks it, use any Postgres you already have (a local install,
-a container, or a shared development database):
+`npm run dev:db`. Proxies and antivirus tools sometimes block it. You have two ways around it.
+
+### Option A: SQLite (nothing extra to install)
+
+The API can run on SQLite through Node's built-in `node:sqlite` module, so there is no
+database package to download and no database server to run. It needs **Node 22.13 or newer**.
+
+Skip `npm run dev:db` and start the API with:
+
+```bash
+npm run dev:api:sqlite
+```
+
+Start the web app as usual. Data is kept in `.data/archcanvas.sqlite` (set `SQLITE_FILE` to use
+another file). To use SQLite with the commands in the README instead, set this in `.env`:
+
+```bash
+DATABASE_URL=sqlite:.data/archcanvas.sqlite
+```
+
+Everything in the app works the same: workspaces, projects, diagrams, autosave, versions and
+compare, members and roles, and icon packs. The API translates its Postgres SQL for SQLite and
+creates the tables when it starts. Limits, which is why it's for local use only:
+
+- **No tenant isolation.** Postgres row-level security keeps each tenant's data apart; SQLite has
+  no equivalent. Workspace roles (owner, editor, viewer) are still enforced by the API.
+- **One request at a time** touches the database. Fine for one person, not for a team server.
+- **Real-time whiteboard collaboration** (`npm run dev:collab`) still needs Postgres.
+- Data doesn't move between SQLite and Postgres automatically. Export diagrams (draw.io or
+  ArchCanvas JSON) and import them if you switch.
+
+### Option B: an existing Postgres
+
+Use any Postgres you already have (a local install, a container, or a shared development
+database):
 
 1. Create a database and user.
 2. Set `DATABASE_URL` in `.env` (default: `postgres://archcanvas:archcanvas@localhost:5432/archcanvas`).
