@@ -68,7 +68,7 @@ export interface Version extends VersionSummary {
   model: DiagramModel | null;
 }
 
-export type DiagramWrite = Partial<Pick<Diagram, "title" | "kind" | "source" | "scene" | "model">> & { message?: string; projectId?: string; autosave?: boolean };
+export type DiagramWrite = Partial<Pick<Diagram, "title" | "kind" | "source" | "scene" | "model">> & { message?: string; projectId?: string; autosave?: boolean; live?: boolean };
 
 export interface AppConfig {
   /** Browser-only demo build (no server). */

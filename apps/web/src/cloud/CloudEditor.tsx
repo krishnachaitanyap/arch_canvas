@@ -709,7 +709,7 @@ function Editor({
     try {
       if (!diagramId && !projectId) throw new Error("Pick a project first");
       const d = diagramId
-        ? await api.updateDiagram(diagramId, { title, kind: "cloud", model: sent, ...(auto ? { autosave: true } : {}) })
+        ? await api.updateDiagram(diagramId, { title, kind: "cloud", model: sent, ...(auto ? { autosave: true } : {}), ...(live.connected ? { live: true } : {}) })
         : await api.createDiagram({ projectId: projectId!, title, kind: "cloud", model: sent });
       // Changes made while saving stay unsaved (the next autosave picks them up).
       if (modelRef.current === sent) setDirty(false);

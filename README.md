@@ -54,6 +54,8 @@ Screenshots are generated from the demo build with `node scripts/screenshots.mjs
 
 ## How it works
 
+See [Keelrail architecture](docs/architecture.md) for the components, sign-in (social login and enterprise SSO), authorisation and the Google Cloud deployment, drawn in Keelrail itself.
+
 ```
 apps/
   web/       React + Vite. Structured editor (React Flow + ELK), whiteboard (Excalidraw + Mermaid),

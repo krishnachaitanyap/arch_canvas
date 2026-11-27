@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DiagramModelSchema, validateModel } from "@archcanvas/shared";
 import { audit, HttpError, principalIds, requireDiagram, requireProject } from "../access.js";
 import { withTenant } from "../db.js";
+import { publishSaved } from "./live.js";
 import { parse } from "./workspaces.js";
 
 const uuid = z.string().uuid();
@@ -19,6 +20,8 @@ const content = z.object({
   message: versionName.optional(),
   /** Autosave: store the content but don't record a version (versions come from explicit saves). */
   autosave: z.boolean().optional(),
+  /** Saved by an editor that is in the diagram's live room (which already has these changes). */
+  live: z.boolean().optional(),
 });
 
 /** Structural errors (unknown kinds, bad nesting, dangling edges) are rejected on save. */
@@ -110,7 +113,7 @@ export async function diagramRoutes(app: FastifyInstance): Promise<void> {
     const body = parse(content.extend({ projectId: uuid.optional() }), req.body);
     assertValidModel(body.model);
     const p = req.principal;
-    return withTenant(p.tenantId, async (c) => {
+    const result = await withTenant(p.tenantId, async (c) => {
       const { diagram } = await requireDiagram(c, id, p, "editor", true);
       if (body.projectId && body.projectId !== diagram.project_id) await requireProject(c, body.projectId, p, "editor");
       const { rows } = await c.query(
@@ -127,6 +130,9 @@ export async function diagramRoutes(app: FastifyInstance): Promise<void> {
       if (!body.autosave) await audit(c, p, "diagram.update", id, { version, moved: Boolean(body.projectId && body.projectId !== diagram.project_id) });
       return { ...rows[0], version, versionCreated: create };
     });
+    // Saved from outside the editor (MCP server, scripts): people editing it live see the change.
+    if (body.model && !body.live) publishSaved(id, body.model);
+    return result;
   });
 
   app.delete("/api/diagrams/:id", async (req, reply) => {
@@ -219,7 +225,11 @@ export async function diagramRoutes(app: FastifyInstance): Promise<void> {
       );
       const created = await addVersion(c, rows[0], p.userId, `Restored v${version}`, version);
       await audit(c, p, "diagram.version.restore", id, { from: version, to: created });
-      return { ...rows[0], version: created };
+      return { ...rows[0], version: created, restoredModel: v.kind === "cloud" ? v.model : null };
+    }).then(({ restoredModel, ...d }) => {
+      const m = DiagramModelSchema.safeParse(restoredModel);
+      if (m.success) publishSaved(id, m.data);
+      return d;
     });
   });
 }

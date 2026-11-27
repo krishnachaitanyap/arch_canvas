@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import { applyPatch, type DiagramModel, DiagramModelSchema, type ModelPatch, personColor } from "@archcanvas/shared";
+import { applyPatch, type DiagramModel, DiagramModelSchema, diffPatch, type ModelPatch, personColor } from "@archcanvas/shared";
 import { atLeast, HttpError, requireDiagram } from "../access.js";
 import { withTenant } from "../db.js";
 import { parse } from "./workspaces.js";
@@ -51,6 +51,20 @@ const message = z.discriminatedUnion("type", [
     selection: z.array(z.string().max(200)).max(200).default([]),
   }),
 ]);
+
+/**
+ * A diagram saved outside its live room (the MCP server, a script, restoring a version): bring
+ * the room up to date and send the difference to everyone in it.
+ */
+export function publishSaved(diagramId: string, model: DiagramModel): void {
+  const room = rooms.get(diagramId);
+  if (!room) return;
+  const patch = diffPatch(room.model, model);
+  if (!patch) return;
+  room.model = model;
+  room.seq++;
+  broadcast(room, { type: "patch", seq: room.seq, from: "server", patch });
+}
 
 export async function liveRoutes(app: FastifyInstance): Promise<void> {
   /** Join a diagram's room: the stream starts with the current model and who's here. */

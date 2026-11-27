@@ -1,0 +1,92 @@
+// Keelrail diagram code: edit here or on the canvas, both stay in sync.
+// Keelrail's own architecture, kept as code (see docs/architecture.md).
+// Check it with: npm run keelrail -- check docs/architecture.arch
+
+page system "System and auth" {
+  people "Architects and engineers" [generic.client]
+  agents "AI coding agents" [generic.client]
+  github "GitHub Actions" [generic.component, icon: "logos:github-actions"]
+  identity "Sign-in (one OIDC issuer)" [generic.group, color: "#7c3aed", border: solid, borderWidth: "1", fill: "#faf5ff", header: label] {
+    broker "Identity broker (Keycloak, Auth0, WorkOS, Google Identity Platform)" [generic.component, icon: "lucide:shield-check"]
+    social "Social login" [generic.group, color: "#7c3aed", border: dashed, borderWidth: "1", fill: none, header: label] {
+      google "Google" [generic.component, icon: "logos:google-icon"]
+      github_login "GitHub" [generic.component, icon: "logos:github-icon"]
+      microsoft "Microsoft" [generic.component, icon: "logos:microsoft-icon"]
+    }
+    enterprise "Enterprise SSO (per company)" [generic.group, color: "#7c3aed", border: dashed, borderWidth: "1", fill: none, header: label] {
+      okta "Okta (SAML / OIDC)" [generic.component, icon: "logos:okta-icon"]
+      entra "Microsoft Entra ID (SAML / OIDC)" [generic.component, icon: "logos:microsoft-azure"]
+      workspace_sso "Google Workspace (SAML)" [generic.component, icon: "logos:google-cloud"]
+    }
+  }
+  llm "LLM provider" [generic.component, icon: "lucide:brain"]
+  dev "Developer machine" [generic.group, color: "#64748b", border: dashed, borderWidth: "1", fill: none, header: label] {
+    mcp "MCP server (stdio)" [generic.component, icon: "lucide:plug"]
+    cli "keelrail CLI" [generic.component, icon: "lucide:terminal"]
+  }
+  keelrail "Keelrail" [generic.group, color: "#4f46e5", border: solid, borderWidth: "1.5", fill: none, header: tab] {
+    web "Web app (React, nginx)" [generic.component, icon: "logos:react"]
+    api "API (Fastify, Node.js)" [generic.group, color: "#0ea5e9", border: solid, borderWidth: "1", fill: "#f0f9ff", header: label] {
+      authn "Authentication" [generic.component, icon: "lucide:lock"]
+      authz "Workspace roles" [generic.component, icon: "lucide:users"]
+      routes "Diagrams, versions, live rooms" [generic.component, icon: "lucide:workflow"]
+      agent "AI agent" [generic.component, icon: "lucide:sparkles"]
+      tfvalidate "terraform validate" [generic.component, icon: "logos:terraform"]
+    }
+    data "Data" [generic.group, color: "#16a34a", border: solid, borderWidth: "1", fill: "#f0fdf4", header: label] {
+      pg "PostgreSQL (row-level security)" [generic.component, icon: "logos:postgresql"]
+      sqlite "SQLite (local fallback)" [generic.component, icon: "logos:sqlite"]
+    }
+  }
+  note_auth "Every request: who are you (a token from the broker, an API token, or dev mode), then what may you do (owner, editor, viewer in the workspace), then the database only returns your tenant's rows. The broker puts the company's tenant in the token, so an enterprise's SSO users land in its workspaces." [generic.note]
+
+  people -> web "HTTPS" [https]
+  people ..> broker "sign in (OIDC + PKCE): to build"
+  broker -> google "social"
+  broker -> okta "SSO by email domain"
+  okta ..> authz "SCIM: add and remove members (to build)"
+  web -> authn "/api + bearer token" [https]
+  authn -> broker "signing keys (JWKS)" [https]
+  authn -> authz "who"
+  authn -> pg "API token hashes" [sql]
+  authz -> routes "allowed"
+  authz -> pg "memberships" [sql]
+  routes -> pg "tenant set per transaction" [sql]
+  routes -> agent
+  routes -> tfvalidate
+  agent -> llm "HTTPS" [https]
+  agents -> mcp "stdio"
+  mcp -> authn "API token (kr_…)" [https]
+  github -> cli "PR review of .arch files"
+}
+
+page deploy "Deploy on Google Cloud" {
+  users "Users" [generic.client]
+  prod "Keelrail project" [gcp.project] {
+    lb "HTTPS load balancer + managed certificate" [gcp.load_balancer]
+    images "Container images" [gcp.artifact_registry]
+    assets "Assets bucket" [gcp.gcs_bucket]
+    db_url "DATABASE_URL" [gcp.secret]
+    region "Region" [gcp.region] {
+      vpc "VPC" [gcp.vpc] {
+        gke "GKE subnet" [gcp.subnet] {
+          web_pods "web pods (nginx)" [generic.component, icon: "logos:kubernetes"]
+          api_pods "api pods (autoscaled)" [generic.component, icon: "logos:kubernetes"]
+        }
+        sql "Cloud SQL Postgres (private IP)" [gcp.cloud_sql]
+      }
+    }
+  }
+  vertex "Vertex AI / Gemini" [generic.component, icon: "logos:google-gemini"]
+  oidc "Identity broker (social + enterprise SSO)" [generic.component, icon: "lucide:shield-check"]
+
+  users -> lb "HTTPS" [https]
+  lb -> web_pods [https]
+  web_pods -> api_pods "/api" [https]
+  api_pods -> sql [sql]
+  api_pods -> db_url [secret]
+  api_pods -> assets [storage]
+  api_pods -> vertex "Workload Identity" [https]
+  api_pods -> oidc "JWKS" [https]
+  users ..> oidc "sign in" [https]
+}
