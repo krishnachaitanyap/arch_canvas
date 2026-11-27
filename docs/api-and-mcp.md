@@ -6,7 +6,7 @@ All three use diagram code (`.arch`, see [Diagram as code](../README.md#diagram-
 
 ## API tokens
 
-Create a token on the home page: **API tokens** (next to Members and Icon packs). A token acts as
+Create a token from your avatar (top right) → **API tokens**. A token acts as
 you, with your workspace roles. It is shown once; Keelrail stores only its hash. Tokens can
 expire (30 days, 90 days, a year) and can be revoked at any time.
 

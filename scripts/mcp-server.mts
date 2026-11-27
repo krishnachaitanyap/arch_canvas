@@ -3,7 +3,7 @@
  * change diagrams as code, generate Terraform, compare versions and review designs.
  *
  *   KEELRAIL_URL    the Keelrail API (default http://localhost:8082)
- *   KEELRAIL_TOKEN  an API token (Home → API tokens); optional when the server has no sign-in
+ *   KEELRAIL_TOKEN  an API token (your avatar → API tokens); optional when the server has no sign-in
  *
  * Run it with `npm run mcp` (stdio). Speaks the Model Context Protocol over stdio with
  * newline-delimited JSON-RPC 2.0; no SDK needed. See docs/api-and-mcp.md.

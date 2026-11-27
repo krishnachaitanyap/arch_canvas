@@ -331,7 +331,7 @@ export function Palette({ onAdd, disabled, terraform = false }: { onAdd: (item: 
       {q && shown === 0 && <p className="hint">Nothing matches “{q}”.</p>}
       <p className="hint palette-foot">
         Click to add, or drag onto the canvas (into a group to nest it). Google Cloud items also generate Terraform; everything else is documentation. For
-        official Azure or Google Cloud icons, upload their icon packs from the project page.
+        official Azure or Google Cloud icons, upload their icon packs in Workspace settings → Icon packs (on the dashboard).
       </p>
     </div>
   );

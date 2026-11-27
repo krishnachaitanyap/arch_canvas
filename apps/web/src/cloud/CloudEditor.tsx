@@ -66,6 +66,8 @@ import { PageTabs } from "./PageTabs";
 import { Presentation } from "./Presentation";
 import { Properties, Review, type Selection, TerraformPanel } from "./panels";
 import { askConfirm } from "../dialogs";
+import { Popover } from "../ui";
+import { Check, ChevronDown, Download, Grid3x3, Loader2, Play, Redo2, Undo2, Upload, Wand2 } from "lucide-react";
 
 const ImportDialog = lazy(() => import("../home/ImportDialog"));
 
@@ -748,27 +750,59 @@ function Editor({
   // ---------------------------------------------------------------- render
 
   const multi = nodeIds(selectedIds).length;
+  const EXPORTS: [string, string, string][] = [
+    ["png", "PNG image", "For slides and chat"],
+    ["svg", "SVG image", "Sharp at any size"],
+    ["drawio", "draw.io", "Edit in diagrams.net"],
+    ["doc", "Architecture doc", "Markdown with workflows"],
+    ["mermaid", "Mermaid", "For GitHub, Notion, Confluence"],
+    ["plantuml", "PlantUML", ".puml"],
+    ["json", "Keelrail JSON", "Full model"],
+  ];
   const tools = (
     <>
-      <button onClick={undo} disabled={!past.length || readOnly} title="Undo (⌘Z)">
-        Undo
-      </button>
-      <button onClick={redo} disabled={!future.length || readOnly} title="Redo (⇧⌘Z)">
-        Redo
-      </button>
+      <div className="tb-group" role="group" aria-label="History">
+        <button className="tb-icon" onClick={undo} disabled={!past.length || readOnly} title="Undo (⌘Z)" aria-label="Undo">
+          <Undo2 size={16} />
+        </button>
+        <button className="tb-icon" onClick={redo} disabled={!future.length || readOnly} title="Redo (⇧⌘Z)" aria-label="Redo">
+          <Redo2 size={16} />
+        </button>
+      </div>
+      <div className="tb-group" role="group" aria-label="Canvas">
+        <button
+          className={`tb-icon ${snap ? "on" : ""}`}
+          aria-pressed={snap}
+          onClick={() => {
+            localStorage.setItem("archcanvas.snap", snap ? "0" : "1");
+            setSnap(!snap);
+          }}
+          title={snap ? "Snap to grid: on" : "Snap to grid: off"}
+          aria-label="Snap to grid"
+        >
+          <Grid3x3 size={16} />
+        </button>
+        <button
+          className="tb-icon"
+          onClick={async () => {
+            if (!model.nodes.length || readOnly) return;
+            if (Object.keys(model.layout).length && !(await askConfirm({ title: "Auto layout?", message: "This rearranges every shape on this tab. You can undo it.", confirm: "Auto layout" }))) return;
+            void relayout();
+          }}
+          disabled={readOnly || !model.nodes.length}
+          title="Auto layout this tab"
+          aria-label="Auto layout"
+        >
+          <Wand2 size={16} />
+        </button>
+        <button className="tb-icon" onClick={() => setImportOpen(true)} disabled={readOnly} title="Import: draw.io, diagram code, Terraform, Kubernetes, docker-compose or SQL" aria-label="Import">
+          <Upload size={16} />
+        </button>
+      </div>
       <button
-        className={snap ? "toggle on" : "toggle"}
-        onClick={() => {
-          localStorage.setItem("archcanvas.snap", snap ? "0" : "1");
-          setSnap(!snap);
-        }}
-        title="Snap to grid"
-      >
-        Grid
-      </button>
-      <button
-        className={terraformOn ? "toggle on" : "toggle"}
-        aria-pressed={terraformOn}
+        className={`tb-switch ${terraformOn ? "on" : ""}`}
+        role="switch"
+        aria-checked={terraformOn}
         disabled={readOnly}
         onClick={() => {
           const m = modelRef.current;
@@ -777,20 +811,8 @@ function Editor({
         }}
         title={terraformOn ? "Hide cloud details: resource types, regions, warnings and Terraform" : "Show cloud details on this canvas: resource types, regions, warnings and Terraform"}
       >
+        <span className="tb-knob" aria-hidden />
         Terraform
-      </button>
-      <button
-        onClick={async () => {
-          if (!model.nodes.length || readOnly) return;
-          if (Object.keys(model.layout).length && !(await askConfirm({ title: "Auto layout?", message: "This rearranges every shape on this tab. You can undo it.", confirm: "Auto layout" }))) return;
-          void relayout();
-        }}
-        disabled={readOnly || !model.nodes.length}
-      >
-        Auto layout
-      </button>
-      <button onClick={() => setImportOpen(true)} disabled={readOnly} title="Add a draw.io diagram, Terraform, Kubernetes, docker-compose or a SQL schema to this canvas">
-        Import
       </button>
       <input
         ref={importInput}
@@ -803,45 +825,53 @@ function Editor({
           e.target.value = "";
         }}
       />
-      <button onClick={() => onPresent?.()} disabled={!model.edges.length || Boolean(proposal)} title="Walk through the workflows">
-        Present
-      </button>
-      <select
-        value=""
-        aria-label="Export"
+      {canEdit && diagramId && !readOnly && (
+        <span className={`autosave ${autoSaving ? "saving" : dirty ? "dirty" : "saved"}`} title={savedAt ? `Last saved ${savedAt.toLocaleTimeString()}` : "Changes save automatically"}>
+          {autoSaving ? <Loader2 size={13} className="spin" /> : dirty ? <span className="dot" /> : <Check size={13} />}
+          {autoSaving ? "Saving…" : dirty ? "Unsaved" : "Saved"}
+        </span>
+      )}
+      <Popover
+        className="tb-pop"
+        align="right"
+        label="Export"
         disabled={!model.nodes.length}
-        onChange={(e) => {
-          void exportAs(e.target.value);
-          e.target.value = "";
-        }}
+        trigger={
+          <>
+            <Download size={15} /> Export <ChevronDown size={13} />
+          </>
+        }
       >
-        <option value="" disabled>
-          Export…
-        </option>
-        <option value="drawio">draw.io (.drawio)</option>
-        <option value="svg">SVG image</option>
-        <option value="png">PNG image</option>
-        <option value="mermaid">Mermaid (.mmd)</option>
-        <option value="plantuml">PlantUML (.puml)</option>
-        <option value="doc">Architecture doc (.md)</option>
-        <option value="json">Keelrail JSON</option>
-      </select>
+        {(close) =>
+          EXPORTS.map(([v, name, hint]) => (
+            <button
+              key={v}
+              className="menu-item"
+              onClick={() => {
+                close();
+                void exportAs(v);
+              }}
+            >
+              <span>
+                {name}
+                <small>{hint}</small>
+              </span>
+            </button>
+          ))
+        }
+      </Popover>
+      <button className="tb-btn" onClick={() => onPresent?.()} disabled={!model.edges.length || Boolean(proposal)} title="Walk through the workflows, step by step">
+        <Play size={14} /> Present
+      </button>
       {canEdit ? (
-        <>
-          {diagramId && !readOnly && (
-            <span className="autosave" title={savedAt ? `Last saved ${savedAt.toLocaleTimeString()}` : "Changes save automatically"}>
-              {autoSaving ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"}
-            </span>
-          )}
-          <button
-            className="primary"
-            onClick={() => void save()}
-            disabled={saving || readOnly}
-            title={diagramId ? "Save a version you can compare and restore (⌘S). Changes also save automatically." : "Save (⌘S)"}
-          >
-            {saving ? "Saving…" : diagramId ? "Save version" : "Save"}
-          </button>
-        </>
+        <button
+          className="primary tb-primary"
+          onClick={() => void save()}
+          disabled={saving || readOnly}
+          title={diagramId ? "Save a named point in the history you can compare and restore (⌘S). Changes also save automatically." : "Save (⌘S)"}
+        >
+          {saving ? "Saving…" : diagramId ? "Save version" : "Save"}
+        </button>
       ) : (
         <span className="kind-pill">View only</span>
       )}

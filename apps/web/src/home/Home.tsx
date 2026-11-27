@@ -1,7 +1,9 @@
-import { type FormEvent, lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { createContext, type FormEvent, lazy, type ReactNode, Suspense, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { type DiagramModel, type DrawioPage, readDrawio, TEMPLATES, templateModel } from "@archcanvas/shared";
 import {
   ArrowUpDown,
+  Check,
+  ChevronsUpDown,
   ChevronDown,
   Copy,
   Ellipsis,
@@ -9,7 +11,6 @@ import {
   Folder,
   FolderInput,
   History,
-  KeyRound,
   Layers,
   LayoutGrid,
   List,
@@ -34,6 +35,7 @@ const IconPacksDialog = lazy(() => import("./IconPacksDialog").then((m) => ({ de
 import { timeAgo } from "../util";
 import { askConfirm } from "../dialogs";
 import { DiagramThumb, WhiteboardThumb } from "./DiagramThumb";
+import { Avatar, Popover } from "../ui";
 
 type SetStatus = (s: { kind: "ok" | "error"; text: string } | null) => void;
 
@@ -58,7 +60,12 @@ const canEdit = (r: Role | undefined) => r === "owner" || r === "editor";
 
 export function Home(props: HomeProps) {
   const { workspaces, workspace, projects, project, onWorkspace, projectHref, reload, setStatus } = props;
-  const [dialog, setDialog] = useState<null | "workspace" | "project" | "members" | "rename-ws" | "icons" | "tokens">(null);
+  const [dialog, setDialog] = useState<null | "workspace" | "project" | SettingsTab>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  useEffect(() => {
+    if (!workspace) return setMembers([]);
+    api.members(workspace.id).then(setMembers, () => setMembers([]));
+  }, [workspace?.id, workspace?.member_count]); // eslint-disable-line react-hooks/exhaustive-deps
   const role = workspace?.role;
 
   const run = async (fn: () => Promise<unknown>, ok?: string) => {
@@ -72,37 +79,74 @@ export function Home(props: HomeProps) {
     }
   };
 
-  const initials = (s: string) =>
-    s
-      .split(/[\s@._-]+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0]!.toUpperCase())
-      .join("") || "?";
-
   return (
     <div className="home dash">
       <aside className="dash-side">
-        <div className="ws-switch">
-          <span className="ws-avatar" style={{ background: tint(workspace?.name ?? "") }}>
-            {initials(workspace?.name ?? "W")}
-          </span>
-          <div className="ws-meta">
-            <select value={workspace?.id ?? ""} onChange={(e) => onWorkspace(e.target.value)} aria-label="Workspace">
+        <Popover
+          className="ws-switch"
+          label="Switch workspace"
+          trigger={
+            <>
+              <Avatar name={workspace?.name ?? "W"} size={34} square />
+              <span className="ws-meta">
+                <b>{workspace?.name ?? "No workspace"}</b>
+                <span className="ws-sub">
+                  {workspace ? `${workspace.role[0].toUpperCase()}${workspace.role.slice(1)} · ${workspace.member_count} member${workspace.member_count === 1 ? "" : "s"}` : ""}
+                </span>
+              </span>
+              <ChevronsUpDown size={15} className="ws-chev" />
+            </>
+          }
+        >
+          {(close) => (
+            <>
+              <div className="menu-sep first">Workspaces</div>
               {workspaces.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
+                <button
+                  key={w.id}
+                  className={`menu-item ws-item ${w.id === workspace?.id ? "current" : ""}`}
+                  onClick={() => {
+                    close();
+                    if (w.id !== workspace?.id) onWorkspace(w.id);
+                  }}
+                >
+                  <Avatar name={w.name} size={24} square />
+                  <span>
+                    {w.name}
+                    <small>
+                      {w.project_count} project{w.project_count === 1 ? "" : "s"} · {w.role}
+                    </small>
+                  </span>
+                  {w.id === workspace?.id && <Check size={15} className="ws-check" />}
+                </button>
               ))}
-            </select>
-            <span className="ws-sub">
-              {workspace ? `${workspace.role[0].toUpperCase()}${workspace.role.slice(1)} · ${workspace.member_count} member${workspace.member_count === 1 ? "" : "s"}` : ""}
-            </span>
-          </div>
-          <button className="icon-btn" title="New workspace" aria-label="New workspace" onClick={() => setDialog("workspace")}>
-            <Plus size={15} />
-          </button>
-        </div>
+              <div className="menu-sep-line" />
+              {workspace && (
+                <>
+                  <button className="menu-item" onClick={() => (close(), setDialog(role === "owner" ? "general" : "members"))}>
+                    <Settings size={15} /> Workspace settings
+                  </button>
+                  <button className="menu-item" onClick={() => (close(), setDialog("members"))}>
+                    <Users size={15} /> {role === "owner" ? "Invite members" : "Members"}
+                  </button>
+                  <button className="menu-item" onClick={() => (close(), setDialog("icons"))}>
+                    <Shapes size={15} /> Icon packs
+                  </button>
+                  <div className="menu-sep-line" />
+                </>
+              )}
+              <button
+                className="menu-item"
+                onClick={() => {
+                  close();
+                  setDialog("workspace");
+                }}
+              >
+                <Plus size={15} /> New workspace
+              </button>
+            </>
+          )}
+        </Popover>
 
         <div className="side-section">
           <div className="side-head">
@@ -128,34 +172,22 @@ export function Home(props: HomeProps) {
         </div>
 
         {workspace && (
-          <div className="side-section side-bottom">
-            <div className="side-head">
-              <span>Workspace</span>
-            </div>
-            <ul className="side-list tools">
-              <li>
-                <button onClick={() => setDialog("members")}>
-                  <Users size={16} /> <span className="side-name">Members</span> <span className="count">{workspace.member_count}</span>
-                </button>
-              </li>
-              <li>
-                <button onClick={() => setDialog("icons")}>
-                  <Shapes size={16} /> <span className="side-name">Icon packs</span>
-                </button>
-              </li>
-              <li>
-                <button onClick={() => setDialog("tokens")}>
-                  <KeyRound size={16} /> <span className="side-name">API tokens</span>
-                </button>
-              </li>
-              {role === "owner" && (
-                <li>
-                  <button onClick={() => setDialog("rename-ws")}>
-                    <Settings size={16} /> <span className="side-name">Settings</span>
-                  </button>
-                </li>
-              )}
-            </ul>
+          <div className="side-foot">
+            <button className="team" onClick={() => setDialog("members")} title="Members of this workspace">
+              <span className="avatar-stack">
+                {members.slice(0, 4).map((m) => (
+                  <Avatar key={m.user_id} name={m.user_id} size={24} />
+                ))}
+                {members.length > 4 && <span className="avatar more">+{members.length - 4}</span>}
+              </span>
+              <span className="team-text">
+                <b>{workspace.member_count} member{workspace.member_count === 1 ? "" : "s"}</b>
+                <span>{role === "owner" ? "Invite people" : "See who's here"}</span>
+              </span>
+            </button>
+            <button className="icon-btn" onClick={() => setDialog(role === "owner" ? "general" : "members")} title="Workspace settings" aria-label="Workspace settings">
+              <Settings size={17} />
+            </button>
           </div>
         )}
       </aside>
@@ -191,22 +223,6 @@ export function Home(props: HomeProps) {
           }}
         />
       )}
-      {dialog === "rename-ws" && workspace && (
-        <WorkspaceSettings
-          workspace={workspace}
-          onClose={() => setDialog(null)}
-          onRename={async (name) => {
-            const ok = await run(() => api.renameWorkspace(workspace.id, name), "Workspace renamed");
-            if (ok) await reload({ workspaceId: workspace.id });
-            return ok;
-          }}
-          onDelete={async () => {
-            const ok = await run(() => api.deleteWorkspace(workspace.id), "Workspace deleted");
-            if (ok) await reload();
-            return ok;
-          }}
-        />
-      )}
       {dialog === "project" && workspace && (
         <PromptDialog
           title="New project"
@@ -222,14 +238,36 @@ export function Home(props: HomeProps) {
           }}
         />
       )}
-      {dialog === "icons" && workspace && (
-        <Suspense fallback={null}>
-          <IconPacksDialog workspace={workspace} onClose={() => setDialog(null)} onChanged={props.reloadIconPacks} setStatus={setStatus} />
-        </Suspense>
-      )}
-      {dialog === "tokens" && <TokensDialog onClose={() => setDialog(null)} setStatus={setStatus} />}
-      {dialog === "members" && workspace && (
-        <MembersDialog workspace={workspace} me={props.me} onClose={() => setDialog(null)} onChanged={() => reload({ workspaceId: workspace.id })} setStatus={setStatus} />
+      {dialog && workspace && SETTINGS_TABS.some(([t]) => t === dialog) && (
+        <WorkspaceSettingsDialog
+          tab={dialog as SettingsTab}
+          onTab={setDialog}
+          workspace={workspace}
+          role={role!}
+          onClose={() => setDialog(null)}
+          general={
+            <WorkspaceSettings
+              workspace={workspace}
+              onClose={() => setDialog(null)}
+              onRename={async (name) => {
+                const ok = await run(() => api.renameWorkspace(workspace.id, name), "Workspace renamed");
+                if (ok) await reload({ workspaceId: workspace.id });
+                return ok;
+              }}
+              onDelete={async () => {
+                const ok = await run(() => api.deleteWorkspace(workspace.id), "Workspace deleted");
+                if (ok) await reload();
+                return ok;
+              }}
+            />
+          }
+          members={<MembersDialog workspace={workspace} me={props.me} onClose={() => setDialog(null)} onChanged={() => reload({ workspaceId: workspace.id })} setStatus={setStatus} />}
+          icons={
+            <Suspense fallback={<p className="hint">Loading…</p>}>
+              <IconPacksDialog workspace={workspace} onClose={() => setDialog(null)} onChanged={props.reloadIconPacks} setStatus={setStatus} />
+            </Suspense>
+          }
+        />
       )}
     </div>
   );
@@ -739,12 +777,87 @@ function TemplateThumb({ id }: { id: string }) {
 
 // ------------------------------------------------------------------ dialogs
 
-export function Modal({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
+type SettingsTab = "general" | "members" | "icons";
+const SETTINGS_TABS: [SettingsTab, string, string][] = [
+  ["general", "General", "Name, and deleting the workspace"],
+  ["members", "Members", "Who can view and edit"],
+  ["icons", "Icon packs", "Icons for every diagram here"],
+];
+
+/** Workspace settings in one place: General (owners), Members, Icon packs. */
+function WorkspaceSettingsDialog({
+  tab,
+  onTab,
+  workspace,
+  role,
+  onClose,
+  general,
+  members,
+  icons,
+}: {
+  tab: SettingsTab;
+  onTab: (t: SettingsTab) => void;
+  workspace: Workspace;
+  role: Role;
+  onClose: () => void;
+  general: ReactNode;
+  members: ReactNode;
+  icons: ReactNode;
+}) {
+  const tabs = SETTINGS_TABS.filter(([t]) => t !== "general" || role === "owner");
+  const icon = { general: <Settings size={16} />, members: <Users size={16} />, icons: <Shapes size={16} /> };
   useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal settings-dialog" role="dialog" aria-label="Workspace settings">
+        <nav className="settings-nav">
+          <div className="settings-ws">
+            <Avatar name={workspace.name} size={30} square />
+            <div>
+              <b>{workspace.name}</b>
+              <span>Workspace settings</span>
+            </div>
+          </div>
+          {tabs.map(([t, label, hint]) => (
+            <button key={t} className={tab === t ? "on" : ""} onClick={() => onTab(t)}>
+              {icon[t]}
+              <span>
+                {label}
+                <small>{hint}</small>
+              </span>
+            </button>
+          ))}
+        </nav>
+        <section className="settings-body">
+          <div className="settings-head">
+            <h2>{SETTINGS_TABS.find(([t]) => t === tab)?.[1]}</h2>
+            <button className="icon-btn" onClick={onClose} aria-label="Close">
+              ✕
+            </button>
+          </div>
+          <Embedded.Provider value={true}>{tab === "general" ? general : tab === "members" ? members : icons}</Embedded.Provider>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/** Set inside a tabbed dialog: a Modal there renders just its content, as a tab. */
+const Embedded = createContext(false);
+
+export function Modal({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
+  const embedded = useContext(Embedded);
+  useEffect(() => {
+    if (embedded) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, embedded]);
+  if (embedded) return <div className="settings-pane">{children}</div>;
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal ${wide ? "wide" : ""}`} role="dialog" aria-label={title}>
@@ -886,20 +999,32 @@ function WorkspaceSettings({
   return (
     <Modal title="Workspace settings" onClose={onClose}>
       <form
-        className="form"
+        className="settings-card"
         onSubmit={(e) => {
           e.preventDefault();
-          void onRename(name.trim()).then((ok) => ok && onClose());
+          void onRename(name.trim());
         }}
       >
-        <label>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
+        <div className="settings-card-text">
+          <b>Workspace name</b>
+          <span>Shown in the workspace switcher and in links to its diagrams.</span>
+        </div>
+        <div className="row">
+          <input value={name} onChange={(e) => setName(e.target.value)} aria-label="Workspace name" style={{ flex: 1 }} />
+          <button className="primary" disabled={!name.trim() || name.trim() === workspace.name}>
+            Save
+          </button>
+        </div>
+      </form>
+      <div className="settings-card danger-zone">
+        <div className="settings-card-text">
+          <b>Delete this workspace</b>
+          <span>Deletes all its projects, diagrams and version history for everyone. This cannot be undone.</span>
+        </div>
         <div className="row end">
           <button
             type="button"
-            className="danger"
+            className="danger-solid"
             onClick={async () => {
               if (
                 await askConfirm({
@@ -914,15 +1039,8 @@ function WorkspaceSettings({
           >
             Delete workspace
           </button>
-          <div className="spacer" />
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="primary" disabled={!name.trim()}>
-            Save
-          </button>
         </div>
-      </form>
+      </div>
     </Modal>
   );
 }
@@ -1026,7 +1144,7 @@ function MembersDialog({
 }
 
 /** Personal API tokens for scripts, CI and AI agents (the MCP server). */
-function TokensDialog({ onClose, setStatus }: { onClose: () => void; setStatus: (s: { kind: "ok" | "error"; text: string } | null) => void }) {
+export function TokensDialog({ onClose, setStatus }: { onClose: () => void; setStatus: (s: { kind: "ok" | "error"; text: string } | null) => void }) {
   const [tokens, setTokens] = useState<ApiToken[] | null>(null);
   const [name, setName] = useState("");
   const [days, setDays] = useState("90");

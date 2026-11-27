@@ -2,11 +2,13 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { type DiagramModel, emptyModel, SAMPLE_MODEL } from "@archcanvas/shared";
 import { resetDemo } from "./demo-api";
 import { api, type AppConfig, type Diagram, type DiagramKind, devUser, type Project, type Role, setDevUser, type Workspace } from "./api";
-import { Home } from "./home/Home";
+import { Home, TokensDialog } from "./home/Home";
 import { setWorkspacePacks } from "./icons/registry";
 import type { CurrentState } from "./history/VersionHistory";
 import { diagramRef, Link, navigate, type NewKind, parseRoute, paths, refId, setNavigationBlocker, slugMap, useLocation } from "./router";
 import { askConfirm } from "./dialogs";
+import { Avatar, LogoMark, Popover } from "./ui";
+import { BookOpen, ChevronDown, ChevronRight, History, House, KeyRound } from "lucide-react";
 
 // Each editor is its own chunk: the whiteboard pulls in Excalidraw + Mermaid, the cloud editor React Flow + ELK.
 const CloudEditor = lazy(() => import("./cloud/CloudEditor").then((m) => ({ default: m.CloudEditor })));
@@ -45,6 +47,7 @@ let nextKey = 1;
 export function App() {
   const loc = useLocation();
   const route = parseRoute(loc.path);
+  const [tokensOpen, setTokensOpen] = useState(false);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
   const [projects, setProjects] = useState<{ ws: string; list: Project[] } | null>(null);
@@ -338,16 +341,18 @@ export function App() {
         </div>
       )}
       <header className="topbar">
-        <Link to={homePath} className="logo" title="Project page">
-          Keelrail
+        <Link to={homePath} className="brand" title="Dashboard">
+          <LogoMark size={26} />
+          <span className="brand-name">Keelrail</span>
         </Link>
+        <span className="topbar-sep" aria-hidden />
         {doc ? (
           <>
-            <nav className="crumbs">
-              <Link to={paths.workspace(wsSlug(doc.workspaceId))}>{doc.loaded?.workspace_name ?? workspace?.name ?? "Workspace"}</Link>
-              <span>/</span>
-              <Link to={projectPath(doc.workspaceId, doc.projectId)}>{doc.loaded?.project_name ?? project?.name ?? "Project"}</Link>
-              <span>/</span>
+            <nav className="crumbs" aria-label="Breadcrumb">
+              <Link to={projectPath(doc.workspaceId, doc.projectId)} className="crumb" title={`${doc.loaded?.workspace_name ?? workspace?.name ?? "Workspace"} / ${doc.loaded?.project_name ?? project?.name ?? "Project"}`}>
+                {doc.loaded?.project_name ?? project?.name ?? "Project"}
+              </Link>
+              <ChevronRight size={14} className="crumb-sep" />
             </nav>
             <input
               className="title"
@@ -355,18 +360,28 @@ export function App() {
               disabled={!canEdit}
               onChange={(e) => setDoc((d) => d && { ...d, title: e.target.value })}
               aria-label="Diagram title"
+              size={Math.max(8, Math.min(40, doc.title.length + 1))}
             />
-            <span className="kind-pill">{doc.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
+            <span className={`kind-pill ${doc.kind}`}>{doc.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
             {doc.id ? (
               <Link to={paths.diagram(docRef!, "history")} className="version-badge" title="Version history and compare">
-                {doc.version ? `v${doc.version}` : "v?"} · History
+                <History size={13} />
+                {doc.version ? `v${doc.version}` : "v?"}
               </Link>
             ) : (
-              <span className="version-badge disabled">unsaved</span>
+              <span className="version-badge disabled">Unsaved</span>
             )}
           </>
         ) : (
-          <span className="hint">{workspace ? `${workspace.name}${project ? ` / ${project.name}` : ""}` : ""}</span>
+          <nav className="crumbs" aria-label="Breadcrumb">
+            {workspace && <span className="crumb static">{workspace.name}</span>}
+            {project && (
+              <>
+                <ChevronRight size={14} className="crumb-sep" />
+                <span className="crumb static current">{project.name}</span>
+              </>
+            )}
+          </nav>
         )}
         <div className="spacer" />
         {status && (
@@ -378,24 +393,62 @@ export function App() {
           </div>
         )}
         <div className="toolbar-slot" ref={setToolbar} />
-        {config?.devUser && (
-          <label className="dev-user" title="Dev mode (no OIDC): act as another user to try workspace roles">
-            as
-            <input
-              defaultValue={devUser() ?? config.devUser}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v === (devUser() ?? config.devUser)) return;
-                setDevUser(v && v !== config.devUser ? v : null);
-                setProjects(null);
-                void loadWorkspaces().then(() => navigate("/", { force: true }));
-              }}
-              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-              aria-label="Acting user (dev mode)"
-            />
-          </label>
-        )}
+        <Popover
+          className="user-menu"
+          align="right"
+          label="Account"
+          trigger={
+            <>
+              <Avatar name={devUser() ?? config?.devUser ?? "you"} size={30} />
+              <ChevronDown size={14} />
+            </>
+          }
+        >
+          {(close) => (
+            <>
+              <div className="menu-head">
+                <Avatar name={devUser() ?? config?.devUser ?? "you"} size={34} />
+                <div>
+                  <b>{devUser() ?? config?.devUser ?? "Signed in"}</b>
+                  <span>{workspace ? `${workspace.role[0].toUpperCase()}${workspace.role.slice(1)} in ${workspace.name}` : "Keelrail"}</span>
+                </div>
+              </div>
+              {config?.devUser && (
+                <label className="menu-field" title="Dev mode (no single sign-on): act as another user to try workspace roles">
+                  <span>Act as (dev mode)</span>
+                  <input
+                    defaultValue={devUser() ?? config.devUser}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v === (devUser() ?? config.devUser)) return;
+                      setDevUser(v && v !== config.devUser ? v : null);
+                      setProjects(null);
+                      close();
+                      void loadWorkspaces().then(() => navigate("/", { force: true }));
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                    aria-label="Acting user (dev mode)"
+                  />
+                </label>
+              )}
+              <div className="menu-sep-line" />
+              <Link to={homePath} className="menu-item" onNavigate={close}>
+                <House size={15} /> Dashboard
+              </Link>
+              <button className="menu-item" onClick={() => (close(), setTokensOpen(true))}>
+                <KeyRound size={15} />
+                <span>
+                  API tokens<small>For scripts, CI and AI agents (MCP)</small>
+                </span>
+              </button>
+              <a className="menu-item" href="https://keelrail.com" target="_blank" rel="noreferrer" onClick={close}>
+                <BookOpen size={15} /> keelrail.com
+              </a>
+            </>
+          )}
+        </Popover>
       </header>
+      {tokensOpen && <TokensDialog onClose={() => setTokensOpen(false)} setStatus={setStatus} />}
 
       {doc ? (
         <Suspense fallback={<div className="loading">Loading editor…</div>}>
