@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { type DiagramModel, describeIntegrations, type Integration, nodeById, toArchitectureDoc, type Workflow } from "@archcanvas/shared";
+import { type DiagramModel, describeIntegrations, type Integration, nodeById, sequenceOf, sequenceSvg, toArchitectureDoc, toMermaidSequence, type Workflow } from "@archcanvas/shared";
 import { api } from "../api";
 import { slug } from "../util";
 import { download } from "./exporters";
@@ -45,6 +45,7 @@ export function FlowsPanel({
 }) {
   const integrations = useMemo(() => describeIntegrations(model), [model]);
   const [active, setActive] = useState<string | null>(null);
+  const [sequence, setSequence] = useState<Workflow | null>(null);
   const [openEdge, setOpenEdge] = useState<string | null>(null);
   const [narrating, setNarrating] = useState(false);
   const name = (id: string) => nodeById(model, id)?.label ?? id;
@@ -93,6 +94,7 @@ export function FlowsPanel({
           ))}
       </div>
 
+      {sequence && <SequenceDialog model={model} workflow={sequence} title={title} onClose={() => setSequence(null)} setStatus={setStatus} />}
       <h3>Workflows</h3>
       {workflows.map((w, wi) => (
         <section key={w.id} className={`workflow ${active?.startsWith(`${w.id}#`) || active === w.id ? "active" : ""}`}>
@@ -126,9 +128,14 @@ export function FlowsPanel({
               </li>
             ))}
           </ol>
-          <button className="link small" onClick={() => onPresent(wi)}>
-            Present this workflow ▸
-          </button>
+          <div className="workflow-actions">
+            <button className="link small" onClick={() => onPresent(wi)}>
+              Present this workflow ▸
+            </button>
+            <button className="link small" onClick={() => setSequence(w)}>
+              Sequence diagram
+            </button>
+          </div>
         </section>
       ))}
 
@@ -178,6 +185,53 @@ export function IntegrationCard({ integration: i }: { integration: Integration }
       {block("Watch out for", i.considerations)}
       {block("Terraform", i.terraform, true)}
       {!i.mapped && <p className="banner warn">Documentation only: the generated Terraform does not deploy this connection.</p>}
+    </div>
+  );
+}
+
+/** A workflow as a sequence diagram, with SVG download and Mermaid text to paste elsewhere. */
+function SequenceDialog({
+  model,
+  workflow,
+  title,
+  onClose,
+  setStatus,
+}: {
+  model: DiagramModel;
+  workflow: Workflow;
+  title: string;
+  onClose: () => void;
+  setStatus: (s: { kind: "ok" | "error"; text: string } | null) => void;
+}) {
+  const seq = useMemo(() => sequenceOf(model, workflow), [model, workflow]);
+  const svg = useMemo(() => sequenceSvg(seq), [seq]);
+  const name = `${slug(title)}-${slug(workflow.title).toLowerCase()}`;
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal wide sequence" role="dialog" aria-label="Sequence diagram" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>{workflow.title}</h2>
+          <button className="link" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        {/* The SVG is generated here from escaped text, not taken from user HTML. */}
+        <div className="sequence-svg" dangerouslySetInnerHTML={{ __html: svg }} />
+        <div className="row">
+          <button onClick={() => download(`${name}.svg`, svg, "image/svg+xml")}>Download SVG</button>
+          <button onClick={() => download(`${name}.mmd`, toMermaidSequence(seq))}>Download Mermaid</button>
+          <button
+            onClick={() =>
+              void navigator.clipboard.writeText(toMermaidSequence(seq)).then(
+                () => setStatus({ kind: "ok", text: "Mermaid sequence diagram copied: paste it into GitHub, GitLab, Notion or Confluence" }),
+                () => setStatus({ kind: "error", text: "Couldn't copy to the clipboard" }),
+              )
+            }
+          >
+            Copy Mermaid
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

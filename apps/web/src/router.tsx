@@ -113,17 +113,23 @@ let snapshot = read();
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-/** Return false to keep the user where they are (e.g. unsaved changes they didn't want to drop). */
-let blocker: ((toPath: string) => boolean) | null = null;
-export function setNavigationBlocker(fn: ((toPath: string) => boolean) | null): void {
+/**
+ * Return false to keep the user where they are (e.g. unsaved changes they didn't want to drop),
+ * or a promise when it asks them first (an in-app dialog): navigation continues if it resolves true.
+ */
+type Blocker = (toPath: string) => boolean | Promise<boolean>;
+let blocker: Blocker | null = null;
+export function setNavigationBlocker(fn: Blocker | null): void {
   blocker = fn;
 }
 
 window.addEventListener("popstate", () => {
   const next = read();
-  if (blocker && !blocker(next.path)) {
-    // Undo the browser's back/forward.
+  const ok = blocker ? blocker(next.path) : true;
+  if (ok !== true) {
+    // Undo the browser's back/forward; go there after all if they confirm.
     window.history.pushState(snapshot.state, "", href(snapshot.full));
+    if (ok instanceof Promise) void ok.then((yes) => yes && navigate(next.full, { force: true }));
     return;
   }
   snapshot = next;
@@ -132,7 +138,14 @@ window.addEventListener("popstate", () => {
 
 export function navigate(to: string, opts: { replace?: boolean; state?: unknown; force?: boolean } = {}): boolean {
   const toPath = to.split("?")[0];
-  if (!opts.force && blocker && toPath !== snapshot.path && !blocker(toPath)) return false;
+  if (!opts.force && blocker && toPath !== snapshot.path) {
+    const ok = blocker(toPath);
+    if (ok instanceof Promise) {
+      void ok.then((yes) => yes && navigate(to, { ...opts, force: true }));
+      return false;
+    }
+    if (!ok) return false;
+  }
   if (to === snapshot.full && !opts.state) return true;
   window.history[opts.replace ? "replaceState" : "pushState"](opts.state ?? null, "", href(to));
   snapshot = read();

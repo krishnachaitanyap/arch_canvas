@@ -8,6 +8,7 @@ import { agentRoutes } from "./routes/agent.js";
 import { aiRoutes } from "./routes/ai.js";
 import { diagramRoutes } from "./routes/diagrams.js";
 import { iconRoutes } from "./routes/icons.js";
+import { tokenRoutes } from "./routes/tokens.js";
 import { terraformRoutes } from "./routes/terraform.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 
@@ -51,6 +52,7 @@ await app.register(async (secured) => {
   await secured.register(aiRoutes);
   await secured.register(agentRoutes);
   await secured.register(terraformRoutes);
+  await secured.register(tokenRoutes);
 });
 
 if (process.env.MIGRATE_ON_START !== "false") await migrate();

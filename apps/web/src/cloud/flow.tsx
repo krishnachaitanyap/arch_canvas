@@ -1203,7 +1203,8 @@ export function toFlow(
         selected: opts.selectedIds ? opts.selectedIds.has(n.id) : opts.selected === n.id,
         // Layer by type, then by order in the model (Bring to front / Send to back reorder it).
         zIndex: (container ? 0 : note || shape ? 5 : 10) * 1000 + order.get(n.id)!,
-        className: emphasis(opts.highlight, n.id, "node", Boolean(container)),
+        className: emphasis(opts.highlight, n.id, "node", Boolean(container)) + (n.locked ? " locked" : ""),
+        ...(n.locked ? { draggable: false, deletable: false } : {}),
       });
       visit(n.id);
     }

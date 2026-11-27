@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type DiagramKind, type DiagramSummary, type Version, type VersionSummary } from "../api";
 import { formatTime } from "../util";
 import { Compare, type Snapshot } from "./Compare";
+import { askConfirm } from "../dialogs";
 
 /** What the open editor currently holds (possibly unsaved). */
 export interface CurrentState {
@@ -74,6 +75,12 @@ export function VersionHistory({
             ...s,
             [key]: { label: current.dirty ? "Current (unsaved)" : "Current", kind: current.kind, model: current.model, source: current.source, elementCount: current.elementCount },
           }));
+        // Opened straight from a link (no editor yet): the latest content, autosaved edits included.
+        else
+          void api.getDiagram(diagramId).then(
+            (d) => setSnaps((s) => ({ ...s, [key]: { label: "Current", kind: d.kind, model: d.model, source: d.source, elementCount: d.scene.elements?.length } })),
+            (e) => setStatus({ kind: "error", text: (e as Error).message }),
+          );
       } else if (side.type === "version") {
         void api.version(diagramId, side.version).then(
           (v) => setSnaps((s) => ({ ...s, [key]: fromVersion(v, `v${v.version}${v.name ? ` · ${v.name}` : ""}`) })),
@@ -94,7 +101,7 @@ export function VersionHistory({
 
   async function restore(v: VersionSummary) {
     const unsaved = current?.dirty ? " Your unsaved changes in the editor will be discarded." : "";
-    if (!confirm(`Restore v${v.version}? It becomes the current content as a new version; nothing in the history is lost.${unsaved}`)) return;
+    if (!(await askConfirm({ title: `Restore v${v.version}?`, message: `It becomes the current content as a new version; nothing in the history is lost.${unsaved}`, confirm: "Restore" }))) return;
     try {
       const d = await api.restoreVersion(diagramId, v.version);
       setStatus({ kind: "ok", text: `Restored v${v.version} as v${d.version}` });

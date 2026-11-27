@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { type DiagramModel, describeChanges, type DiffLine, emptyModel, hunks, lineDiff, terraformDiff, toMermaid } from "@archcanvas/shared";
+import { type DiagramModel, describeChanges, type DiffLine, emptyModel, hunks, lineDiff, terraformDiff, toCode, toMermaid } from "@archcanvas/shared";
 import { DiffCanvas } from "../cloud/DiffCanvas";
 
 /** One side of a comparison: a saved version, the editor's current state, or another diagram. */
@@ -11,7 +11,7 @@ export interface Snapshot {
   elementCount?: number;
 }
 
-type Tab = "visual" | "changes" | "terraform" | "code";
+type Tab = "visual" | "changes" | "terraform" | "code" | "mermaid";
 
 export function Compare({ a, b }: { a: Snapshot; b: Snapshot }) {
   const cloud = a.kind === "cloud" && b.kind === "cloud";
@@ -21,10 +21,13 @@ export function Compare({ a, b }: { a: Snapshot; b: Snapshot }) {
   const mb = b.model ?? emptyModel();
   const changes = useMemo(() => (cloud ? describeChanges(ma, mb) : []), [cloud, ma, mb]);
   const tf = useMemo(() => (cloud && tab === "terraform" ? terraformDiff(ma, mb) : null), [cloud, tab, ma, mb]);
-  // Cloud diagrams compare as Mermaid too, which is handy for pasting into reviews.
-  const textA = cloud ? toMermaid(ma) : a.source;
-  const textB = cloud ? toMermaid(mb) : b.source;
-  const code = useMemo(() => (tab === "code" ? lineDiff(textA, textB) : []), [tab, textA, textB]);
+  // Cloud diagrams compare as diagram code (what changed, like a code review), and as Mermaid
+  // for pasting into reviews elsewhere.
+  const code = useMemo(() => {
+    if (tab === "code") return cloud ? lineDiff(toCode(ma), toCode(mb)) : lineDiff(a.source, b.source);
+    if (tab === "mermaid" && cloud) return lineDiff(toMermaid(ma), toMermaid(mb));
+    return [];
+  }, [tab, cloud, ma, mb, a.source, b.source]);
 
   const counts = {
     added: changes.filter((c) => c.change === "added").length,
@@ -67,8 +70,13 @@ export function Compare({ a, b }: { a: Snapshot; b: Snapshot }) {
           </>
         )}
         <button className={tab === "code" ? "active" : ""} onClick={() => setTab("code")}>
-          {cloud ? "Mermaid" : "Diagram code"}
+          Diagram code
         </button>
+        {cloud && (
+          <button className={tab === "mermaid" ? "active" : ""} onClick={() => setTab("mermaid")}>
+            Mermaid
+          </button>
+        )}
       </div>
 
       <div className="compare-body">
@@ -109,7 +117,7 @@ export function Compare({ a, b }: { a: Snapshot; b: Snapshot }) {
               ))}
           </div>
         )}
-        {tab === "code" && (
+        {(tab === "code" || tab === "mermaid") && (
           <div className="scroll pad">
             {code.every((l) => l.op === "eq") ? <p className="hint">No differences.</p> : <DiffView lines={code} />}
           </div>

@@ -15,6 +15,7 @@ ArchCanvas is an AI-native architecture diagramming tool for Google Cloud. Each 
 | **Any cloud, on-prem, or a mix** | Start a **Blank architecture** and combine Google Cloud, AWS, Azure and on-prem: data centers, DMZs, accounts and subscriptions, Kubernetes clusters, servers, firewalls, mainframes and SaaS. Google Cloud resources also generate Terraform; everything else is documentation that still shows up in workflows, docs and presentations. |
 | **Typed GCP diagrams** | Projects, regions, VPCs and subnets as real nested groups; Cloud Run, Cloud SQL, Memorystore, Cloud Storage, Pub/Sub, load balancers, Secret Manager and Artifact Registry as resources with settings. A review panel flags security and reliability issues. |
 | **Edit like draw.io** | Drag from the palette to the canvas or into a group; drag shapes between groups; resize groups and notes; double-click to rename shapes and line labels; box-select, align and distribute; copy, paste and duplicate; reconnect line ends; orthogonal, straight or curved lines; right-click menus; snap to grid; undo/redo. Auto layout only when you ask for it. |
+| **Diagram as code** | Every diagram is also plain text (`.arch`), shown in the **Code** tab next to the canvas: edit either one and the other follows. Keep `.arch` files in Git, review changes as text, and compare versions as a code diff alongside the visual and Terraform diffs. `npm run arch` checks, formats, diffs and compiles them to Terraform without the app. See [Diagram as code](#diagram-as-code). |
 | **Terraform from the diagram** | A deterministic compiler, not an LLM guess. Connections become least-privilege IAM, passwordless Cloud SQL login, private networking (VPC egress, private service access), authenticated Pub/Sub push subscriptions, and load balancers with Cloud Armor. Download as a zip, or run `terraform validate` on the server. |
 | **Workflows and integrations** | Request and async workflows are generated from the connections. For every integration you get how it works, its security, configuration and caveats, always consistent with the Terraform. |
 | **Presentation mode** | A full-screen walkthrough of each workflow, step by step, with the canvas zooming to the connection being explained. |
@@ -53,6 +54,51 @@ docs/        Plan and roadmap, example draw.io file, screenshots.
 ```
 
 Everything is derived from one model in `packages/shared`, so the editor, the agent, the Terraform, the workflows, the exports and the comparisons always agree.
+
+## Diagram as code
+
+Each diagram can be written as text. The **Code** tab in the editor shows it and applies your
+edits to the canvas as soon as the code is valid (problems are listed with their line numbers).
+The code holds what the diagram means; positions stay on the canvas, so diffs stay readable.
+
+```
+// ArchCanvas diagram code
+terraform on                                         // show cloud details and Terraform
+
+users "Customers" [generic.client]
+prod "Production" [gcp.project] {                    // a group, with items inside
+  api "Orders API" [cloud_run, min_instances: 1]     // short type names work too
+  db "Postgres" [gcp.cloud_sql, high_availability: true]
+}
+fn "Fraud scoring" [generic.component, icon: "aws:AWSLambda"]
+
+users -> api "HTTPS" [https]                         // a line with a label and a protocol
+api -> db [sql]
+api --> fn [curved]                                  // dashed; ..> is dotted, <-> both ends, - none
+```
+
+Tabs are written as `page dr "HA / DR" { … }`. The full syntax is under **Syntax** in the Code tab.
+
+AI agents can work on diagrams as code through the **MCP server** (`scripts/mcp-server.mts`), scripts and CI through the
+REST API with **API tokens**, and pull requests get a diagram review comment from the **GitHub workflow**. See
+[API, AI agents (MCP) and pull-request reviews](docs/api-and-mcp.md).
+
+**Import** on the canvas also reads Terraform (`.tf`), Kubernetes and docker-compose YAML, and SQL schemas (as an
+entity-relationship diagram). **Flows → Sequence diagram** draws each workflow as a sequence diagram (SVG or Mermaid).
+AWS items (Lambda, S3, RDS, DynamoDB, SQS, SNS, ECS, ALB, API Gateway, CloudFront and more) generate Terraform too,
+with least-privilege IAM, security groups and encryption, alongside Google Cloud.
+
+From the command line (no server needed), for `.arch` files kept in Git:
+
+```bash
+npm run arch -- check infra/app.arch                    # exit 1 on problems (CI)
+npm run arch -- diff HEAD~1:infra/app.arch infra/app.arch   # items, code and Terraform changes
+npm run arch -- terraform infra/app.arch terraform/      # write the Terraform
+npm run arch -- review infra/app.arch                   # security and reliability review
+npm run arch -- fmt infra/app.arch --write              # tidy the code
+npm run arch -- from diagram.drawio > app.arch          # draw.io or ArchCanvas JSON to code
+npm run arch -- to app.arch drawio > app.drawio         # code to draw.io, mermaid, plantuml or json
+```
 
 ## Run locally
 

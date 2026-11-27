@@ -1,6 +1,7 @@
 import { catalogEntry, resolvedProps } from "./catalog.js";
 import { attr, block, comment, type Block, ex, type Item, nested, renderBlocks, type Val } from "./hcl.js";
 import { type DiagramEdge, type DiagramModel, type DiagramNode, nearestAncestor, nodeById } from "./model.js";
+import { compileAwsTerraform } from "./terraform-aws.js";
 
 /**
  * Deterministic diagram → Terraform compiler (google provider). The same model always gives
@@ -26,7 +27,12 @@ const DEFAULT_REGION = "us-central1";
 const STORE_KINDS = new Set(["gcp.cloud_sql", "gcp.gcs_bucket", "gcp.secret", "gcp.memorystore_redis"]);
 
 export function compileTerraform(model: DiagramModel): TerraformOutput {
-  return new Compiler(model).run();
+  const hasGcp = model.nodes.some((n) => n.kind.startsWith("gcp."));
+  const aws = compileAwsTerraform(model, hasGcp ? "aws" : "");
+  if (aws && !hasGcp) return aws;
+  const gcp = new Compiler(model).run();
+  // Both clouds: AWS goes in its own folder (its own root module with the aws provider).
+  return aws ? { files: [...gcp.files, ...aws.files], warnings: [...gcp.warnings, ...aws.warnings], resources: [...gcp.resources, ...aws.resources] } : gcp;
 }
 
 /** GCP resource name for a node: snake_case id → kebab-case. */

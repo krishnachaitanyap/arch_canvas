@@ -23,6 +23,8 @@ export const NodeSchema = z.object({
   icon: z.string().max(240).optional(),
   /** The tab (page) a top-level item is on; the first page when unset. Items in a group follow the group. */
   page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/).optional(),
+  /** Locked on the canvas: can't be moved, resized or deleted until unlocked (as in draw.io). */
+  locked: z.boolean().optional(),
 });
 
 export const PageSchema = z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/), name: z.string().trim().min(1).max(60) });

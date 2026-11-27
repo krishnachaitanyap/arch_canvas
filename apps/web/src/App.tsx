@@ -6,6 +6,7 @@ import { Home } from "./home/Home";
 import { setWorkspacePacks } from "./icons/registry";
 import type { CurrentState } from "./history/VersionHistory";
 import { diagramRef, Link, navigate, type NewKind, parseRoute, paths, refId, setNavigationBlocker, slugMap, useLocation } from "./router";
+import { askConfirm } from "./dialogs";
 
 // Each editor is its own chunk: the whiteboard pulls in Excalidraw + Mermaid, the cloud editor React Flow + ELK.
 const CloudEditor = lazy(() => import("./cloud/CloudEditor").then((m) => ({ default: m.CloudEditor })));
@@ -200,7 +201,10 @@ export function App() {
         }
         setDoc({ key: nextKey++, id: null, newRoute: routeKey, workspaceId: ws, projectId: proj, kind: "cloud", title: p.title, loaded: null, model: p.model, role, version: null, imported: true });
         const n = p.model.nodes.length;
-        setStatus({ kind: "ok", text: `Imported ${n} item${n === 1 ? "" : "s"} from ${p.fileName}. Check Flows, Terraform and Review, then Save.` });
+        setStatus({
+          kind: "ok",
+          text: p.fileName.endsWith("template") ? `Started from ${p.fileName}. Change anything, then Save.` : `Imported ${n} item${n === 1 ? "" : "s"} from ${p.fileName}. Check Flows, Terraform and Review, then Save.`,
+        });
         return;
       }
       setDoc({
@@ -254,7 +258,8 @@ export function App() {
         ? (to) => {
             const seg = to.split("/");
             const staying = doc.id ? seg[1] === "d" && Boolean(seg[2]) && doc.id.startsWith(refId(seg[2])) : to === here;
-            return staying || !getCurrent()?.dirty || confirm("You have unsaved changes. Leave without saving?");
+            if (staying || !getCurrent()?.dirty) return true;
+            return askConfirm({ title: "Leave without saving?", message: "This diagram has changes that haven't been saved yet.", confirm: "Leave", cancel: "Stay", danger: true });
           }
         : null,
     );
@@ -321,8 +326,8 @@ export function App() {
           </span>
           <button
             className="link"
-            onClick={() => {
-              if (confirm("Reset the demo? Your changes in this browser are deleted and the examples come back.")) {
+            onClick={async () => {
+              if (await askConfirm({ title: "Reset the demo?", message: "Your changes in this browser are deleted and the examples come back.", confirm: "Reset", danger: true })) {
                 resetDemo();
                 window.location.href = `${import.meta.env.BASE_URL}`;
               }

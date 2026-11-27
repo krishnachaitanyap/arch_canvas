@@ -34,6 +34,7 @@ export interface DiagramSummary {
   kind: DiagramKind;
   project_id: string;
   created_by: string | null;
+  created_at?: string;
   updated_at: string;
   version: number | null;
   node_count: number | null;
@@ -122,12 +123,32 @@ async function headers(body: boolean): Promise<Record<string, string>> {
   };
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { ...init, headers: { ...(await headers(Boolean(init.body))), ...init.headers } });
+const UNREACHABLE = "Can't reach the ArchCanvas server. Check that the API is running; your changes are kept here and saved when it's back.";
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Calls the API. When the server can't be reached (it's restarting, or a proxy answers for it
+ * with an empty error), the request is retried a few times before giving up with a clear message.
+ * Those requests never reached the API, so repeating them is safe.
+ */
+async function request<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
+  const retry = async (): Promise<T> => {
+    if (attempt >= 3) throw new Error(UNREACHABLE);
+    await sleep(500 * (attempt + 1));
+    return request<T>(path, init, attempt + 1);
+  };
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...init, headers: { ...(await headers(Boolean(init.body))), ...init.headers } });
+  } catch {
+    return retry();
+  }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const details = Array.isArray(body.details) ? `: ${body.details.join("; ")}` : "";
-    throw new Error(typeof body.error === "string" ? body.error + details : `Request failed (${res.status})`);
+    const body: { error?: unknown; details?: unknown } | null = await res.json().catch(() => null);
+    // No JSON error from the API: the dev proxy or a load balancer answered because the API is down.
+    if ((res.status >= 500 && !body) || ((res.status === 502 || res.status === 503 || res.status === 504) && typeof body?.error !== "string")) return retry();
+    const details = Array.isArray(body?.details) ? `: ${body.details.join("; ")}` : "";
+    throw new Error(typeof body?.error === "string" ? body.error + details : `The server couldn't complete the request (${res.status})`);
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
@@ -180,6 +201,12 @@ const serverApi = {
   duplicateDiagram: (id: string, d: { projectId?: string; title?: string; version?: number } = {}) =>
     request<Diagram>(`/api/diagrams/${id}/duplicate`, { method: "POST", body: JSON.stringify(d) }),
 
+  // API tokens (scripts, CI, AI agents)
+  tokens: () => request<ApiToken[]>("/api/tokens"),
+  createToken: (name: string, expiresInDays?: number) =>
+    request<ApiToken & { token: string }>("/api/tokens", { method: "POST", body: JSON.stringify({ name, ...(expiresInDays ? { expiresInDays } : {}) }) }),
+  deleteToken: (id: string) => request<void>(`/api/tokens/${id}`, { method: "DELETE" }),
+
   // versions
   versions: (id: string) => request<VersionSummary[]>(`/api/diagrams/${id}/versions`),
   version: (id: string, version: number) => request<Version>(`/api/diagrams/${id}/versions/${version}`),
@@ -231,6 +258,15 @@ const serverApi = {
     }
   },
 };
+
+export interface ApiToken {
+  id: string;
+  name: string;
+  prefix?: string;
+  created_at?: string;
+  last_used_at?: string | null;
+  expires_at?: string | null;
+}
 
 /** The demo build (VITE_DEMO=1) swaps in a browser-only backend with the same calls. */
 export const api: typeof serverApi = import.meta.env.VITE_DEMO === "1" ? (demoApi as unknown as typeof serverApi) : serverApi;

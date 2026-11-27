@@ -76,7 +76,7 @@ function renderItems(items: Item[], depth: number): string {
 
 const keyOf = (k: string) => (IDENT.test(k) ? k : JSON.stringify(k));
 
-function renderVal(v: Val, depth: number): string {
+export function renderVal(v: Val, depth: number): string {
   if (v instanceof Expr) return v.code;
   if (typeof v === "string") return JSON.stringify(v).replace(/\$\{/g, "$${").replace(/%\{/g, "%%{");
   if (typeof v === "number" || typeof v === "boolean") return String(v);

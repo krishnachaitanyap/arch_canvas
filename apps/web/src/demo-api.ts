@@ -212,6 +212,11 @@ async function tx<T>(fn: (s: State) => T): Promise<T> {
 // ------------------------------------------------------------------ the API
 
 export const demoApi = {
+  tokens: async () => [],
+  createToken: async () => {
+    throw new Error("API tokens need the server: run ArchCanvas locally");
+  },
+  deleteToken: async () => undefined,
   config: async (): Promise<AppConfig & { demo: true }> => ({ aiEnabled: false, aiProvider: "demo", aiModel: "none", authEnabled: false, devUser: DEMO_USER, demo: true }),
 
   workspaces: () =>

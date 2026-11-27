@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { config } from "./config.js";
+import { principalForToken, TOKEN_PREFIX } from "./routes/tokens.js";
 
 export interface Principal {
   userId: string;
@@ -34,6 +35,17 @@ async function getJwks(): Promise<ReturnType<typeof createRemoteJWKSet>> {
  * acting user is "dev-user", or whatever the x-dev-user header says (to try out roles).
  */
 export async function authenticate(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  // Personal API tokens (scripts, CI, the MCP server) work with or without OIDC.
+  const bearer = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : "";
+  if (bearer.startsWith(TOKEN_PREFIX)) {
+    const p = await principalForToken(bearer);
+    if (!p) {
+      await reply.code(401).send({ error: "invalid or expired API token" });
+      return;
+    }
+    req.principal = p;
+    return;
+  }
   if (!config.OIDC_ISSUER) {
     const devUser = req.headers["x-dev-user"];
     const userId = typeof devUser === "string" && devUser.trim() ? devUser.trim().slice(0, 200) : "dev-user";

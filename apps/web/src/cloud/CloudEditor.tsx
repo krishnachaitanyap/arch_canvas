@@ -45,11 +45,15 @@ import {
   toPlantUml,
   validateModel,
   type Workflow,
+  TEMPLATES,
+  templateModel,
 } from "@archcanvas/shared";
 import { api, type AppConfig, type Diagram } from "../api";
 import type { CurrentState } from "../history/VersionHistory";
 import { slug } from "../util";
 import { AgentPanel } from "./AgentPanel";
+import { CodePanel } from "./CodePanel";
+import { FindBar, ImportCodeDialog, ShortcutsHelp } from "./EditorExtras";
 import { download, exportImage } from "./exporters";
 import { type CloudNodeData, EditorContext, type EditorActions, edgeTypes, type Highlight, nodeTypes, toFlow, withGhosts } from "./flow";
 import { FlowsPanel } from "./FlowsPanel";
@@ -61,10 +65,11 @@ import { FormatBar, type LineStyle } from "./FormatBar";
 import { PageTabs } from "./PageTabs";
 import { Presentation } from "./Presentation";
 import { Properties, Review, type Selection, TerraformPanel } from "./panels";
+import { askConfirm } from "../dialogs";
 
 const ImportDialog = lazy(() => import("../home/ImportDialog"));
 
-export type Tab = "assistant" | "properties" | "flows" | "review" | "terraform";
+export type Tab = "assistant" | "properties" | "code" | "flows" | "review" | "terraform";
 
 interface Proposal {
   base: DiagramModel;
@@ -167,6 +172,10 @@ function Editor({
   const [highlight, setHighlight] = useState<Highlight | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  /** Find bar (⌘F), with replace (⌥⌘F); keyboard shortcuts list (?). */
+  const [finding, setFinding] = useState<null | "find" | "replace">(null);
+  const [showKeys, setShowKeys] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [snap, setSnap] = useState(() => localStorage.getItem("archcanvas.snap") !== "0");
   const [paletteW, setPaletteW] = usePanelWidth("archcanvas.paletteW", 260);
   const [inspectorW, setInspectorW] = usePanelWidth("archcanvas.inspectorW", 380);
@@ -452,7 +461,7 @@ function Editor({
     setSelection({ type: "node", id });
     setSelectedIds(new Set([id]));
     if (item.kind === "generic.note" || item.kind === "generic.shape") setEditing(id);
-    else setTab("properties");
+    else if (tab !== "code") setTab("properties");
   }
 
   function onDrop(e: DragEvent) {
@@ -470,8 +479,10 @@ function Editor({
         if (e) ops.push({ op: "disconnect", from: e.from, to: e.to });
       }
     }
-    // Nodes after edges; skip descendants of removed groups (their children move up).
-    for (const id of nodeIds(ids)) ops.push({ op: "remove_node", id });
+    // Nodes after edges; skip descendants of removed groups (their children move up). Locked items stay.
+    const locked = nodeIds(ids).filter((id) => modelRef.current.nodes.find((n) => n.id === id)?.locked);
+    if (locked.length) setStatus({ kind: "ok", text: `${locked.length} locked item${locked.length === 1 ? " was" : "s were"} kept; unlock ${locked.length === 1 ? "it" : "them"} first (right-click → Unlock)` });
+    for (const id of nodeIds(ids)) if (!locked.includes(id)) ops.push({ op: "remove_node", id });
     if (ops.length && change(ops)) {
       setSelection(null);
       setSelectedIds(new Set());
@@ -526,13 +537,26 @@ function Editor({
   }
 
   function nudge(dx: number, dy: number) {
-    const ids = nodeIds(selectedIds);
+    const ids = nodeIds(selectedIds).filter((id) => !modelRef.current.nodes.find((n) => n.id === id)?.locked);
     if (!ids.length || readOnly) return;
     const m = modelRef.current;
     const layout = { ...m.layout };
     for (const id of ids) if (layout[id]) layout[id] = { ...layout[id], x: layout[id].x + dx, y: layout[id].y + dy };
     commit({ ...m, layout: growGroups({ ...m, layout }) });
   }
+
+  // Find works from anywhere in the editor, even while typing in a field.
+  useEffect(() => {
+    const onFind = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (!(e.metaKey || e.ctrlKey) || !(k === "f" || k === "h" || e.code === "KeyF")) return;
+      if (!(e.target as HTMLElement).closest(".cloud") && e.target !== document.body) return;
+      e.preventDefault();
+      setFinding(e.altKey || k === "h" ? "replace" : "find");
+    };
+    window.addEventListener("keydown", onFind);
+    return () => window.removeEventListener("keydown", onFind);
+  }, []);
 
   // Keyboard shortcuts (not while typing).
   useEffect(() => {
@@ -562,6 +586,16 @@ function Editor({
       } else if (mod && k === "d" && !readOnly) {
         e.preventDefault();
         duplicate();
+      } else if (mod && k === "l" && !readOnly && nodeIds(selectedIds).length) {
+        e.preventDefault();
+        const m = modelRef.current;
+        const ids = new Set(nodeIds(selectedIds));
+        const on = !m.nodes.filter((n) => ids.has(n.id)).every((n) => n.locked);
+        commit({ ...m, nodes: m.nodes.map((n) => (!ids.has(n.id) ? n : on ? { ...n, locked: true } : (({ locked: _l, ...rest }) => rest)(n))) });
+        setStatus({ kind: "ok", text: on ? "Locked: it can't be moved or deleted until unlocked (⌘L)" : "Unlocked" });
+      } else if (k === "?" || (e.shiftKey && k === "/")) {
+        e.preventDefault();
+        setShowKeys(true);
       } else if (mod && k === "a") {
         e.preventDefault();
         setSelectedIds(new Set(modelRef.current.nodes.filter((n) => pageOf(modelRef.current, n.id) === pageRef.current).map((n) => n.id)));
@@ -569,6 +603,7 @@ function Editor({
         e.preventDefault();
         setEditing(selection.type === "edge" ? `edge:${selection.id}` : selection.id);
       } else if (k === "escape") {
+        setFinding(null);
         setMenu(null);
         setSelectedIds(new Set());
         setSelection(null);
@@ -745,16 +780,16 @@ function Editor({
         Terraform
       </button>
       <button
-        onClick={() => {
+        onClick={async () => {
           if (!model.nodes.length || readOnly) return;
-          if (Object.keys(model.layout).length && !confirm("Auto layout rearranges every shape. Continue? (You can undo.)")) return;
+          if (Object.keys(model.layout).length && !(await askConfirm({ title: "Auto layout?", message: "This rearranges every shape on this tab. You can undo it.", confirm: "Auto layout" }))) return;
           void relayout();
         }}
         disabled={readOnly || !model.nodes.length}
       >
         Auto layout
       </button>
-      <button onClick={() => importInput.current?.click()} disabled={readOnly} title="Add a draw.io diagram to this canvas">
+      <button onClick={() => setImportOpen(true)} disabled={readOnly} title="Add a draw.io diagram, Terraform, Kubernetes, docker-compose or a SQL schema to this canvas">
         Import
       </button>
       <input
@@ -843,11 +878,11 @@ function Editor({
     commit(pasted.model);
     switchPage(r.id);
   }
-  function deletePage(id: string) {
+  async function deletePage(id: string) {
     const m = modelRef.current;
     const p = pages.find((x) => x.id === id);
     const count = m.nodes.filter((n) => pageOf(m, n.id) === id).length;
-    if (!p || (count && !confirm(`Delete the "${p.name}" tab and the ${count} item${count === 1 ? "" : "s"} on it? You can undo this.`))) return;
+    if (!p || (count && !(await askConfirm({ title: `Delete the "${p.name}" tab?`, message: `The ${count} item${count === 1 ? "" : "s"} on it go too. You can undo this.`, confirm: "Delete tab", danger: true })))) return;
     commit(removePage(m, id));
     if (id === page) switchPage(pagesOf(removePage(m, id))[0].id);
   }
@@ -1015,6 +1050,8 @@ function Editor({
               styleSelected(() => null, { routing: r === "orthogonal" ? null : r });
             }}
             onInsert={(item) => addItem(item)}
+            onFind={() => setFinding("find")}
+            onShortcuts={() => setShowKeys(true)}
           />
           <ReactFlow
             onDoubleClick={(e) => {
@@ -1070,13 +1107,13 @@ function Editor({
               const pick = ns.length === 1 && !es.length ? { type: "node" as const, id: ns[0].id } : es.length === 1 && !ns.length ? { type: "edge" as const, id: es[0].id } : null;
               if (pick) setSelection((prev) => (prev?.type === pick.type && prev.id === pick.id ? prev : pick));
             }}
-            onNodeClick={() => tab !== "assistant" && tab !== "flows" && setTab("properties")}
+            onNodeClick={() => tab !== "assistant" && tab !== "flows" && tab !== "code" && setTab("properties")}
             onEdgeClick={(e, ed) => {
               // Lines are controlled by the model, so selecting one is done here (Shift/⌘ adds to the selection).
               const key = `edge:${ed.id}`;
               setSelectedIds((prev) => (e.shiftKey || e.metaKey || e.ctrlKey ? new Set([...prev, key]) : new Set([key])));
               setSelection({ type: "edge", id: ed.id });
-              setTab("properties");
+              if (tab !== "code") setTab("properties");
             }}
             // Double-click a line to add or edit its text, as in draw.io.
             onEdgeDoubleClick={(_, ed) => !readOnly && setEditing(`edge:${ed.id}`)}
@@ -1182,6 +1219,18 @@ function Editor({
                   }
                   commit({ ...m, layout });
                 },
+                lock: (id, on) => {
+                  const m = modelRef.current;
+                  const ids = new Set(selectedIds.has(id) ? nodeIds(selectedIds) : [id]);
+                  commit({
+                    ...m,
+                    nodes: m.nodes.map((n) => {
+                      if (!ids.has(n.id)) return n;
+                      const { locked: _l, ...rest } = n;
+                      return on ? { ...rest, locked: true } : rest;
+                    }),
+                  });
+                },
                 arrange: (id, where) => arrange(selectedIds.has(id) ? nodeIds(selectedIds) : [id], where),
                 edge: (edgeId, patch) => {
                   const e = modelRef.current.edges.find((x) => x.id === edgeId);
@@ -1215,9 +1264,66 @@ function Editor({
               <h2>Start your architecture</h2>
               <p>
                 Mix Google Cloud, AWS, Azure and on-prem: drag anything from the left (Google Cloud items also generate Terraform), describe it to the assistant
-                on the right, or import a draw.io file from the toolbar.
+                on the right, write it in the Code tab, or import a draw.io file from the toolbar.
               </p>
+              {!readOnly && (
+                <div className="template-grid">
+                  <span className="hint">Or start from a template:</span>
+                  {TEMPLATES.map((t) => (
+                    <button key={t.id} className="template-card" title={t.description} onClick={() => commit({ ...templateModel(t.id), ...(model.pages ? { pages: model.pages } : {}) })}>
+                      <b>{t.title}</b>
+                      <span>{t.description}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+          )}
+          {finding && (
+            <FindBar
+              model={model}
+              readOnly={readOnly}
+              replace={finding === "replace"}
+              onClose={() => setFinding(null)}
+              onGo={(h) => {
+                if (h.page !== page) setActivePage(h.page);
+                setMenu(null);
+                if (h.type === "edge") {
+                  setSelectedIds(new Set([`edge:${h.id}`]));
+                  setSelection({ type: "edge", id: h.id });
+                  const e = modelRef.current.edges.find((x) => x.id === h.id);
+                  setTimeout(() => {
+                    const ns = [e?.from, e?.to].map((id) => id && rf.getNode(id)).filter((n): n is Node => Boolean(n));
+                    if (ns.length) void rf.fitView({ nodes: ns, padding: 0.8, duration: 300, maxZoom: 1.4 });
+                  }, 60);
+                } else {
+                  setSelectedIds(new Set([h.id]));
+                  setSelection({ type: "node", id: h.id });
+                  setTimeout(() => {
+                    const n = rf.getNode(h.id);
+                    if (n) void rf.fitView({ nodes: [n], padding: 1.2, duration: 300, maxZoom: 1.4 });
+                  }, 60);
+                }
+              }}
+              onReplaceAll={(m, count) => {
+                if (count) commit(m);
+                setStatus({ kind: "ok", text: count ? `Replaced text in ${count} item${count === 1 ? "" : "s"} (⌘Z to undo)` : "Nothing to replace" });
+              }}
+            />
+          )}
+          {showKeys && <ShortcutsHelp onClose={() => setShowKeys(false)} />}
+          {importOpen && (
+            <ImportCodeDialog
+              onClose={() => setImportOpen(false)}
+              onDrawio={(f) => {
+                setImportOpen(false);
+                void pickImport(f);
+              }}
+              onModel={(m, source) => {
+                setImportOpen(false);
+                void mergeImport(m, source);
+              }}
+            />
           )}
           {proposal && (
             <div className="proposal-bar">
@@ -1246,6 +1352,7 @@ function Editor({
               [
                 ["assistant", "Assistant"],
                 ["properties", "Properties"],
+                ["code", "Code"],
                 ["flows", "Flows"],
                 ["review", `Review${issues.filter((i) => i.severity !== "suggestion").length ? ` (${issues.filter((i) => i.severity !== "suggestion").length})` : ""}`],
                 ["terraform", "Terraform"],
@@ -1267,6 +1374,9 @@ function Editor({
             ) : (
               <Properties model={model} selection={selection} onOp={op} readOnly={readOnly} />
             )}
+          </div>
+          <div className="tab-body" hidden={tab !== "code"}>
+            {tab === "code" && <CodePanel model={proposal ? proposal.model : model} title={title} readOnly={readOnly} onApply={commit} />}
           </div>
           <div className="tab-body scroll" hidden={tab !== "flows"}>
             <FlowsPanel

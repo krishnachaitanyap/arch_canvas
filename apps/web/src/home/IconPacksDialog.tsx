@@ -4,6 +4,7 @@ import { api, type Workspace } from "../api";
 import { allPacks, useIconsVersion } from "../icons/registry";
 import { type ReadIcons, readIconFiles } from "../icons/upload";
 import { Modal } from "./Home";
+import { askConfirm } from "../dialogs";
 
 const FAMILIES: [IconFamily, string][] = [
   ["gcp", "Google Cloud (used for GCP resources automatically)"],
@@ -102,8 +103,8 @@ export function IconPacksDialog({
                 {!p.builtIn && canEdit && (
                   <button
                     className="link danger"
-                    onClick={() => {
-                      if (confirm(`Remove the "${p.name}" icon pack? Diagrams using its icons fall back to default icons.`))
+                    onClick={async () => {
+                      if (await askConfirm({ title: `Remove the "${p.name}" icon pack?`, message: "Diagrams using its icons fall back to default icons.", confirm: "Remove", danger: true }))
                         void api.deleteIconPack(p.id).then(onChanged, (e) => setStatus({ kind: "error", text: (e as Error).message }));
                     }}
                   >

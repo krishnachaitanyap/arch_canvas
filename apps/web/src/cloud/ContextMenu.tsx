@@ -23,6 +23,8 @@ export interface MenuActions {
   /** Set style properties on the clicked item and any other selected items that have them. */
   styleNodes: (id: string, props: Record<string, string | boolean>) => void;
   arrange: (id: string, where: "front" | "back") => void;
+  /** Lock or unlock the item (and any other selected ones). */
+  lock: (id: string, on: boolean) => void;
   /** Rotate by some degrees, or null to reset. */
   rotate: (id: string, by: number | null) => void;
   edge: (edgeId: string, patch: Record<string, string | null>) => void;
@@ -220,6 +222,7 @@ export function ContextMenu({
               {model.layout[t.id]?.r ? item("Reset rotation", () => actions.rotate(t.id, null), { disabled: readOnly }) : null}
             </>
           )}
+          {item(node.locked ? "Unlock" : "Lock", () => actions.lock(t.id, !node.locked), { disabled: readOnly, hint: "⌘L" })}
           {item("Bring to front", () => actions.arrange(t.id, "front"), { disabled: readOnly })}
           {item("Send to back", () => actions.arrange(t.id, "back"), { disabled: readOnly })}
           <hr />
@@ -247,7 +250,7 @@ export function ContextMenu({
           {!shape && node.kind !== "generic.note" && item("Properties & icon…", () => actions.properties())}
           {item("Copy", () => actions.copy(t.id), { hint: "⌘C" })}
           {item("Duplicate", () => actions.duplicate(t.id), { disabled: readOnly, hint: "⌘D" })}
-          {item("Delete", () => actions.remove(t), { disabled: readOnly, danger: true, hint: "⌫" })}
+          {item("Delete", () => actions.remove(t), { disabled: readOnly || Boolean(node.locked), danger: true, hint: "⌫" })}
         </>
       )}
       {t.type === "edge" && edge && (

@@ -15,6 +15,8 @@ import {
   Undo2,
   ZoomIn,
   ZoomOut,
+  Search,
+  Keyboard,
 } from "lucide-react";
 import type { Routing } from "@archcanvas/shared";
 import type { PaletteItem } from "./Palette";
@@ -98,6 +100,8 @@ export function FormatBar(p: {
   lineStyle: LineStyle;
   onLineStyle: (patch: Partial<LineStyle>) => void;
   onInsert: (item: PaletteItem) => void;
+  onFind: () => void;
+  onShortcuts: () => void;
 }) {
   const [inserting, setInserting] = useState(false);
   const none = !p.selected || p.readOnly;
@@ -237,6 +241,13 @@ export function FormatBar(p: {
           </div>
         )}
       </div>
+      <span className="fb-sep" />
+      <button title="Find and replace (⌘F)" aria-label="Find" onClick={p.onFind}>
+        <Search size={16} />
+      </button>
+      <button title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={p.onShortcuts}>
+        <Keyboard size={16} />
+      </button>
     </div>
   );
 }
