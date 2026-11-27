@@ -93,7 +93,7 @@ export function systemPrompt(): string {
       c.parents.length ? ` Parents: ${c.parents.join(", ")}.` : ""
     }${props.length ? ` Props: ${props.join("; ")}.` : ""}`;
   }).join("\n");
-  return `You are ArchCanvas's architecture agent. You design Google Cloud architectures on a typed diagram that compiles to Terraform.
+  return `You are Keelrail's architecture agent. You design Google Cloud architectures on a typed diagram that compiles to Terraform.
 
 You change the diagram ONLY by calling edit_diagram. Never describe a change without making it.
 

@@ -1,12 +1,14 @@
-# ArchCanvas
+# Keelrail
+
+[keelrail.com](https://keelrail.com) · formerly ArchCanvas
 
 **Draw your cloud architecture once and get the rest from it: Terraform, step-by-step workflows, documentation, a presentation, and a full version history you can compare.**
 
-ArchCanvas is an AI-native architecture diagramming tool for Google Cloud. Each diagram is a typed model, not a picture. It knows a Cloud Run service is talking to Cloud SQL, so it can generate the IAM, networking and Terraform for that connection, explain how it works, and show what changed between two versions. You can start from scratch, describe the system to the assistant (Gemini), or import an existing draw.io diagram, including AWS ones.
+Keelrail is an AI-native architecture diagramming tool for Google Cloud. Each diagram is a typed model, not a picture. It knows a Cloud Run service is talking to Cloud SQL, so it can generate the IAM, networking and Terraform for that connection, explain how it works, and show what changed between two versions. You can start from scratch, describe the system to the assistant (Gemini), or import an existing draw.io diagram, including AWS ones.
 
 **[▶ Try the live demo](https://krishnachaitanyap.github.io/arch_canvas/)**: it runs entirely in your browser with example diagrams. The AI assistant and `terraform validate` need the server ([run locally](#run-locally)).
 
-![The ArchCanvas editor: a GCP architecture with nested project, region, VPC and subnet groups](docs/screenshots/editor.png)
+![The Keelrail editor: a GCP architecture with nested project, region, VPC and subnet groups](docs/screenshots/editor.png)
 
 ## Highlights
 
@@ -62,7 +64,7 @@ edits to the canvas as soon as the code is valid (problems are listed with their
 The code holds what the diagram means; positions stay on the canvas, so diffs stay readable.
 
 ```
-// ArchCanvas diagram code
+// Keelrail diagram code
 terraform on                                         // show cloud details and Terraform
 
 users "Customers" [generic.client]
@@ -96,7 +98,7 @@ npm run arch -- diff HEAD~1:infra/app.arch infra/app.arch   # items, code and Te
 npm run arch -- terraform infra/app.arch terraform/      # write the Terraform
 npm run arch -- review infra/app.arch                   # security and reliability review
 npm run arch -- fmt infra/app.arch --write              # tidy the code
-npm run arch -- from diagram.drawio > app.arch          # draw.io or ArchCanvas JSON to code
+npm run arch -- from diagram.drawio > app.arch          # draw.io or Keelrail JSON to code
 npm run arch -- to app.arch drawio > app.drawio         # code to draw.io, mermaid, plantuml or json
 ```
 
@@ -153,7 +155,7 @@ Shapes are mapped like this:
 
 | Source | Confidence | Example |
 |---|---|---|
-| ArchCanvas's own draw.io export | exact | lossless round trip, positions kept |
+| Keelrail's own draw.io export | exact | lossless round trip, positions kept |
 | Google Cloud icons | high | Cloud Run, Cloud SQL, Pub/Sub… |
 | AWS and Azure icons | medium | Lambda/Fargate → Cloud Run, RDS → Cloud SQL, SQS → Pub/Sub, ElastiCache → Memorystore |
 | Shapes | medium | cylinder → database, actor → users |

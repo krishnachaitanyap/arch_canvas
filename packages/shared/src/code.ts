@@ -4,7 +4,7 @@ import { edgeId } from "./ops.js";
 import { pageOf, pagesOf } from "./pages.js";
 
 /**
- * ArchCanvas diagram code (`.arch`): the diagram as plain text, in the spirit of Eraser's
+ * Keelrail diagram code (`.arch`): the diagram as plain text, in the spirit of Eraser's
  * diagram-as-code. It holds what the diagram means (items, groups, names, settings, lines,
  * tabs) but not where things sit, so diffs stay readable and code reviews are about the
  * architecture. Positions live on the canvas and are kept when code is applied.
@@ -70,7 +70,7 @@ function nodeHead(n: DiagramNode): string {
 
 /** The diagram as code. Deterministic: the same diagram always prints the same text. */
 export function toCode(m: DiagramModel): string {
-  const out: string[] = ["// ArchCanvas diagram code: edit here or on the canvas, both stay in sync."];
+  const out: string[] = ["// Keelrail diagram code: edit here or on the canvas, both stay in sync."];
   if (m.settings?.terraform) out.push("terraform on");
   const ids = new Set(m.nodes.map((n) => n.id));
   const kids = new Map<string | undefined, DiagramNode[]>();

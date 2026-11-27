@@ -1,9 +1,9 @@
 /**
- * ArchCanvas MCP server: lets AI agents (Claude Code, Claude Desktop, Cursor, VS Code…) read and
+ * Keelrail MCP server: lets AI agents (Claude Code, Claude Desktop, Cursor, VS Code…) read and
  * change diagrams as code, generate Terraform, compare versions and review designs.
  *
- *   ARCHCANVAS_URL    the ArchCanvas API (default http://localhost:8082)
- *   ARCHCANVAS_TOKEN  an API token (Home → API tokens); optional when the server has no sign-in
+ *   KEELRAIL_URL    the Keelrail API (default http://localhost:8082)
+ *   KEELRAIL_TOKEN  an API token (Home → API tokens); optional when the server has no sign-in
  *
  * Run it with `npm run mcp` (stdio). Speaks the Model Context Protocol over stdio with
  * newline-delimited JSON-RPC 2.0; no SDK needed. See docs/api-and-mcp.md.
@@ -25,8 +25,8 @@ import {
   validateModel,
 } from "../packages/shared/src/index.ts";
 
-const BASE = (process.env.ARCHCANVAS_URL ?? "http://localhost:8082").replace(/\/$/, "");
-const TOKEN = process.env.ARCHCANVAS_TOKEN ?? "";
+const BASE = (process.env.KEELRAIL_URL ?? process.env.ARCHCANVAS_URL ?? "http://localhost:8082").replace(/\/$/, "");
+const TOKEN = process.env.KEELRAIL_TOKEN ?? process.env.ARCHCANVAS_TOKEN ?? "";
 const PROTOCOL_VERSION = "2025-06-18";
 
 // ---------------------------------------------------------------- API client
@@ -95,7 +95,7 @@ const codeDiff = (a: DiagramModel, b: DiagramModel) =>
     .map((l) => `${l.op === "add" ? "+" : "-"} ${l.text}`)
     .join("\n");
 
-const REFERENCE = `ArchCanvas diagram code (.arch)
+const REFERENCE = `Keelrail diagram code (.arch)
 
 // comments start with //
 terraform on                       // show cloud details; Google Cloud and AWS items generate Terraform
@@ -163,14 +163,14 @@ const TOOLS: Tool[] = [
   },
   {
     name: "diagram_code_reference",
-    description: "The ArchCanvas diagram code syntax: types, protocols, line styles, AWS icons. Read this before writing code.",
+    description: "The Keelrail diagram code syntax: types, protocols, line styles, AWS icons. Read this before writing code.",
     inputSchema: { type: "object", properties: {} },
     readOnly: true,
     run: async () => REFERENCE,
   },
   {
     name: "get_diagram_code",
-    description: "Get an architecture diagram as ArchCanvas diagram code (.arch). Edit the code and send it back with update_diagram_code.",
+    description: "Get an architecture diagram as Keelrail diagram code (.arch). Edit the code and send it back with update_diagram_code.",
     inputSchema: { type: "object", properties: diagramArg, required: ["diagram"] },
     readOnly: true,
     run: async (a) => {
@@ -282,7 +282,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "code_from_source",
-    description: `Turn infrastructure code into ArchCanvas diagram code: ${Object.values(SOURCE_NAMES).join(", ")}. Use it to draw an existing system, then create_diagram.`,
+    description: `Turn infrastructure code into Keelrail diagram code: ${Object.values(SOURCE_NAMES).join(", ")}. Use it to draw an existing system, then create_diagram.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -317,9 +317,9 @@ async function handle(msg: Msg): Promise<void> {
       return reply(id, {
         protocolVersion: typeof params.protocolVersion === "string" ? params.protocolVersion : PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "archcanvas", version: "0.1.0" },
+        serverInfo: { name: "keelrail", version: "0.1.0" },
         instructions:
-          "ArchCanvas architecture diagrams as code. To change a diagram: get_diagram_code, edit the code, update_diagram_code. Read diagram_code_reference for the syntax. get_terraform builds Terraform; diff_diagram compares versions.",
+          "Keelrail architecture diagrams as code. To change a diagram: get_diagram_code, edit the code, update_diagram_code. Read diagram_code_reference for the syntax. get_terraform builds Terraform; diff_diagram compares versions.",
       });
     case "ping":
       return reply(id, {});

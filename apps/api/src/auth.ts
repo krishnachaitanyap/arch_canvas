@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { config } from "./config.js";
-import { principalForToken, TOKEN_PREFIX } from "./routes/tokens.js";
+import { principalForToken, TOKEN_PREFIXES } from "./routes/tokens.js";
 
 export interface Principal {
   userId: string;
@@ -37,7 +37,7 @@ async function getJwks(): Promise<ReturnType<typeof createRemoteJWKSet>> {
 export async function authenticate(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   // Personal API tokens (scripts, CI, the MCP server) work with or without OIDC.
   const bearer = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : "";
-  if (bearer.startsWith(TOKEN_PREFIX)) {
+  if (TOKEN_PREFIXES.some((p) => bearer.startsWith(p))) {
     const p = await principalForToken(bearer);
     if (!p) {
       await reply.code(401).send({ error: "invalid or expired API token" });

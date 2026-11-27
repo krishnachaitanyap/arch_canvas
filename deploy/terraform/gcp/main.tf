@@ -186,7 +186,7 @@ resource "google_artifact_registry_repository" "images" {
 # ---------------- Workload Identity for the API (Vertex AI + GCS) ----------------
 resource "google_service_account" "api" {
   account_id   = "${var.name}-api"
-  display_name = "ArchCanvas API"
+  display_name = "Keelrail API"
 }
 
 resource "google_project_iam_member" "api_vertex" {

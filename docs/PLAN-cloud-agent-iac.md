@@ -174,7 +174,7 @@ That slice touches every layer with about 8 resources. After that, widening the 
 **Done**
 - `xml.ts` (XML reader that works in browser and Node) and `drawio-import.ts`: plain, compressed and SVG files, multiple pages, and mapping of GCP, AWS and Azure icons, shapes and labels, with confidence and a reason for each.
 - Groups are detected from explicit containers and from visual enclosure. Nesting GCP doesn't allow is moved up with a warning. Connections attached to groups or skipped shapes are reported.
-- The draw.io export now carries ArchCanvas metadata in `<object>` custom properties, so a round trip is exact (tests compare the Terraform and workflows).
+- The draw.io export now carries Keelrail metadata in `<object>` custom properties, so a round trip is exact (tests compare the Terraform and workflows).
 - Import review dialog with overrides and a live preview; the editor opens on the Flows tab after import.
 
 **Next**

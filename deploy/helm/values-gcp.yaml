@@ -1,4 +1,4 @@
-# ArchCanvas Cloud on GKE. Fill the <...> values from `terraform output`.
+# Keelrail Cloud on GKE. Fill the <...> values from `terraform output`.
 image:
   registry: <region>-docker.pkg.dev/<project>/archcanvas
   tag: "0.1.0"

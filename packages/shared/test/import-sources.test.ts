@@ -57,7 +57,7 @@ same_indent_list:
 });
 
 describe("Terraform import", () => {
-  it("rebuilds the diagram from the Terraform ArchCanvas generates", () => {
+  it("rebuilds the diagram from the Terraform Keelrail generates", () => {
     const tf = compileTerraform(SAMPLE_MODEL).files.map((f) => f.content).join("\n");
     expect(detectSource("main.tf", tf)).toBe("terraform");
     const m = importSource("main.tf", tf);

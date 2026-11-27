@@ -1,4 +1,4 @@
-# ArchCanvas self-hosted in a customer's Kubernetes / OpenShift cluster.
+# Keelrail self-hosted in a customer's Kubernetes / OpenShift cluster.
 image:
   registry: registry.customer.internal/archcanvas   # mirror of the release images
   tag: "0.1.0"

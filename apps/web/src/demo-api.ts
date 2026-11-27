@@ -214,7 +214,7 @@ async function tx<T>(fn: (s: State) => T): Promise<T> {
 export const demoApi = {
   tokens: async () => [],
   createToken: async () => {
-    throw new Error("API tokens need the server: run ArchCanvas locally");
+    throw new Error("API tokens need the server: run Keelrail locally");
   },
   deleteToken: async () => undefined,
   config: async (): Promise<AppConfig & { demo: true }> => ({ aiEnabled: false, aiProvider: "demo", aiModel: "none", authEnabled: false, devUser: DEMO_USER, demo: true }),
@@ -467,7 +467,7 @@ export const demoApi = {
       try {
         localStorage.setItem(`archcanvas.demo.icons.${id}`, JSON.stringify(icons));
       } catch {
-        fail("This icon pack is too large for the demo's browser storage. Run ArchCanvas locally to use it.");
+        fail("This icon pack is too large for the demo's browser storage. Run Keelrail locally to use it.");
       }
       const meta = { id, name: pack.name, family: pack.family, license: pack.license ?? "", url: pack.url, count: icons.length, builtIn: false, created_by: me(), created_at: now() };
       (s.iconPacks ??= []).push({ ...meta, workspace_id: workspaceId });
@@ -494,7 +494,7 @@ export const demoApi = {
 };
 
 const SERVER_ONLY =
-  "The live demo runs entirely in your browser, so the AI features are off. Run ArchCanvas locally with a Gemini key to use them (see the README).";
+  "The live demo runs entirely in your browser, so the AI features are off. Run Keelrail locally with a Gemini key to use them (see the README).";
 
 export const isDemo = () => true;
 export { emptyModel };

@@ -40,7 +40,7 @@ jobs:
             fi
             npm run -s arch -- diff --markdown "$before" "$after" >> comment.md
           done
-          { echo "## ArchCanvas diagram review"; echo; cat comment.md; } > body.md
+          { echo "## Keelrail diagram review"; echo; cat comment.md; } > body.md
           echo "status=$status" >> "$GITHUB_ENV"
       - name: Comment on the pull request
         env:

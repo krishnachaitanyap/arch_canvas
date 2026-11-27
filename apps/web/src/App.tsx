@@ -339,7 +339,7 @@ export function App() {
       )}
       <header className="topbar">
         <Link to={homePath} className="logo" title="Project page">
-          ArchCanvas
+          Keelrail
         </Link>
         {doc ? (
           <>

@@ -1,12 +1,12 @@
 /**
- * ArchCanvas diagram code on the command line, for diagrams kept in Git as .arch files.
+ * Keelrail diagram code on the command line, for diagrams kept in Git as .arch files.
  *
  *   npm run arch -- check  diagram.arch               check the code (exit 1 on problems)
  *   npm run arch -- fmt    diagram.arch [--write]     print (or rewrite) the code tidied up
  *   npm run arch -- diff   before.arch after.arch     what changed: items, lines and Terraform
  *   npm run arch -- terraform diagram.arch [out-dir]  write the Terraform (default ./terraform)
  *   npm run arch -- review diagram.arch               security and reliability review
- *   npm run arch -- from   diagram.json|.drawio       turn an ArchCanvas JSON export or a draw.io file into code
+ *   npm run arch -- from   diagram.json|.drawio       turn an Keelrail JSON export or a draw.io file into code
  *   npm run arch -- to     diagram.arch drawio|mermaid|plantuml|json
  *
  * "-" reads from stdin. diff also accepts git revisions: `diff HEAD~1:infra/app.arch infra/app.arch`.
@@ -74,7 +74,7 @@ function printDiff(lines: ReturnType<typeof lineDiff>) {
   }
 }
 
-const USAGE = `ArchCanvas diagram code (.arch)
+const USAGE = `Keelrail diagram code (.arch)
 
   arch check  diagram.arch                check the code (exit 1 on problems)
   arch fmt    diagram.arch [--write]      print (or rewrite) the code tidied up

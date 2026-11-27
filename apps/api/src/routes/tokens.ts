@@ -9,7 +9,9 @@ import { parse } from "./workspaces.js";
  * A token acts as the user who made it, with that user's workspace roles. The token itself is
  * shown once; only its SHA-256 hash is stored.
  */
-export const TOKEN_PREFIX = "ac_";
+export const TOKEN_PREFIX = "kr_";
+/** Prefixes of tokens made before the rename (ArchCanvas) still work. */
+export const TOKEN_PREFIXES = ["kr_", "ac_"];
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 const create = z.object({

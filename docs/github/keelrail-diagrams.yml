@@ -1,6 +1,6 @@
 # Copy to .github/workflows/ in a repository that keeps diagrams as .arch files.
-# Needs the bundled CLI in the repo: run `npm run build:cli` in ArchCanvas and commit
-# dist/arch.mjs as tools/arch.mjs. It's one file with no dependencies, so CI needs no
+# Needs the bundled CLI in the repo: run `npm run build:cli` in Keelrail and commit
+# dist/keelrail.mjs as tools/keelrail.mjs. It's one file with no dependencies, so CI needs no
 # npm install (useful behind a corporate proxy).
 name: Diagram review
 
@@ -33,14 +33,14 @@ jobs:
             before=/dev/null; after=/dev/null
             git cat-file -e "$BASE:$f" 2>/dev/null && before="$BASE:$f"
             [ -f "$f" ] && after="$f"
-            if [ "$after" != /dev/null ] && ! node tools/arch.mjs check "$f" 2> errors.txt; then
+            if [ "$after" != /dev/null ] && ! node tools/keelrail.mjs check "$f" 2> errors.txt; then
               status=1
               { echo "### \`$f\`"; echo; echo '```'; cat errors.txt; echo '```'; echo; } >> comment.md
               continue
             fi
-            node tools/arch.mjs diff --markdown "$before" "$after" >> comment.md
+            node tools/keelrail.mjs diff --markdown "$before" "$after" >> comment.md
           done
-          { echo "## ArchCanvas diagram review"; echo; cat comment.md; } > body.md
+          { echo "## Keelrail diagram review"; echo; cat comment.md; } > body.md
           echo "status=$status" >> "$GITHUB_ENV"
       - name: Comment on the pull request
         env:

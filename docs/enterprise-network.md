@@ -141,7 +141,7 @@ creates the tables when it starts. Limits, which is why it's for local use only:
 - **One request at a time** touches the database. Fine for one person, not for a team server.
 - **Real-time whiteboard collaboration** (`npm run dev:collab`) still needs Postgres.
 - Data doesn't move between SQLite and Postgres automatically. Export diagrams (draw.io or
-  ArchCanvas JSON) and import them if you switch.
+  Keelrail JSON) and import them if you switch.
 
 ### Option B: an existing Postgres
 

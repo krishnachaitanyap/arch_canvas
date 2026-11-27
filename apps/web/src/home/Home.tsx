@@ -165,7 +165,7 @@ export function Home(props: HomeProps) {
           <ProjectView key={project.id} {...props} project={project} role={role!} run={run} />
         ) : (
           <div className="dash-empty">
-            <h2>Welcome to ArchCanvas</h2>
+            <h2>Welcome to Keelrail</h2>
             <p>Projects keep related diagrams together, like a team or a system. Create one to get started.</p>
             {canEdit(role) && (
               <button className="primary" onClick={() => setDialog("project")}>

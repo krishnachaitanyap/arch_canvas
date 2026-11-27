@@ -1,19 +1,19 @@
 # API, AI agents (MCP) and pull-request reviews
 
-ArchCanvas diagrams can be read and changed from outside the app: by scripts and CI through the
+Keelrail diagrams can be read and changed from outside the app: by scripts and CI through the
 REST API, by AI agents through the MCP server, and in pull requests through the diagram-code CLI.
 All three use diagram code (`.arch`, see [Diagram as code](../README.md#diagram-as-code)).
 
 ## API tokens
 
 Create a token on the home page: **API tokens** (next to Members and Icon packs). A token acts as
-you, with your workspace roles. It is shown once; ArchCanvas stores only its hash. Tokens can
+you, with your workspace roles. It is shown once; Keelrail stores only its hash. Tokens can
 expire (30 days, 90 days, a year) and can be revoked at any time.
 
 Send it as a bearer token:
 
 ```bash
-curl -H "Authorization: Bearer $ARCHCANVAS_TOKEN" https://archcanvas.example.com/api/diagrams
+curl -H "Authorization: Bearer $KEELRAIL_TOKEN" https://keelrail.example.com/api/diagrams
 ```
 
 Tokens work whether or not the server uses single sign-on (OIDC).
@@ -57,13 +57,13 @@ beyond the repository itself.
 
 Settings (environment variables):
 
-- `ARCHCANVAS_URL`: the API, default `http://localhost:8082`
-- `ARCHCANVAS_TOKEN`: an API token (optional when the server runs without sign-in)
+- `KEELRAIL_URL`: the API, default `http://localhost:8082`
+- `KEELRAIL_TOKEN`: an API token (optional when the server runs without sign-in)
 
 **Claude Code:**
 
 ```bash
-claude mcp add archcanvas --env ARCHCANVAS_URL=http://localhost:8082 --env ARCHCANVAS_TOKEN=ac_... -- node /path/to/archcanvas/node_modules/tsx/dist/cli.mjs /path/to/archcanvas/scripts/mcp-server.mts
+claude mcp add keelrail --env KEELRAIL_URL=http://localhost:8082 --env KEELRAIL_TOKEN=kr_... -- node /path/to/archcanvas/node_modules/tsx/dist/cli.mjs /path/to/archcanvas/scripts/mcp-server.mts
 ```
 
 **Claude Desktop, Cursor, VS Code** (an `mcpServers` entry in the client's MCP settings):
@@ -71,16 +71,16 @@ claude mcp add archcanvas --env ARCHCANVAS_URL=http://localhost:8082 --env ARCHC
 ```json
 {
   "mcpServers": {
-    "archcanvas": {
+    "keelrail": {
       "command": "node",
-      "args": ["/path/to/archcanvas/dist/archcanvas-mcp.mjs"],
-      "env": { "ARCHCANVAS_URL": "http://localhost:8082", "ARCHCANVAS_TOKEN": "ac_..." }
+      "args": ["/path/to/archcanvas/dist/keelrail-mcp.mjs"],
+      "env": { "KEELRAIL_URL": "http://localhost:8082", "KEELRAIL_TOKEN": "kr_..." }
     }
   }
 }
 ```
 
-`dist/archcanvas-mcp.mjs` is a single-file build (`npm run build:cli`) that runs with plain
+`dist/keelrail-mcp.mjs` is a single-file build (`npm run build:cli`) that runs with plain
 Node 20+, so the agent's machine doesn't need the repository's dependencies. Don't start the
 server through `npm run mcp` in a client config: npm prints a banner on stdout, which breaks
 the protocol (use `npm run --silent mcp`, or `node` directly as above).
@@ -98,8 +98,8 @@ workflow checks the code and comments with what changed: items and lines added, 
 removed, the Terraform resources that would be created or destroyed, and the code diff.
 
 - In this repository: `.github/workflows/diagrams.yml`.
-- In another repository: run `npm run build:cli` here, commit `dist/arch.mjs` there as
-  `tools/arch.mjs`, and copy [`docs/github/archcanvas-diagrams.yml`](github/archcanvas-diagrams.yml)
+- In another repository: run `npm run build:cli` here, commit `dist/keelrail.mjs` there as
+  `tools/keelrail.mjs`, and copy [`docs/github/keelrail-diagrams.yml`](github/keelrail-diagrams.yml)
   to its `.github/workflows/`. The CLI is one file, so CI needs no `npm install`.
 
 The same checks run locally:

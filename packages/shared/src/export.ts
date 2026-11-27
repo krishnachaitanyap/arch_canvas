@@ -76,7 +76,7 @@ export function toDrawio(m: DiagramModel, title = "Architecture"): string {
       ? pages.map((p) => drawioDiagram(pageModel(m, p.id), p.name, `archcanvas-${p.id}`))
       : [drawioDiagram(m, title, "archcanvas")];
   return `<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="ArchCanvas" type="device">
+<mxfile host="Keelrail" type="device">
 ${diagrams.join("\n")}
 </mxfile>
 `;
@@ -118,7 +118,7 @@ function drawioDiagram(m: DiagramModel, name: string, id: string): string {
             ? esc(n.label)
             : `${entry.label}: ${n.label}`
           : `<b>${esc(n.label)}</b><br><font color="${color}" style="font-size:10px">${esc(entry?.label ?? n.kind)}</font>`;
-    // <object> carries ArchCanvas metadata as draw.io custom properties (Edit Data), so
+    // <object> carries Keelrail metadata as draw.io custom properties (Edit Data), so
     // re-importing is lossless and people can set types in draw.io itself.
     const props =
       (Object.keys(n.props).length ? ` archcanvas_props="${esc(JSON.stringify(n.props))}"` : "") +
@@ -147,7 +147,7 @@ function drawioDiagram(m: DiagramModel, name: string, id: string): string {
   </diagram>`;
 }
 
-/** draw.io style for each ArchCanvas shape. */
+/** draw.io style for each Keelrail shape. */
 const DRAWIO_SHAPE: Record<string, string> = {
   rectangle: "rounded=0;",
   rounded: "rounded=1;",

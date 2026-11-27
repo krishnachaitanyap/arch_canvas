@@ -25,7 +25,7 @@ async function compress(xml: string): Promise<string> {
 
 const byLabel = (r: ReturnType<typeof drawioToModel>, label: string) => r.model.nodes.find((n) => n.label === label);
 
-describe("ArchCanvas round trip", () => {
+describe("Keelrail round trip", () => {
   it("re-imports its own export exactly, so every artifact is identical", async () => {
     const pages = await readDrawio(toDrawio(SAMPLE_MODEL, "Sample"));
     const r = drawioToModel(pages[0]);

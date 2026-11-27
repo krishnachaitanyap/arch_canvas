@@ -123,7 +123,7 @@ async function headers(body: boolean): Promise<Record<string, string>> {
   };
 }
 
-const UNREACHABLE = "Can't reach the ArchCanvas server. Check that the API is running; your changes are kept here and saved when it's back.";
+const UNREACHABLE = "Can't reach the Keelrail server. Check that the API is running; your changes are kept here and saved when it's back.";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**

@@ -9,7 +9,7 @@ import { findAll, htmlToText, parseXml, type XmlElement } from "./xml.js";
  * draw.io / diagrams.net import. Reads .drawio and .xml files (plain or compressed, any
  * number of pages) and .drawio.svg, then maps shapes onto the GCP catalog:
  *
- *   exact   ArchCanvas metadata from our own export (lossless round trip)
+ *   exact   Keelrail metadata from our own export (lossless round trip)
  *   high    Google Cloud icons
  *   medium  AWS / Azure icons translated to the closest GCP service, or telling shapes
  *           (cylinder = database, actor = users)
@@ -56,7 +56,7 @@ export interface ImportResult {
   model: DiagramModel;
   items: ImportItem[];
   warnings: string[];
-  /** True when positions came from the file (ArchCanvas exports); otherwise auto-layout runs. */
+  /** True when positions came from the file (Keelrail exports); otherwise auto-layout runs. */
   layoutKept: boolean;
 }
 
@@ -224,7 +224,7 @@ function styleMap(style: string): Record<string, string> {
   return out;
 }
 
-/** Which ArchCanvas shape a draw.io style draws, if it's a flowchart/basic shape. */
+/** Which Keelrail shape a draw.io style draws, if it's a flowchart/basic shape. */
 function shapeOf(c: DrawioCell, plainToo: boolean): ShapeName | undefined {
   const s = c.style.toLowerCase();
   const m = styleMap(c.style);
@@ -493,7 +493,7 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
     if (!v.label && !container && !provider(v.style.toLowerCase()) && !v.attrs.archcanvas_kind) continue; // decoration
     let c: Classified;
     if (v.attrs.archcanvas_kind && catalogEntry(v.attrs.archcanvas_kind))
-      c = { kind: v.attrs.archcanvas_kind, reason: "ArchCanvas export", confidence: "exact" };
+      c = { kind: v.attrs.archcanvas_kind, reason: "Keelrail export", confidence: "exact" };
     else c = container ? classifyGroup(v) : classifyResource(v, flowchart);
     if (v.id in overrides) {
       const o = overrides[v.id];
@@ -623,7 +623,7 @@ export function drawioToModel(page: DrawioPage, overrides: Record<string, string
     warnings.push(`${components} shape${components === 1 ? " has" : "s have"} no GCP equivalent and became documentation-only components (not deployed by Terraform).`);
   if (unmatched) warnings.push(`${unmatched} shape${unmatched === 1 ? " was" : "s were"} not recognised. Pick a type for ${unmatched === 1 ? "it" : "them"} below, or leave skipped.`);
 
-  // Keep positions only for exact ArchCanvas round trips; anything else is auto-laid out
+  // Keep positions only for exact Keelrail round trips; anything else is auto-laid out
   // because draw.io icons and our nodes have different sizes.
   const exact = items.filter((i) => i.kind).every((i) => i.confidence === "exact") && !nestingChanged;
   if (exact) {

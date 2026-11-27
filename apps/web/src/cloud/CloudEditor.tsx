@@ -824,7 +824,7 @@ function Editor({
         <option value="mermaid">Mermaid (.mmd)</option>
         <option value="plantuml">PlantUML (.puml)</option>
         <option value="doc">Architecture doc (.md)</option>
-        <option value="json">ArchCanvas JSON</option>
+        <option value="json">Keelrail JSON</option>
       </select>
       {canEdit ? (
         <>

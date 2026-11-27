@@ -90,7 +90,7 @@ export function parseTerraform(src: string): TfBlock[] {
   return out;
 }
 
-/** Terraform resource types drawn as ArchCanvas kinds (GCP) or icon items (AWS and others). */
+/** Terraform resource types drawn as Keelrail kinds (GCP) or icon items (AWS and others). */
 const GCP_KINDS: Record<string, string> = {
   google_project: "gcp.project",
   google_compute_network: "gcp.vpc",
@@ -396,7 +396,7 @@ export function composeToModel(src: string): DiagramModel {
 /** Which importer a file needs, from its name and content. */
 export function detectSource(fileName: string, text: string): SourceKind | null {
   const name = fileName.toLowerCase();
-  if (/\.arch$/.test(name) || /^\s*\/\/ ArchCanvas diagram code/.test(text)) return "arch";
+  if (/\.arch$/.test(name) || /^\s*\/\/ (Keelrail|ArchCanvas) diagram code/.test(text)) return "arch";
   if (/\.tf$|\.tf\.json$/.test(name) || /^\s*(resource|module|provider|terraform)\s+("|\{)/m.test(text)) return "terraform";
   if (/\.sql$/.test(name) || /\bcreate\s+table\b/i.test(text)) return "sql";
   if (/\.(ya?ml)$/.test(name) || /^\s*(services|apiVersion|kind):/m.test(text)) {
@@ -407,7 +407,7 @@ export function detectSource(fileName: string, text: string): SourceKind | null 
   return null;
 }
 
-export const SOURCE_NAMES: Record<SourceKind, string> = { arch: "ArchCanvas diagram code", terraform: "Terraform", kubernetes: "Kubernetes manifests", compose: "docker-compose", sql: "SQL schema" };
+export const SOURCE_NAMES: Record<SourceKind, string> = { arch: "Keelrail diagram code", terraform: "Terraform", kubernetes: "Kubernetes manifests", compose: "docker-compose", sql: "SQL schema" };
 
 /** A diagram from infrastructure code or a schema. Throws with a readable message when it can't. */
 export function importSource(fileName: string, text: string, kind = detectSource(fileName, text)): DiagramModel {
@@ -426,6 +426,6 @@ export function importSource(fileName: string, text: string, kind = detectSource
     case "sql":
       return sqlToModel(text);
     default:
-      throw new Error(`${fileName}: not a file ArchCanvas can read. Use Terraform (.tf), Kubernetes or docker-compose YAML, SQL (.sql), or draw.io.`);
+      throw new Error(`${fileName}: not a file Keelrail can read. Use Terraform (.tf), Kubernetes or docker-compose YAML, SQL (.sql), or draw.io.`);
   }
 }
