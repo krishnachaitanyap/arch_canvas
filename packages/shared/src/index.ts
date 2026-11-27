@@ -20,3 +20,4 @@ export * from "./sql-import.js";
 export * from "./source-import.js";
 export { parseYaml, parseYamlDocuments, type Yaml } from "./yaml.js";
 export { awsServiceOf, compileAwsTerraform, hasAws, AWS_PROVIDER_VERSION } from "./terraform-aws.js";
+export * from "./live.js";

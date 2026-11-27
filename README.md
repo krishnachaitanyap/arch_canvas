@@ -2,9 +2,21 @@
 
 [keelrail.com](https://keelrail.com) · formerly ArchCanvas
 
-**Draw your cloud architecture once and get the rest from it: Terraform, step-by-step workflows, documentation, a presentation, and a full version history you can compare.**
+### Draw your architecture. Get Terraform, pull-request reviews and guardrails for AI agents.
 
-Keelrail is an AI-native architecture diagramming tool for Google Cloud. Each diagram is a typed model, not a picture. It knows a Cloud Run service is talking to Cloud SQL, so it can generate the IAM, networking and Terraform for that connection, explain how it works, and show what changed between two versions. You can start from scratch, describe the system to the assistant (Gemini), or import an existing draw.io diagram, including AWS ones.
+Keelrail keeps your architecture diagram true to your infrastructure. Each diagram is a typed model of the system, not a
+picture: it knows a service calls a database through a queue, so it can:
+
+- **Generate Terraform** for Google Cloud and AWS, the same every time, with least-privilege IAM, private networking and
+  encryption. A compiler, not an AI guess.
+- **Review every pull request** that changes the architecture: what was added or removed, and which cloud resources
+  Terraform would create or destroy, as a comment on the PR.
+- **Give AI coding agents the map.** Claude, Cursor and other agents read and change the architecture as code through
+  the MCP server, so they build what was designed, and you review the design instead of thousands of lines.
+
+Start from a template, import what you already have (Terraform, Kubernetes, docker-compose, SQL, draw.io), describe the
+system to the AI assistant, or write it as code. It's open source and runs in the cloud or fully self-hosted, down to a
+laptop with SQLite.
 
 **[▶ Try the live demo](https://krishnachaitanyap.github.io/arch_canvas/)**: it runs entirely in your browser with example diagrams. The AI assistant and `terraform validate` need the server ([run locally](#run-locally)).
 
@@ -14,14 +26,15 @@ Keelrail is an AI-native architecture diagramming tool for Google Cloud. Each di
 
 | | |
 |---|---|
-| **Any cloud, on-prem, or a mix** | Start a **Blank architecture** and combine Google Cloud, AWS, Azure and on-prem: data centers, DMZs, accounts and subscriptions, Kubernetes clusters, servers, firewalls, mainframes and SaaS. Google Cloud resources also generate Terraform; everything else is documentation that still shows up in workflows, docs and presentations. |
+| **Any cloud, on-prem, or a mix** | Start a **Blank architecture** and combine Google Cloud, AWS, Azure and on-prem: data centers, DMZs, accounts and subscriptions, Kubernetes clusters, servers, firewalls, mainframes and SaaS. Google Cloud and AWS resources generate Terraform; everything else is documentation that still shows up in workflows, docs and presentations. |
 | **Typed GCP diagrams** | Projects, regions, VPCs and subnets as real nested groups; Cloud Run, Cloud SQL, Memorystore, Cloud Storage, Pub/Sub, load balancers, Secret Manager and Artifact Registry as resources with settings. A review panel flags security and reliability issues. |
 | **Edit like draw.io** | Drag from the palette to the canvas or into a group; drag shapes between groups; resize groups and notes; double-click to rename shapes and line labels; box-select, align and distribute; copy, paste and duplicate; reconnect line ends; orthogonal, straight or curved lines; right-click menus; snap to grid; undo/redo. Auto layout only when you ask for it. |
 | **Diagram as code** | Every diagram is also plain text (`.arch`), shown in the **Code** tab next to the canvas: edit either one and the other follows. Keep `.arch` files in Git, review changes as text, and compare versions as a code diff alongside the visual and Terraform diffs. `npm run arch` checks, formats, diffs and compiles them to Terraform without the app. See [Diagram as code](#diagram-as-code). |
-| **Terraform from the diagram** | A deterministic compiler, not an LLM guess. Connections become least-privilege IAM, passwordless Cloud SQL login, private networking (VPC egress, private service access), authenticated Pub/Sub push subscriptions, and load balancers with Cloud Armor. Download as a zip, or run `terraform validate` on the server. |
+| **Terraform from the diagram** | A deterministic compiler, not an LLM guess. On Google Cloud, connections become least-privilege IAM, passwordless Cloud SQL login, private networking, authenticated Pub/Sub push subscriptions, and load balancers with Cloud Armor. On AWS, Lambda, ECS, RDS, DynamoDB, SQS, SNS, S3, ALB, API Gateway, CloudFront and more get IAM policies, security groups, triggers and encryption from their connections. CI runs `terraform validate` on the output of every template. Download as a zip, or validate on the server. |
 | **Workflows and integrations** | Request and async workflows are generated from the connections. For every integration you get how it works, its security, configuration and caveats, always consistent with the Terraform. |
+| **Live collaboration** | Open the same diagram together: changes appear for everyone as they're made, with each person's cursor and who's here in the toolbar. Two people editing different items never overwrite each other. Built into the API (no extra service); with several API replicas, route each diagram to one replica. |
 | **Presentation mode** | A full-screen walkthrough of each workflow, step by step, with the canvas zooming to the connection being explained. |
-| **AI assistant (Gemini)** | "Add a Redis cache in front of the DB" becomes validated edits shown as a highlighted proposal that you accept or reject. It can also review the design, explain integrations and generate Terraform. |
+| **AI assistant** | Gemini, Claude or any OpenAI-compatible model (including a local one). "Add a Redis cache in front of the DB" becomes validated edits shown as a highlighted proposal that you accept or reject. It can also review the design, explain integrations and generate Terraform. |
 | **Import from draw.io** | Google Cloud, AWS and Azure icons, plain shapes and labels are mapped to GCP resources (AWS RDS → Cloud SQL, SQS → Pub/Sub…). A review step lets you check and override each mapping. |
 | **One icon palette** | A single searchable sidebar, in collapsible segments: Google Cloud (deployable), diagram basics (users, groups, notes), AWS groups (VPC, subnets, regions, accounts), AWS services and resources, Lucide and about 2,300 technology logos, plus packs you upload (such as Google Cloud's official icons). The sidebar is resizable and the tiles reflow. AWS group icons become real groups you can drop things into. |
 | **Workspaces, projects, versions** | Owner, editor and viewer roles. Every save is a version you can name, restore or copy. Compare any two versions, or two different diagrams, visually, field by field, and as a Terraform diff. Readable URLs for every page (`/dashboard`, `/dashboard/default-workspace/general`, `/d/orders-api-612b054b`, `…/history`, `…/present`), so links, refresh and back/forward work. Diagram links keep working after a rename. |

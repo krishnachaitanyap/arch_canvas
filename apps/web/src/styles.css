@@ -819,7 +819,7 @@ span.find-toggle { display: inline-block; }
 .file-card.skeleton { height: 236px; background: linear-gradient(90deg, #fff 25%, #f4f4f6 37%, #fff 63%) 0 0 / 400% 100%; animation: shimmer 1.4s infinite; }
 .file-thumb { position: relative; display: block; height: 170px; margin: 6px 6px 0; border-radius: 10px; overflow: hidden; background: #f7f7fb radial-gradient(#e4e4ec 1px, transparent 1px) 0 0 / 16px 16px; padding: 12px; box-sizing: border-box; }
 .kind-chip { position: absolute; top: 8px; left: 8px; font-size: 10.5px; font-weight: 650; letter-spacing: .03em; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.92); color: #4f46e5; border: 1px solid #e0e7ff; opacity: 0; transition: opacity .15s; }
-.kind-chip.whiteboard { color: #7c3aed; border-color: #ede9fe; }
+.kind-chip.kind-whiteboard { color: #7c3aed; border-color: #ede9fe; }
 .file-card:hover .kind-chip { opacity: 1; }
 .file-info { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 12px; }
 .file-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; }
@@ -874,7 +874,7 @@ a.crumb:hover { background: #f4f4f6; color: #18181b; }
 .topbar .title:focus { border-color: #a5b4fc; box-shadow: 0 0 0 3px #eef2ff; outline: none; background: #fff; }
 .topbar .title:disabled { color: #18181b; background: transparent; }
 .topbar .kind-pill { font-size: 11.5px; font-weight: 600; padding: 3px 9px; background: #eef2ff; color: #4f46e5; border-radius: 999px; }
-.topbar .kind-pill.whiteboard { background: #f5f3ff; color: #7c3aed; }
+.topbar .kind-pill.kind-whiteboard { background: #f5f3ff; color: #7c3aed; }
 .topbar .version-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #52525b; text-decoration: none; padding: 4px 9px; border: 1px solid #e4e4e7; border-radius: 999px; background: #fff; white-space: nowrap; }
 .topbar .version-badge:hover { border-color: #c7d2fe; color: #4338ca; background: #f8f9ff; }
 .topbar .version-badge.disabled { color: #a1a1aa; border-style: dashed; }
@@ -986,3 +986,16 @@ a.crumb:hover { background: #f4f4f6; color: #18181b; }
 .settings-card.danger-zone { border-color: #fecaca; background: #fffafa; }
 .danger-solid { background: #dc2626; border-color: #dc2626; color: #fff; }
 .danger-solid:hover:not(:disabled) { background: #b91c1c !important; }
+.beta-chip { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 16px; vertical-align: middle; }
+.menu-item .with-chip { display: inline-flex !important; flex-direction: row !important; align-items: center; }
+
+/* Live collaboration */
+.live-cursor { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 60; transition: transform 90ms linear; display: flex; align-items: flex-start; }
+.live-cursor span { margin: 14px 0 0 -2px; padding: 2px 7px; border-radius: 6px 6px 6px 2px; color: #fff; font: 600 11px/1.4 Inter, system-ui, sans-serif; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+.live-people { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 8px; border-radius: 9px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 3px #dcfce7; }
+.live-label { font-size: 12px; font-weight: 600; color: #15803d; }
+.live-ring { display: inline-flex; border: 2px solid; border-radius: 50%; margin-left: -6px; background: #fff; }
+.live-ring:first-child { margin-left: 0; }
+.live-ring .avatar { font-size: 9.5px !important; }
+.live-cursor { transform-origin: 0 0; }

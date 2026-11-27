@@ -94,14 +94,15 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
   await send("Page.navigate", { url });
-  await waitFor(".card");
+  await waitFor(".file-card .thumb-svg");
+  await sleep(1500);
   console.log(`Capturing ${url} -> ${path.relative(process.cwd(), outDir)}`);
 
-  // 1. Home: workspace, projects, diagram cards, draw.io drop zone
+  // 1. Dashboard: workspace, projects, templates, diagram cards with previews
   await shot("home");
 
   // 2. Editor with the GCP web app
-  await click(".card-main");
+  await click(".file-card .file-thumb");
   await waitFor(".react-flow__node");
   await sleep(1500);
   await shot("editor");
@@ -114,11 +115,14 @@ try {
   await shot("flows");
 
   // 4. Terraform tab
+  // The Terraform tab shows once cloud details are on.
+  await js(`if (!document.querySelector(".tb-switch.on")) document.querySelector(".tb-switch").click();`);
+  await sleep(400);
   await click(".inspector .tabs button", "Terraform");
   await shot("terraform");
 
   // 5. Presentation, on a step slide
-  await click(".toolbar-slot button", "Present");
+  await click(".toolbar-slot .tb-btn", "Present");
   await waitFor(".present");
   for (let i = 0; i < 4; i++) await key("ArrowRight", "ArrowRight");
   await sleep(1200);
@@ -156,13 +160,13 @@ try {
   `);
 
   // 8. draw.io import review (drop the AWS example on the project page)
-  await click(".logo");
-  await waitFor(".dropzone");
+  await click(".brand");
+  await waitFor(".dash-body");
   const drawio = readFileSync(path.join(import.meta.dirname, "..", "docs", "examples", "aws-orders.drawio"), "utf8");
   await js(`
     const dt = new DataTransfer();
     dt.items.add(new File([${JSON.stringify(drawio)}], "aws-orders.drawio", { type: "application/xml" }));
-    const z = document.querySelector(".dropzone");
+    const z = document.querySelector(".dash-body");
     z.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
   `);
   await waitFor(".import-preview .react-flow__node");

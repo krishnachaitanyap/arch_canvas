@@ -362,7 +362,7 @@ export function App() {
               aria-label="Diagram title"
               size={Math.max(8, Math.min(40, doc.title.length + 1))}
             />
-            <span className={`kind-pill ${doc.kind}`}>{doc.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
+            <span className={`kind-pill kind-${doc.kind}`}>{doc.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
             {doc.id ? (
               <Link to={paths.diagram(docRef!, "history")} className="version-badge" title="Version history and compare">
                 <History size={13} />

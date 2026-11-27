@@ -198,7 +198,7 @@ export function Home(props: HomeProps) {
         ) : (
           <div className="dash-empty">
             <h2>Welcome to Keelrail</h2>
-            <p>Projects keep related diagrams together, like a team or a system. Create one to get started.</p>
+            <p>Draw your architecture and get Terraform, pull-request reviews and guardrails for AI agents. Projects keep related diagrams together, like a team or a system: create one to start.</p>
             {canEdit(role) && (
               <button className="primary" onClick={() => setDialog("project")}>
                 <Plus size={15} /> New project
@@ -503,7 +503,13 @@ function ProjectView({
                   <Network size={15} /> <span>Architecture diagram<small>Any cloud and on-prem; Terraform for GCP and AWS</small></span>
                 </button>
                 <button className="menu-item" onClick={() => onNew("whiteboard")}>
-                  <PenTool size={15} /> <span>Whiteboard<small>Freeform sketch with Mermaid</small></span>
+                  <PenTool size={15} />{" "}
+                  <span>
+                    <span className="with-chip">
+                      Whiteboard <span className="beta-chip">Beta</span>
+                    </span>
+                    <small>Freeform sketch with Mermaid</small>
+                  </span>
                 </button>
                 <button className="menu-item" onClick={() => (setNewOpen(false), fileInput.current?.click())}>
                   <Upload size={15} /> <span>Import draw.io file…<small>.drawio, .xml or .drawio.svg</small></span>
@@ -654,7 +660,7 @@ function ProjectView({
               <div key={d.id} className={`file-card ${menu === d.id ? "menu-open" : ""}`}>
                 <Link to={diagramHref(d.id, d.title)} className="file-thumb" title={`Open ${d.title}`}>
                   {thumb(d)}
-                  <span className={`kind-chip ${d.kind}`}>{d.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
+                  <span className={`kind-chip kind-${d.kind}`}>{d.kind === "cloud" ? "Architecture" : "Whiteboard"}</span>
                 </Link>
                 <div className="file-info">
                   <span className="file-icon" style={{ background: d.kind === "cloud" ? "#eef2ff" : "#f5f3ff", color: d.kind === "cloud" ? "#4f46e5" : "#7c3aed" }}>

@@ -12,6 +12,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   SelectionMode,
+  useNodesInitialized,
   useReactFlow,
   useViewport,
 } from "@xyflow/react";
@@ -54,6 +55,7 @@ import { slug } from "../util";
 import { AgentPanel } from "./AgentPanel";
 import { CodePanel } from "./CodePanel";
 import { FindBar, ImportCodeDialog, ShortcutsHelp } from "./EditorExtras";
+import { LiveCursors, LivePeople, useLive } from "./useLive";
 import { download, exportImage } from "./exporters";
 import { type CloudNodeData, EditorContext, type EditorActions, edgeTypes, type Highlight, nodeTypes, toFlow, withGhosts } from "./flow";
 import { FlowsPanel } from "./FlowsPanel";
@@ -204,6 +206,25 @@ function Editor({
   }, [registerCurrent, diagramId]);
 
   const fit = useCallback(() => setTimeout(() => void rf.fitView({ padding: 0.15, duration: 300, maxZoom: 1.25 }), 60), [rf]);
+  // Opening a diagram: fit once every item has been measured (fitting earlier zooms onto
+  // whichever item happened to be measured first).
+  // Live collaboration: other people's changes arrive here; ours go out from the model.
+  const live = useLive({
+    diagramId,
+    model,
+    canSend: !readOnly,
+    onRemote: (m) => {
+      modelRef.current = m;
+      setModel(m);
+    },
+  });
+  const nodesReady = useNodesInitialized();
+  const fittedOnOpen = useRef(false);
+  useEffect(() => {
+    if (!nodesReady || fittedOnOpen.current) return;
+    fittedOnOpen.current = true;
+    void rf.fitView({ padding: 0.15, maxZoom: 1.25 });
+  }, [nodesReady, rf]);
 
   // ---------------------------------------------------------------- model changes
 
@@ -761,6 +782,7 @@ function Editor({
   ];
   const tools = (
     <>
+      <LivePeople peers={live.peers} connected={live.connected} />
       <div className="tb-group" role="group" aria-label="History">
         <button className="tb-icon" onClick={undo} disabled={!past.length || readOnly} title="Undo (⌘Z)" aria-label="Undo">
           <Undo2 size={16} />
@@ -1012,6 +1034,8 @@ function Editor({
           className="cloud-canvas"
           ref={canvasRef}
           onPointerDownCapture={(e) => (rightDown.current = e.button === 2 ? { x: e.clientX, y: e.clientY } : null)}
+          onPointerMove={(e) => live.presence(rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }), nodeIds(selectedIds))}
+          onPointerLeave={() => live.presence(null, nodeIds(selectedIds))}
           onContextMenu={(e) => {
             // React Flow drops the pane's context menu while right-drag panning is on, so open it here.
             if (!(e.target as HTMLElement).classList.contains("react-flow__pane")) return;
@@ -1175,6 +1199,7 @@ function Editor({
             snapToGrid={snap}
             snapGrid={[10, 10]}
             fitView
+            fitViewOptions={{ padding: 0.15, maxZoom: 1.25 }}
             minZoom={0.1}
             maxZoom={3}
             proOptions={{ hideAttribution: true }}
@@ -1182,6 +1207,7 @@ function Editor({
             <Background variant={BackgroundVariant.Dots} gap={snap ? 20 : 18} size={1} />
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable nodeStrokeWidth={2} />
+            <LiveCursors peers={live.peers} />
           </ReactFlow>
 
           {multi >= 2 && !readOnly && (
@@ -1293,8 +1319,8 @@ function Editor({
             <div className="canvas-empty">
               <h2>Start your architecture</h2>
               <p>
-                Mix Google Cloud, AWS, Azure and on-prem: drag anything from the left (Google Cloud items also generate Terraform), describe it to the assistant
-                on the right, write it in the Code tab, or import a draw.io file from the toolbar.
+                Drag services from the left, describe the system to the assistant, write it in the Code tab, or import Terraform, Kubernetes, docker-compose,
+                SQL or draw.io. Google Cloud and AWS items generate Terraform.
               </p>
               {!readOnly && (
                 <div className="template-grid">

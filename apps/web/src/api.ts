@@ -153,6 +153,46 @@ async function request<T>(path: string, init: RequestInit = {}, attempt = 0): Pr
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
+/**
+ * A server-sent event stream that needs our auth headers (EventSource can't send them).
+ * Calls onEvent for each `data:` message until the signal aborts or the server closes it.
+ */
+export async function streamEvents(path: string, onEvent: (data: unknown) => void, signal: AbortSignal): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { headers: await headers(false), signal });
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => null);
+    throw new Error(typeof body?.error === "string" ? body.error : `Couldn't connect (${res.status})`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buf += decoder.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const chunk = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      const data = chunk
+        .split("\n")
+        .filter((l) => l.startsWith("data: "))
+        .map((l) => l.slice(6))
+        .join("\n");
+      if (data) onEvent(JSON.parse(data));
+    }
+  }
+}
+
+/** Posts to the API without retrying (for frequent live messages that are fine to drop). */
+export async function postLive(path: string, body: unknown): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: await headers(true), body: JSON.stringify(body) });
+  if (!res.ok && res.status !== 204) {
+    const b = await res.json().catch(() => null);
+    throw new Error(typeof b?.error === "string" ? b.error : `Live update failed (${res.status})`);
+  }
+}
+
 export interface IconPackUpload {
   name: string;
   family: IconFamily;

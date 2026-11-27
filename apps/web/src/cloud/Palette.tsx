@@ -25,6 +25,8 @@ interface Segment {
   items: PaletteItem[] | null; // null = pack not loaded yet
   packId?: string;
   defaultOpen?: boolean;
+  /** Works, but less complete than the architecture tools. */
+  beta?: boolean;
 }
 
 const GCP_ORDER: Category[] = ["Groups", "Compute", "Data", "Messaging", "Networking", "Security", "DevOps"];
@@ -189,13 +191,13 @@ export function Palette({ onAdd, disabled, terraform = false }: { onAdd: (item: 
     const out: Segment[] = [
       { id: "gcp", title: "Google Cloud", note: terraform ? "Deploys with Terraform" : undefined, items: gcpItems, defaultOpen: true },
       { id: "basics", title: "Diagram basics", items: basicItems, defaultOpen: true },
-      { id: "general", title: "General", note: "Right-click a shape for colours, fonts, lines and shadow", items: generalItems, defaultOpen: true },
-      { id: "arrows", title: "Arrows & lines", note: "Free-standing arrows to resize and colour; to link two things, drag between their connection points", items: arrowItems, defaultOpen: true },
-      { id: "flowchart", title: "Flowchart", items: flowchartItems },
-      { id: "er", title: "Entity relation", note: "Type the columns as lines; right-click a line for crow's-foot ends", items: erItems },
-      { id: "uml", title: "UML", note: "Classes: a line with -- starts the operations", items: umlItems },
       { id: "boundaries", title: "Boundaries · Azure, Kubernetes, on-prem", note: "Groups to nest things in; change border, thickness and colour by right-clicking", items: boundaryItems, defaultOpen: true },
       { id: "multicloud", title: "Multi-cloud & on-prem", note: "Documentation; mix freely with any cloud", items: multiCloudItems, defaultOpen: true },
+      { id: "general", title: "General", note: "Right-click a shape for colours, fonts, lines and shadow", items: generalItems },
+      { id: "arrows", title: "Arrows & lines", note: "Free-standing arrows to resize and colour; to link two things, drag between their connection points", items: arrowItems },
+      { id: "flowchart", title: "Flowchart", items: flowchartItems },
+      { id: "er", title: "Entity relation", note: "Type the columns as lines; right-click a line for crow's-foot ends. Or import a SQL schema.", items: erItems, beta: true },
+      { id: "uml", title: "UML", note: "Classes: a line with -- starts the operations", items: umlItems, beta: true },
     ];
     for (const p of packs) {
       const icons = loaded[p.id] ?? null;
@@ -269,6 +271,7 @@ export function Palette({ onAdd, disabled, terraform = false }: { onAdd: (item: 
             <button className="seg-head" onClick={() => !q && toggle(s.id, !expanded)} aria-expanded={expanded}>
               <span className="chev">{expanded ? "▾" : "▸"}</span>
               <span className="seg-title">{s.title}</span>
+              {s.beta && <span className="beta-chip">Beta</span>}
               {items && <span className="count">{items.length}</span>}
             </button>
             {expanded && (
